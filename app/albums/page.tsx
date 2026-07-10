@@ -1,0 +1,724 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+
+type Album = {
+  title: string;
+  image: string;
+  year?: string;
+  tracks?: string;
+  audio?: string;
+  link?: string;
+};
+
+const upcomingAlbums: Album[] = [
+  {
+    title: "Dark Horse",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/darkhorse.png",
+    audio: "/previews/darkhorse.wav",
+    link: "/albums/dark-horse",
+  },
+  {
+    title: "Bass King",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/bassking.png",
+    audio: "/previews/bassking.wav",
+    link: "/albums/bass-king",
+  },
+  {
+    title: "Zombie Bassline",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/zombiebassline.png",
+    audio: "/previews/zombiebassline.wav",
+    link: "/albums/zombie-bassline",
+  },
+  {
+    title: "A World Built on Sound",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/aworldbuiltonsound.png",
+    audio: "/previews/aworldbuiltonsound.wav",
+    link: "/albums/aworldbuiltonsound",
+  },
+];
+
+const releasedAlbums: Album[] = [
+  {
+    title: "Neon Lights",
+    image: "/covers/neonlights.jpg",
+  },
+  {
+    title: "Mystery",
+    image: "/covers/mystery.jpg",
+  },
+  {
+    title: "Echoes of Power",
+    image: "/covers/echoes-of-power.jpg",
+  },
+  {
+    title: "Neon Overdrive",
+    image: "/covers/neon-overdrive.jpg",
+  },
+  {
+    title: "Unchained Energy",
+    image: "/covers/unchained-energy.png",
+  },
+  {
+    title: "Novafx",
+    image: "/covers/novafx.jpg",
+  },
+  {
+    title: "More Touch",
+    image: "/covers/more-touch.jpg",
+  },
+  {
+    title: "Summer Blast",
+    image: "/covers/summer-blast.jpg",
+  },
+  {
+    title: "Obsession",
+    image: "/covers/obsession.jpg",
+  },
+  {
+    title: "Tasty Smile",
+    image: "/covers/tasty-smile.jpg",
+  },
+  {
+    title: "Beaming Dance",
+    image: "/covers/beaming-dance.jpg",
+  },
+  {
+    title: "Can't Miss It!",
+    image: "/covers/cant-miss-it.jpg",
+  },
+  {
+    title: "All Ears",
+    image: "/covers/all-ears.jpg",
+  },
+  {
+    title: "Boost",
+    image: "/covers/boost.jpg",
+  },
+  {
+    title: "Cygnus X",
+    image: "/covers/cygnus-x.jpg",
+  },
+  {
+    title: "Blur",
+    image: "/covers/blur.png",
+  },
+  {
+    title: "Trust No One",
+    image: "/covers/trust-no-one.jpg",
+  },
+  {
+    title: "Full Speed",
+    image: "/covers/fullspeed.jpg",
+  },
+  {
+    title: "Night Terror",
+    image: "/covers/nightterror.jpg",
+  },
+  {
+    title: "Reboot",
+    image: "/covers/reboot.jpg",
+  },
+  {
+    title: "Strange Feeling",
+    image: "/covers/strangefeeling.png",
+  },
+];
+
+const ALBUMS_PER_PAGE = 8;
+
+function formatTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "0:00";
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+}
+
+export default function AlbumsPage() {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const [currentAlbum, setCurrentAlbum] = useState<Album | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(0.8);
+
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  function sortAlbums(albums: Album[]) {
+    const sortedAlbums = [...albums];
+
+    if (sortBy === "oldest") {
+      return sortedAlbums.reverse();
+    }
+
+    if (sortBy === "az") {
+      return sortedAlbums.sort((a, b) =>
+        a.title.localeCompare(b.title)
+      );
+    }
+
+    if (sortBy === "za") {
+      return sortedAlbums.sort((a, b) =>
+        b.title.localeCompare(a.title)
+      );
+    }
+
+    return sortedAlbums;
+  }
+
+  function filterAlbums(albums: Album[]) {
+    const searchText = search.trim().toLowerCase();
+
+    return sortAlbums(albums).filter((album) =>
+      album.title.toLowerCase().includes(searchText)
+    );
+  }
+
+  async function playPreview(album: Album) {
+    const audio = audioRef.current;
+
+    if (!audio || !album.audio) {
+      return;
+    }
+
+    if (currentAlbum?.audio === album.audio) {
+      if (audio.paused) {
+        try {
+          await audio.play();
+        } catch (error) {
+          console.error("Preview could not play:", error);
+        }
+      } else {
+        audio.pause();
+      }
+
+      return;
+    }
+
+    audio.src = album.audio;
+    audio.currentTime = 0;
+
+    setCurrentAlbum(album);
+    setCurrentTime(0);
+    setDuration(0);
+
+    try {
+      await audio.play();
+    } catch (error) {
+      console.error("Preview could not play:", error);
+      setIsPlaying(false);
+    }
+  }
+
+  async function togglePlayer() {
+    const audio = audioRef.current;
+
+    if (!audio || !currentAlbum?.audio) {
+      return;
+    }
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+      } catch (error) {
+        console.error("Preview could not play:", error);
+      }
+    } else {
+      audio.pause();
+    }
+  }
+
+  function stopPlayer() {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.pause();
+    audio.currentTime = 0;
+
+    setIsPlaying(false);
+    setCurrentTime(0);
+  }
+
+  function closePlayer() {
+    stopPlayer();
+    setCurrentAlbum(null);
+    setDuration(0);
+  }
+
+  function seekAudio(value: number) {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.currentTime = value;
+    setCurrentTime(value);
+  }
+
+  function changeVolume(value: number) {
+    const audio = audioRef.current;
+
+    setVolume(value);
+
+    if (audio) {
+      audio.volume = value;
+    }
+  }
+
+  function handleAudioTimeUpdate() {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    setCurrentTime(audio.currentTime);
+  }
+
+  function handleAudioMetadata() {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    setDuration(
+      Number.isFinite(audio.duration) ? audio.duration : 0
+    );
+  }
+
+  function handleAudioEnded() {
+    const audio = audioRef.current;
+
+    if (audio) {
+      audio.currentTime = 0;
+    }
+
+    setIsPlaying(false);
+    setCurrentTime(0);
+  }
+
+  const visibleUpcomingAlbums = filterAlbums(upcomingAlbums);
+  const visibleReleasedAlbums = filterAlbums(releasedAlbums);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(visibleReleasedAlbums.length / ALBUMS_PER_PAGE)
+  );
+
+  const firstAlbumIndex = (currentPage - 1) * ALBUMS_PER_PAGE;
+  const lastAlbumIndex = firstAlbumIndex + ALBUMS_PER_PAGE;
+
+  const paginatedReleasedAlbums = visibleReleasedAlbums.slice(
+    firstAlbumIndex,
+    lastAlbumIndex
+  );
+
+  const noResults =
+    visibleUpcomingAlbums.length === 0 &&
+    visibleReleasedAlbums.length === 0;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sortBy]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (audio) {
+      audio.volume = volume;
+    }
+  }, [volume]);
+
+  function goToPage(pageNumber: number) {
+    setCurrentPage(pageNumber);
+
+    window.setTimeout(() => {
+      document
+        .getElementById("released-albums")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 0);
+  }
+
+  return (
+    <main
+      className={`min-h-screen bg-black px-5 py-12 text-white md:px-10 ${
+        currentAlbum ? "pb-64 md:pb-44" : ""
+      }`}
+    >
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        onTimeUpdate={handleAudioTimeUpdate}
+        onLoadedMetadata={handleAudioMetadata}
+        onDurationChange={handleAudioMetadata}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={handleAudioEnded}
+      />
+
+      <section className="mx-auto max-w-7xl">
+        <h1 className="text-center text-4xl font-black md:text-6xl">
+          SOLO BEATS ALBUMS
+        </h1>
+
+        <p className="mb-10 mt-4 text-center text-gray-400">
+          Explore upcoming projects and the official Solo Beats catalog.
+        </p>
+
+        <div className="mx-auto mb-14 grid max-w-4xl gap-4 md:grid-cols-[1fr_220px]">
+          <input
+            type="text"
+            placeholder="Search albums..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-4 text-white outline-none transition placeholder:text-gray-500 focus:border-fuchsia-500"
+          />
+
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none transition focus:border-fuchsia-500"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="az">A to Z</option>
+            <option value="za">Z to A</option>
+          </select>
+        </div>
+
+        {noResults ? (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-16 text-center">
+            <h2 className="text-2xl font-black">
+              No albums found
+            </h2>
+
+            <p className="mt-3 text-gray-400">
+              Try searching with a different album title.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="mt-6 rounded-xl bg-fuchsia-600 px-6 py-3 font-bold transition hover:bg-fuchsia-700"
+            >
+              Clear Search
+            </button>
+          </div>
+        ) : (
+          <>
+            {visibleUpcomingAlbums.length > 0 && (
+              <section className="mb-20">
+                <div className="mb-8">
+                  <p className="font-bold uppercase tracking-[0.3em] text-fuchsia-500">
+                    Coming Soon
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-black md:text-4xl">
+                    Upcoming Releases
+                  </h2>
+                </div>
+
+                <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+                  {visibleUpcomingAlbums.map((album) => {
+                    const albumIsPlaying =
+                      currentAlbum?.audio === album.audio &&
+                      isPlaying;
+
+                    return (
+                      <article
+                        key={album.title}
+                        className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition duration-300 hover:-translate-y-2 hover:border-fuchsia-500 hover:shadow-fuchsia-500/30"
+                      >
+                        {album.link ? (
+                          <Link href={album.link}>
+                            <img
+                              src={album.image}
+                              alt={`${album.title} album cover`}
+                              className="aspect-square w-full rounded-xl object-cover"
+                            />
+                          </Link>
+                        ) : (
+                          <img
+                            src={album.image}
+                            alt={`${album.title} album cover`}
+                            className="aspect-square w-full rounded-xl object-cover"
+                          />
+                        )}
+
+                        <h3 className="mt-5 text-2xl font-black">
+                          {album.title}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                          Upcoming Album - Solo Beats
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          {album.year} - {album.tracks}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => playPreview(album)}
+                          className="mt-5 w-full rounded-xl bg-fuchsia-600 py-3 font-bold transition hover:bg-fuchsia-700"
+                        >
+                          {albumIsPlaying
+                            ? "Pause Preview"
+                            : "Play Preview"}
+                        </button>
+
+                        {album.link && (
+                          <Link
+                            href={album.link}
+                            className="mt-3 block w-full rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition hover:bg-fuchsia-500"
+                          >
+                            View Album
+                          </Link>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {visibleReleasedAlbums.length > 0 && (
+              <section
+                id="released-albums"
+                className="scroll-mt-8"
+              >
+                <div className="mb-8">
+                  <p className="font-bold uppercase tracking-[0.3em] text-fuchsia-500">
+                    Official Catalog
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-black md:text-4xl">
+                    Released Albums
+                  </h2>
+
+                  <p className="mt-3 max-w-2xl text-gray-400">
+                    Browse officially released Solo Beats albums.
+                    Listening and purchasing options will be connected
+                    next.
+                  </p>
+                </div>
+
+                <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {paginatedReleasedAlbums.map((album) => (
+                    <article
+                      key={album.title}
+                      className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition duration-300 hover:-translate-y-2 hover:border-fuchsia-500 hover:shadow-fuchsia-500/30"
+                    >
+                      <img
+                        src={album.image}
+                        alt={`${album.title} album cover`}
+                        className="aspect-square w-full rounded-xl object-cover"
+                      />
+
+                      <h3 className="mt-5 text-2xl font-black">
+                        {album.title}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-gray-400">
+                        Released Album - Solo Beats
+                      </p>
+
+                      <div className="mt-5 grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          disabled
+                          className="cursor-not-allowed rounded-xl bg-fuchsia-600/50 py-3 font-bold text-white/70"
+                        >
+                          Listen
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled
+                          className="cursor-not-allowed rounded-xl border border-fuchsia-500/50 py-3 font-bold text-white/60"
+                        >
+                          Buy
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition hover:border-fuchsia-500 hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-700 disabled:hover:bg-transparent"
+                    >
+                      Previous
+                    </button>
+
+                    {Array.from(
+                      { length: totalPages },
+                      (_, index) => index + 1
+                    ).map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => goToPage(pageNumber)}
+                        className={`h-12 min-w-12 rounded-xl px-4 font-bold transition ${
+                          currentPage === pageNumber
+                            ? "bg-fuchsia-600 text-white"
+                            : "border border-zinc-700 bg-zinc-900 hover:border-fuchsia-500 hover:bg-fuchsia-500"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition hover:border-fuchsia-500 hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-700 disabled:hover:bg-transparent"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+
+                <p className="mt-5 text-center text-sm text-gray-500">
+                  Page {currentPage} of {totalPages}
+                </p>
+              </section>
+            )}
+          </>
+        )}
+      </section>
+
+      {currentAlbum && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-fuchsia-500/40 bg-zinc-950/95 px-4 py-4 shadow-[0_-10px_40px_rgba(217,70,239,0.18)] backdrop-blur-xl md:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="grid items-center gap-4 md:grid-cols-[260px_1fr_220px_50px]">
+              <div className="flex min-w-0 items-center gap-3">
+                <img
+                  src={currentAlbum.image}
+                  alt={`${currentAlbum.title} album cover`}
+                  className="h-16 w-16 flex-none rounded-xl object-cover"
+                />
+
+                <div className="min-w-0">
+                  <p className="truncate font-black">
+                    {currentAlbum.title}
+                  </p>
+
+                  <p className="text-sm text-gray-400">
+                    Solo Beats Preview
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={stopPlayer}
+                    className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold transition hover:border-fuchsia-500 hover:bg-fuchsia-500"
+                  >
+                    Stop
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={togglePlayer}
+                    className="rounded-xl bg-fuchsia-600 px-6 py-3 font-black transition hover:scale-105 hover:bg-fuchsia-700"
+                  >
+                    {isPlaying ? "Pause" : "Play"}
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="w-11 text-right text-xs text-gray-400">
+                    {formatTime(currentTime)}
+                  </span>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max={duration || 0}
+                    step="0.1"
+                    value={Math.min(currentTime, duration || 0)}
+                    onChange={(event) =>
+                      seekAudio(Number(event.target.value))
+                    }
+                    className="w-full accent-fuchsia-500"
+                    aria-label="Preview progress"
+                  />
+
+                  <span className="w-11 text-xs text-gray-400">
+                    {formatTime(duration)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-gray-400">
+                  Volume
+                </span>
+
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  onChange={(event) =>
+                    changeVolume(Number(event.target.value))
+                  }
+                  className="w-full accent-fuchsia-500"
+                  aria-label="Preview volume"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={closePlayer}
+                aria-label="Close player"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 text-lg font-bold text-gray-300 transition hover:border-red-500 hover:bg-red-500 hover:text-white"
+              >
+                X
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
