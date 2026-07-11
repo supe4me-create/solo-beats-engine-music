@@ -401,13 +401,13 @@ export default function AlbumsPage() {
             placeholder="Search albums..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-4 text-white outline-none transition placeholder:text-gray-500 focus:border-fuchsia-500"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-4 text-white outline-none transition duration-300 placeholder:text-gray-500 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
           />
 
           <select
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none transition focus:border-fuchsia-500"
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none transition duration-300 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
           >
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -429,7 +429,7 @@ export default function AlbumsPage() {
             <button
               type="button"
               onClick={() => setSearch("")}
-              className="mt-6 rounded-xl bg-fuchsia-600 px-6 py-3 font-bold transition hover:bg-fuchsia-700"
+              className="mt-6 rounded-xl bg-fuchsia-600 px-6 py-3 font-bold transition duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
             >
               Clear Search
             </button>
@@ -457,25 +457,30 @@ export default function AlbumsPage() {
                     return (
                       <article
                         key={album.title}
-                        className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition duration-300 hover:-translate-y-2 hover:border-fuchsia-500 hover:shadow-fuchsia-500/30"
+                        className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
                       >
-                        {album.link ? (
-                          <Link href={album.link}>
+                        <div className="overflow-hidden rounded-xl">
+                          {album.link ? (
+                            <Link
+                              href={album.link}
+                              className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-500"
+                            >
+                              <img
+                                src={album.image}
+                                alt={`${album.title} album cover`}
+                                className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                              />
+                            </Link>
+                          ) : (
                             <img
                               src={album.image}
                               alt={`${album.title} album cover`}
-                              className="aspect-square w-full rounded-xl object-cover"
+                              className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
                             />
-                          </Link>
-                        ) : (
-                          <img
-                            src={album.image}
-                            alt={`${album.title} album cover`}
-                            className="aspect-square w-full rounded-xl object-cover"
-                          />
-                        )}
+                          )}
+                        </div>
 
-                        <h3 className="mt-5 text-2xl font-black">
+                        <h3 className="mt-5 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
                           {album.title}
                         </h3>
 
@@ -490,7 +495,7 @@ export default function AlbumsPage() {
                         <button
                           type="button"
                           onClick={() => playPreview(album)}
-                          className="mt-5 w-full rounded-xl bg-fuchsia-600 py-3 font-bold transition hover:bg-fuchsia-700"
+                          className="mt-5 w-full rounded-xl bg-fuchsia-600 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
                         >
                           {albumIsPlaying
                             ? "Pause Preview"
@@ -500,7 +505,7 @@ export default function AlbumsPage() {
                         {album.link && (
                           <Link
                             href={album.link}
-                            className="mt-3 block w-full rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition hover:bg-fuchsia-500"
+                            className="mt-3 block w-full rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
                           >
                             View Album
                           </Link>
@@ -537,15 +542,17 @@ export default function AlbumsPage() {
                   {paginatedReleasedAlbums.map((album) => (
                     <article
                       key={album.title}
-                      className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition duration-300 hover:-translate-y-2 hover:border-fuchsia-500 hover:shadow-fuchsia-500/30"
+                      className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
                     >
-                      <img
-                        src={album.image}
-                        alt={`${album.title} album cover`}
-                        className="aspect-square w-full rounded-xl object-cover"
-                      />
+                      <div className="overflow-hidden rounded-xl">
+                        <img
+                          src={album.image}
+                          alt={`${album.title} album cover`}
+                          className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                        />
+                      </div>
 
-                      <h3 className="mt-5 text-2xl font-black">
+                      <h3 className="mt-5 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
                         {album.title}
                       </h3>
 
@@ -580,7 +587,7 @@ export default function AlbumsPage() {
                       type="button"
                       onClick={() => goToPage(currentPage - 1)}
                       disabled={currentPage === 1}
-                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition hover:border-fuchsia-500 hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-700 disabled:hover:bg-transparent"
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:border-zinc-700 disabled:hover:bg-transparent disabled:hover:shadow-none"
                     >
                       Previous
                     </button>
@@ -593,9 +600,9 @@ export default function AlbumsPage() {
                         key={pageNumber}
                         type="button"
                         onClick={() => goToPage(pageNumber)}
-                        className={`h-12 min-w-12 rounded-xl px-4 font-bold transition ${
+                        className={`h-12 min-w-12 rounded-xl px-4 font-bold transition-all duration-300 hover:-translate-y-1 ${
                           currentPage === pageNumber
-                            ? "bg-fuchsia-600 text-white"
+                            ? "bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-500/30"
                             : "border border-zinc-700 bg-zinc-900 hover:border-fuchsia-500 hover:bg-fuchsia-500"
                         }`}
                       >
@@ -607,7 +614,7 @@ export default function AlbumsPage() {
                       type="button"
                       onClick={() => goToPage(currentPage + 1)}
                       disabled={currentPage === totalPages}
-                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition hover:border-fuchsia-500 hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-700 disabled:hover:bg-transparent"
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:border-zinc-700 disabled:hover:bg-transparent disabled:hover:shadow-none"
                     >
                       Next
                     </button>
@@ -650,7 +657,7 @@ export default function AlbumsPage() {
                   <button
                     type="button"
                     onClick={stopPlayer}
-                    className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold transition hover:border-fuchsia-500 hover:bg-fuchsia-500"
+                    className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500"
                   >
                     Stop
                   </button>
@@ -658,7 +665,7 @@ export default function AlbumsPage() {
                   <button
                     type="button"
                     onClick={togglePlayer}
-                    className="rounded-xl bg-fuchsia-600 px-6 py-3 font-black transition hover:scale-105 hover:bg-fuchsia-700"
+                    className="rounded-xl bg-fuchsia-600 px-6 py-3 font-black transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
                   >
                     {isPlaying ? "Pause" : "Play"}
                   </button>
@@ -711,7 +718,7 @@ export default function AlbumsPage() {
                 type="button"
                 onClick={closePlayer}
                 aria-label="Close player"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 text-lg font-bold text-gray-300 transition hover:border-red-500 hover:bg-red-500 hover:text-white"
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 text-lg font-bold text-gray-300 transition-all duration-300 hover:rotate-90 hover:border-red-500 hover:bg-red-500 hover:text-white"
               >
                 X
               </button>
