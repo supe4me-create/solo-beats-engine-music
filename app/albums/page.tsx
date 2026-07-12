@@ -10,6 +10,7 @@ type Album = {
   tracks?: string;
   audio?: string;
   link?: string;
+  genre?: string;
 };
 
 const upcomingAlbums: Album[] = [
@@ -20,6 +21,7 @@ const upcomingAlbums: Album[] = [
     image: "/covers/darkhorse.png",
     audio: "/previews/darkhorse.wav",
     link: "/albums/dark-horse",
+    genre: "Complextro",
   },
   {
     title: "Bass King",
@@ -28,6 +30,7 @@ const upcomingAlbums: Album[] = [
     image: "/covers/bassking.png",
     audio: "/previews/bassking.wav",
     link: "/albums/bass-king",
+    genre: "Electro House",
   },
   {
     title: "Zombie Bassline",
@@ -36,6 +39,7 @@ const upcomingAlbums: Album[] = [
     image: "/covers/zombiebassline.png",
     audio: "/previews/zombiebassline.wav",
     link: "/albums/zombie-bassline",
+    genre: "Complextro",
   },
   {
     title: "A World Built on Sound",
@@ -44,6 +48,7 @@ const upcomingAlbums: Album[] = [
     image: "/covers/aworldbuiltonsound.png",
     audio: "/previews/aworldbuiltonsound.wav",
     link: "/albums/aworldbuiltonsound",
+    genre: "Electronic",
   },
 ];
 
@@ -51,86 +56,107 @@ const releasedAlbums: Album[] = [
   {
     title: "Neon Lights",
     image: "/covers/neonlights.jpg",
+    genre: "Electronic",
   },
   {
     title: "Mystery",
     image: "/covers/mystery.jpg",
+    genre: "Electronic",
   },
   {
     title: "Echoes of Power",
     image: "/covers/echoes-of-power.jpg",
+    genre: "Electro House",
   },
   {
     title: "Neon Overdrive",
     image: "/covers/neon-overdrive.jpg",
+    genre: "Complextro",
   },
   {
     title: "Unchained Energy",
     image: "/covers/unchained-energy.png",
+    genre: "Electro House",
   },
   {
     title: "Novafx",
     image: "/covers/novafx.jpg",
+    genre: "Electronic",
   },
   {
     title: "More Touch",
     image: "/covers/more-touch.jpg",
+    genre: "Electronic",
   },
   {
     title: "Summer Blast",
     image: "/covers/summer-blast.jpg",
+    genre: "Dance",
   },
   {
     title: "Obsession",
     image: "/covers/obsession.jpg",
+    genre: "Electronic",
   },
   {
     title: "Tasty Smile",
     image: "/covers/tasty-smile.jpg",
+    genre: "Dance",
   },
   {
     title: "Beaming Dance",
     image: "/covers/beaming-dance.jpg",
+    genre: "Dance",
   },
   {
     title: "Can't Miss It!",
     image: "/covers/cant-miss-it.jpg",
+    genre: "Electronic",
   },
   {
     title: "All Ears",
     image: "/covers/all-ears.jpg",
+    genre: "Electronic",
   },
   {
     title: "Boost",
     image: "/covers/boost.jpg",
+    genre: "Electro House",
   },
   {
     title: "Cygnus X",
     image: "/covers/cygnus-x.jpg",
+    genre: "Electronic",
   },
   {
     title: "Blur",
     image: "/covers/blur.png",
+    genre: "Electronic",
   },
   {
     title: "Trust No One",
     image: "/covers/trust-no-one.jpg",
+    genre: "Complextro",
   },
   {
     title: "Full Speed",
     image: "/covers/fullspeed.jpg",
+    genre: "Electro House",
   },
   {
     title: "Night Terror",
     image: "/covers/nightterror.jpg",
+    genre: "Complextro",
   },
   {
     title: "Reboot",
     image: "/covers/reboot.jpg",
+    genre: "Electronic",
   },
   {
     title: "Strange Feeling",
     image: "/covers/strangefeeling.png",
+    genre: "Complextro",
   },
 ];
 
@@ -160,6 +186,10 @@ export default function AlbumsPage() {
   const [sortBy, setSortBy] = useState("newest");
   const [currentPage, setCurrentPage] = useState(1);
 
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+
   function sortAlbums(albums: Album[]) {
     const sortedAlbums = [...albums];
 
@@ -185,9 +215,32 @@ export default function AlbumsPage() {
   function filterAlbums(albums: Album[]) {
     const searchText = search.trim().toLowerCase();
 
-    return sortAlbums(albums).filter((album) =>
-      album.title.toLowerCase().includes(searchText)
-    );
+    return sortAlbums(albums).filter((album) => {
+      const matchesSearch = album.title
+        .toLowerCase()
+        .includes(searchText);
+
+      const matchesFavorites =
+        !favoritesOnly || favorites.includes(album.title);
+
+      return matchesSearch && matchesFavorites;
+    });
+  }
+
+  function toggleFavorite(albumTitle: string) {
+    setFavorites((currentFavorites) => {
+      if (currentFavorites.includes(albumTitle)) {
+        return currentFavorites.filter(
+          (title) => title !== albumTitle
+        );
+      }
+
+      return [...currentFavorites, albumTitle];
+    });
+  }
+
+  function isFavorite(albumTitle: string) {
+    return favorites.includes(albumTitle);
   }
 
   async function playPreview(album: Album) {
@@ -321,26 +374,65 @@ export default function AlbumsPage() {
   const visibleUpcomingAlbums = filterAlbums(upcomingAlbums);
   const visibleReleasedAlbums = filterAlbums(releasedAlbums);
 
+  const totalVisibleAlbums =
+    visibleUpcomingAlbums.length + visibleReleasedAlbums.length;
+
   const totalPages = Math.max(
     1,
     Math.ceil(visibleReleasedAlbums.length / ALBUMS_PER_PAGE)
   );
 
-  const firstAlbumIndex = (currentPage - 1) * ALBUMS_PER_PAGE;
-  const lastAlbumIndex = firstAlbumIndex + ALBUMS_PER_PAGE;
+  const firstAlbumIndex =
+    (currentPage - 1) * ALBUMS_PER_PAGE;
 
-  const paginatedReleasedAlbums = visibleReleasedAlbums.slice(
-    firstAlbumIndex,
-    lastAlbumIndex
-  );
+  const lastAlbumIndex =
+    firstAlbumIndex + ALBUMS_PER_PAGE;
 
-  const noResults =
-    visibleUpcomingAlbums.length === 0 &&
-    visibleReleasedAlbums.length === 0;
+  const paginatedReleasedAlbums =
+    visibleReleasedAlbums.slice(
+      firstAlbumIndex,
+      lastAlbumIndex
+    );
+
+  const noResults = totalVisibleAlbums === 0;
+
+  useEffect(() => {
+    try {
+      const savedFavorites =
+        window.localStorage.getItem("solo-beats-favorites");
+
+      if (savedFavorites) {
+        const parsedFavorites = JSON.parse(savedFavorites);
+
+        if (Array.isArray(parsedFavorites)) {
+          setFavorites(parsedFavorites);
+        }
+      }
+    } catch (error) {
+      console.error("Favorites could not be loaded:", error);
+    } finally {
+      setFavoritesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!favoritesLoaded) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        "solo-beats-favorites",
+        JSON.stringify(favorites)
+      );
+    } catch (error) {
+      console.error("Favorites could not be saved:", error);
+    }
+  }, [favorites, favoritesLoaded]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, sortBy]);
+  }, [search, sortBy, favoritesOnly]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -369,10 +461,16 @@ export default function AlbumsPage() {
     }, 0);
   }
 
+  function clearFilters() {
+    setSearch("");
+    setFavoritesOnly(false);
+    setSortBy("newest");
+  }
+
   return (
     <main
       className={`min-h-screen bg-black px-5 py-12 text-white md:px-10 ${
-        currentAlbum ? "pb-64 md:pb-44" : ""
+        currentAlbum ? "pb-96 md:pb-48" : ""
       }`}
     >
       <audio
@@ -395,7 +493,7 @@ export default function AlbumsPage() {
           Explore upcoming projects and the official Solo Beats catalog.
         </p>
 
-        <div className="mx-auto mb-14 grid max-w-4xl gap-4 md:grid-cols-[1fr_220px]">
+        <div className="mx-auto mb-6 grid max-w-5xl gap-4 md:grid-cols-[1fr_220px_auto]">
           <input
             type="text"
             placeholder="Search albums..."
@@ -414,6 +512,38 @@ export default function AlbumsPage() {
             <option value="az">A to Z</option>
             <option value="za">Z to A</option>
           </select>
+
+          <button
+            type="button"
+            onClick={() => setFavoritesOnly((current) => !current)}
+            className={`rounded-xl border px-5 py-4 font-bold transition-all duration-300 ${
+              favoritesOnly
+                ? "border-pink-500 bg-pink-500 text-white shadow-lg shadow-pink-500/30"
+                : "border-zinc-700 bg-zinc-900 text-gray-200 hover:border-pink-500 hover:text-pink-400"
+            }`}
+          >
+            ♥ Favorites
+          </button>
+        </div>
+
+        <div className="mx-auto mb-14 flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm">
+          <p className="text-gray-400">
+            Showing{" "}
+            <span className="font-bold text-white">
+              {totalVisibleAlbums}
+            </span>{" "}
+            album{totalVisibleAlbums === 1 ? "" : "s"}
+          </p>
+
+          {(search || favoritesOnly || sortBy !== "newest") && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="font-bold text-fuchsia-400 transition hover:text-fuchsia-300"
+            >
+              Clear all filters
+            </button>
+          )}
         </div>
 
         {noResults ? (
@@ -423,15 +553,15 @@ export default function AlbumsPage() {
             </h2>
 
             <p className="mt-3 text-gray-400">
-              Try searching with a different album title.
+              Try another title or clear your current filters.
             </p>
 
             <button
               type="button"
-              onClick={() => setSearch("")}
+              onClick={clearFilters}
               className="mt-6 rounded-xl bg-fuchsia-600 px-6 py-3 font-bold transition duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
             >
-              Clear Search
+              Clear Filters
             </button>
           </div>
         ) : (
@@ -454,11 +584,33 @@ export default function AlbumsPage() {
                       currentAlbum?.audio === album.audio &&
                       isPlaying;
 
+                    const albumIsFavorite =
+                      isFavorite(album.title);
+
                     return (
                       <article
                         key={album.title}
-                        className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
+                        className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
                       >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleFavorite(album.title)
+                          }
+                          aria-label={
+                            albumIsFavorite
+                              ? `Remove ${album.title} from favorites`
+                              : `Add ${album.title} to favorites`
+                          }
+                          className={`absolute right-7 top-7 z-10 flex h-11 w-11 items-center justify-center rounded-full border text-xl shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 ${
+                            albumIsFavorite
+                              ? "border-pink-400 bg-pink-500 text-white"
+                              : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
+                          }`}
+                        >
+                          {albumIsFavorite ? "♥" : "♡"}
+                        </button>
+
                         <div className="overflow-hidden rounded-xl">
                           {album.link ? (
                             <Link
@@ -480,16 +632,26 @@ export default function AlbumsPage() {
                           )}
                         </div>
 
-                        <h3 className="mt-5 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-fuchsia-500/15 px-3 py-1 text-xs font-bold text-fuchsia-300">
+                            Upcoming
+                          </span>
+
+                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-gray-300">
+                            {album.genre}
+                          </span>
+                        </div>
+
+                        <h3 className="mt-4 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
                           {album.title}
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album - Solo Beats
+                          Upcoming Album · Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} - {album.tracks}
+                          {album.year} · {album.tracks}
                         </p>
 
                         <button
@@ -539,53 +701,89 @@ export default function AlbumsPage() {
                 </div>
 
                 <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {paginatedReleasedAlbums.map((album) => (
-                    <article
-                      key={album.title}
-                      className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
-                    >
-                      <div className="overflow-hidden rounded-xl">
-                        <img
-                          src={album.image}
-                          alt={`${album.title} album cover`}
-                          className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                        />
-                      </div>
+                  {paginatedReleasedAlbums.map((album) => {
+                    const albumIsFavorite =
+                      isFavorite(album.title);
 
-                      <h3 className="mt-5 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
-                        {album.title}
-                      </h3>
-
-                      <p className="mt-1 text-sm text-gray-400">
-                        Released Album - Solo Beats
-                      </p>
-
-                      <div className="mt-5 grid grid-cols-2 gap-3">
+                    return (
+                      <article
+                        key={album.title}
+                        className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
+                      >
                         <button
                           type="button"
-                          disabled
-                          className="cursor-not-allowed rounded-xl bg-fuchsia-600/50 py-3 font-bold text-white/70"
+                          onClick={() =>
+                            toggleFavorite(album.title)
+                          }
+                          aria-label={
+                            albumIsFavorite
+                              ? `Remove ${album.title} from favorites`
+                              : `Add ${album.title} to favorites`
+                          }
+                          className={`absolute right-7 top-7 z-10 flex h-11 w-11 items-center justify-center rounded-full border text-xl shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 ${
+                            albumIsFavorite
+                              ? "border-pink-400 bg-pink-500 text-white"
+                              : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
+                          }`}
                         >
-                          Listen
+                          {albumIsFavorite ? "♥" : "♡"}
                         </button>
 
-                        <button
-                          type="button"
-                          disabled
-                          className="cursor-not-allowed rounded-xl border border-fuchsia-500/50 py-3 font-bold text-white/60"
-                        >
-                          Buy
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                        <div className="overflow-hidden rounded-xl">
+                          <img
+                            src={album.image}
+                            alt={`${album.title} album cover`}
+                            className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                          />
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-300">
+                            Released
+                          </span>
+
+                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-gray-300">
+                            {album.genre}
+                          </span>
+                        </div>
+
+                        <h3 className="mt-4 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
+                          {album.title}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                          Released Album · Solo Beats
+                        </p>
+
+                        <div className="mt-5 grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            disabled
+                            className="cursor-not-allowed rounded-xl bg-fuchsia-600/50 py-3 font-bold text-white/70"
+                          >
+                            Listen
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled
+                            className="cursor-not-allowed rounded-xl border border-fuchsia-500/50 py-3 font-bold text-white/60"
+                          >
+                            Buy
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
 
                 {totalPages > 1 && (
                   <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
                     <button
                       type="button"
-                      onClick={() => goToPage(currentPage - 1)}
+                      onClick={() =>
+                        goToPage(currentPage - 1)
+                      }
                       disabled={currentPage === 1}
                       className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:border-zinc-700 disabled:hover:bg-transparent disabled:hover:shadow-none"
                     >
@@ -599,7 +797,9 @@ export default function AlbumsPage() {
                       <button
                         key={pageNumber}
                         type="button"
-                        onClick={() => goToPage(pageNumber)}
+                        onClick={() =>
+                          goToPage(pageNumber)
+                        }
                         className={`h-12 min-w-12 rounded-xl px-4 font-bold transition-all duration-300 hover:-translate-y-1 ${
                           currentPage === pageNumber
                             ? "bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-500/30"
@@ -612,7 +812,9 @@ export default function AlbumsPage() {
 
                     <button
                       type="button"
-                      onClick={() => goToPage(currentPage + 1)}
+                      onClick={() =>
+                        goToPage(currentPage + 1)
+                      }
                       disabled={currentPage === totalPages}
                       className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:border-zinc-700 disabled:hover:bg-transparent disabled:hover:shadow-none"
                     >
@@ -633,7 +835,7 @@ export default function AlbumsPage() {
       {currentAlbum && (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-fuchsia-500/40 bg-zinc-950/95 px-4 py-4 shadow-[0_-10px_40px_rgba(217,70,239,0.18)] backdrop-blur-xl md:px-8">
           <div className="mx-auto max-w-7xl">
-            <div className="grid items-center gap-4 md:grid-cols-[260px_1fr_220px_50px]">
+            <div className="grid items-center gap-5 md:grid-cols-[260px_1fr_220px_50px]">
               <div className="flex min-w-0 items-center gap-3">
                 <img
                   src={currentAlbum.image}
@@ -681,9 +883,14 @@ export default function AlbumsPage() {
                     min="0"
                     max={duration || 0}
                     step="0.1"
-                    value={Math.min(currentTime, duration || 0)}
+                    value={Math.min(
+                      currentTime,
+                      duration || 0
+                    )}
                     onChange={(event) =>
-                      seekAudio(Number(event.target.value))
+                      seekAudio(
+                        Number(event.target.value)
+                      )
                     }
                     className="w-full accent-fuchsia-500"
                     aria-label="Preview progress"
@@ -707,7 +914,9 @@ export default function AlbumsPage() {
                   step="0.01"
                   value={volume}
                   onChange={(event) =>
-                    changeVolume(Number(event.target.value))
+                    changeVolume(
+                      Number(event.target.value)
+                    )
                   }
                   className="w-full accent-fuchsia-500"
                   aria-label="Preview volume"
