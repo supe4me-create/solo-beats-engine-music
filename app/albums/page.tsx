@@ -146,6 +146,7 @@ const releasedAlbums: Album[] = [
   {
     title: "Night Terror",
     image: "/covers/nightterror.jpg",
+    audio: "/previews/nightterror.wav",
     genre: "Complextro",
   },
   {
@@ -705,6 +706,10 @@ export default function AlbumsPage() {
                     const albumIsFavorite =
                       isFavorite(album.title);
 
+                    const albumIsPlaying =
+                      currentAlbum?.audio === album.audio &&
+                      isPlaying;
+
                     return (
                       <article
                         key={album.title}
@@ -756,13 +761,23 @@ export default function AlbumsPage() {
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
-                          <button
-                            type="button"
-                            disabled
-                            className="cursor-not-allowed rounded-xl bg-fuchsia-600/50 py-3 font-bold text-white/70"
-                          >
-                            Listen
-                          </button>
+                          {album.audio ? (
+                            <button
+                              type="button"
+                              onClick={() => playPreview(album)}
+                              className="rounded-xl bg-fuchsia-600 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
+                            >
+                              {albumIsPlaying ? "Pause" : "Listen"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="cursor-not-allowed rounded-xl bg-fuchsia-600/50 py-3 font-bold text-white/70"
+                            >
+                              Listen
+                            </button>
+                          )}
 
                           <button
                             type="button"
