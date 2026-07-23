@@ -50,6 +50,15 @@ const upcomingAlbums: Album[] = [
     link: "/albums/aworldbuiltonsound",
     genre: "Electronic",
   },
+  {
+    title: "Black Sea",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/blacksea.png",
+    audio: "/previews/blacksea.wav",
+    link: "/albums/black-sea",
+    genre: "Complextro",
+  },
 ];
 
 const releasedAlbums: Album[] = [
@@ -94,8 +103,10 @@ const releasedAlbums: Album[] = [
     genre: "Dance",
   },
   {
-    title: "Obsession",
-    image: "/covers/obsession.jpg",
+    title: "Invincible",
+    image: "/covers/Invincible-cover.jpg",
+    audio: "/previews/invincible/Courageous Time 1.wav",
+    link: "/albums/invincible",
     genre: "Electronic",
   },
   {
@@ -112,16 +123,6 @@ const releasedAlbums: Album[] = [
     title: "Can't Miss It!",
     image: "/covers/cant-miss-it.jpg",
     genre: "Electronic",
-  },
-  {
-    title: "All Ears",
-    image: "/covers/all-ears.jpg",
-    genre: "Electronic",
-  },
-  {
-    title: "Boost",
-    image: "/covers/boost.jpg",
-    genre: "Electro House",
   },
   {
     title: "Cygnus X",
@@ -157,6 +158,7 @@ const releasedAlbums: Album[] = [
   {
     title: "Strange Feeling",
     image: "/covers/strangefeeling.png",
+    audio: "/previews/strangefeeling.wav",
     genre: "Complextro",
   },
 ];
@@ -176,17 +178,14 @@ function formatTime(seconds: number) {
 
 export default function AlbumsPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
   const [currentAlbum, setCurrentAlbum] = useState<Album | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
-
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [currentPage, setCurrentPage] = useState(1);
-
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
@@ -199,15 +198,11 @@ export default function AlbumsPage() {
     }
 
     if (sortBy === "az") {
-      return sortedAlbums.sort((a, b) =>
-        a.title.localeCompare(b.title)
-      );
+      return sortedAlbums.sort((a, b) => a.title.localeCompare(b.title));
     }
 
     if (sortBy === "za") {
-      return sortedAlbums.sort((a, b) =>
-        b.title.localeCompare(a.title)
-      );
+      return sortedAlbums.sort((a, b) => b.title.localeCompare(a.title));
     }
 
     return sortedAlbums;
@@ -217,10 +212,7 @@ export default function AlbumsPage() {
     const searchText = search.trim().toLowerCase();
 
     return sortAlbums(albums).filter((album) => {
-      const matchesSearch = album.title
-        .toLowerCase()
-        .includes(searchText);
-
+      const matchesSearch = album.title.toLowerCase().includes(searchText);
       const matchesFavorites =
         !favoritesOnly || favorites.includes(album.title);
 
@@ -231,9 +223,7 @@ export default function AlbumsPage() {
   function toggleFavorite(albumTitle: string) {
     setFavorites((currentFavorites) => {
       if (currentFavorites.includes(albumTitle)) {
-        return currentFavorites.filter(
-          (title) => title !== albumTitle
-        );
+        return currentFavorites.filter((title) => title !== albumTitle);
       }
 
       return [...currentFavorites, albumTitle];
@@ -267,7 +257,6 @@ export default function AlbumsPage() {
 
     audio.src = album.audio;
     audio.currentTime = 0;
-
     setCurrentAlbum(album);
     setCurrentTime(0);
     setDuration(0);
@@ -307,7 +296,6 @@ export default function AlbumsPage() {
 
     audio.pause();
     audio.currentTime = 0;
-
     setIsPlaying(false);
     setCurrentTime(0);
   }
@@ -331,7 +319,6 @@ export default function AlbumsPage() {
 
   function changeVolume(value: number) {
     const audio = audioRef.current;
-
     setVolume(value);
 
     if (audio) {
@@ -356,9 +343,7 @@ export default function AlbumsPage() {
       return;
     }
 
-    setDuration(
-      Number.isFinite(audio.duration) ? audio.duration : 0
-    );
+    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
   }
 
   function handleAudioEnded() {
@@ -374,33 +359,25 @@ export default function AlbumsPage() {
 
   const visibleUpcomingAlbums = filterAlbums(upcomingAlbums);
   const visibleReleasedAlbums = filterAlbums(releasedAlbums);
-
   const totalVisibleAlbums =
     visibleUpcomingAlbums.length + visibleReleasedAlbums.length;
-
   const totalPages = Math.max(
     1,
     Math.ceil(visibleReleasedAlbums.length / ALBUMS_PER_PAGE)
   );
-
-  const firstAlbumIndex =
-    (currentPage - 1) * ALBUMS_PER_PAGE;
-
-  const lastAlbumIndex =
-    firstAlbumIndex + ALBUMS_PER_PAGE;
-
-  const paginatedReleasedAlbums =
-    visibleReleasedAlbums.slice(
-      firstAlbumIndex,
-      lastAlbumIndex
-    );
-
+  const firstAlbumIndex = (currentPage - 1) * ALBUMS_PER_PAGE;
+  const lastAlbumIndex = firstAlbumIndex + ALBUMS_PER_PAGE;
+  const paginatedReleasedAlbums = visibleReleasedAlbums.slice(
+    firstAlbumIndex,
+    lastAlbumIndex
+  );
   const noResults = totalVisibleAlbums === 0;
 
   useEffect(() => {
     try {
-      const savedFavorites =
-        window.localStorage.getItem("solo-beats-favorites");
+      const savedFavorites = window.localStorage.getItem(
+        "solo-beats-favorites"
+      );
 
       if (savedFavorites) {
         const parsedFavorites = JSON.parse(savedFavorites);
@@ -453,12 +430,10 @@ export default function AlbumsPage() {
     setCurrentPage(pageNumber);
 
     window.setTimeout(() => {
-      document
-        .getElementById("released-albums")
-        ?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+      document.getElementById("released-albums")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     }, 0);
   }
 
@@ -530,9 +505,7 @@ export default function AlbumsPage() {
         <div className="mx-auto mb-14 flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm">
           <p className="text-gray-400">
             Showing{" "}
-            <span className="font-bold text-white">
-              {totalVisibleAlbums}
-            </span>{" "}
+            <span className="font-bold text-white">{totalVisibleAlbums}</span>{" "}
             album{totalVisibleAlbums === 1 ? "" : "s"}
           </p>
 
@@ -549,9 +522,7 @@ export default function AlbumsPage() {
 
         {noResults ? (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-16 text-center">
-            <h2 className="text-2xl font-black">
-              No albums found
-            </h2>
+            <h2 className="text-2xl font-black">No albums found</h2>
 
             <p className="mt-3 text-gray-400">
               Try another title or clear your current filters.
@@ -582,11 +553,8 @@ export default function AlbumsPage() {
                 <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
                   {visibleUpcomingAlbums.map((album) => {
                     const albumIsPlaying =
-                      currentAlbum?.audio === album.audio &&
-                      isPlaying;
-
-                    const albumIsFavorite =
-                      isFavorite(album.title);
+                      currentAlbum?.audio === album.audio && isPlaying;
+                    const albumIsFavorite = isFavorite(album.title);
 
                     return (
                       <article
@@ -595,9 +563,7 @@ export default function AlbumsPage() {
                       >
                         <button
                           type="button"
-                          onClick={() =>
-                            toggleFavorite(album.title)
-                          }
+                          onClick={() => toggleFavorite(album.title)}
                           aria-label={
                             albumIsFavorite
                               ? `Remove ${album.title} from favorites`
@@ -660,9 +626,7 @@ export default function AlbumsPage() {
                           onClick={() => playPreview(album)}
                           className="mt-5 w-full rounded-xl bg-fuchsia-600 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
                         >
-                          {albumIsPlaying
-                            ? "Pause Preview"
-                            : "Play Preview"}
+                          {albumIsPlaying ? "Pause Preview" : "Play Preview"}
                         </button>
 
                         {album.link && (
@@ -681,10 +645,7 @@ export default function AlbumsPage() {
             )}
 
             {visibleReleasedAlbums.length > 0 && (
-              <section
-                id="released-albums"
-                className="scroll-mt-8"
-              >
+              <section id="released-albums" className="scroll-mt-8">
                 <div className="mb-8">
                   <p className="font-bold uppercase tracking-[0.3em] text-fuchsia-500">
                     Official Catalog
@@ -695,20 +656,16 @@ export default function AlbumsPage() {
                   </h2>
 
                   <p className="mt-3 max-w-2xl text-gray-400">
-                    Browse officially released Solo Beats albums.
-                    Listening and purchasing options will be connected
-                    next.
+                    Browse officially released Solo Beats albums and listen to
+                    available previews.
                   </p>
                 </div>
 
                 <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {paginatedReleasedAlbums.map((album) => {
-                    const albumIsFavorite =
-                      isFavorite(album.title);
-
+                    const albumIsFavorite = isFavorite(album.title);
                     const albumIsPlaying =
-                      currentAlbum?.audio === album.audio &&
-                      isPlaying;
+                      currentAlbum?.audio === album.audio && isPlaying;
 
                     return (
                       <article
@@ -717,9 +674,7 @@ export default function AlbumsPage() {
                       >
                         <button
                           type="button"
-                          onClick={() =>
-                            toggleFavorite(album.title)
-                          }
+                          onClick={() => toggleFavorite(album.title)}
                           aria-label={
                             albumIsFavorite
                               ? `Remove ${album.title} from favorites`
@@ -735,11 +690,21 @@ export default function AlbumsPage() {
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
-                          <img
-                            src={album.image}
-                            alt={`${album.title} album cover`}
-                            className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                          />
+                          {album.link ? (
+                            <Link href={album.link}>
+                              <img
+                                src={album.image}
+                                alt={`${album.title} album cover`}
+                                className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                              />
+                            </Link>
+                          ) : (
+                            <img
+                              src={album.image}
+                              alt={`${album.title} album cover`}
+                              className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                            />
+                          )}
                         </div>
 
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -779,13 +744,22 @@ export default function AlbumsPage() {
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            disabled
-                            className="cursor-not-allowed rounded-xl border border-fuchsia-500/50 py-3 font-bold text-white/60"
-                          >
-                            Buy
-                          </button>
+                          {album.link ? (
+                            <Link
+                              href={album.link}
+                              className="rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/30"
+                            >
+                              Buy
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="cursor-not-allowed rounded-xl border border-fuchsia-500/50 py-3 font-bold text-white/60"
+                            >
+                              Buy
+                            </button>
+                          )}
                         </div>
                       </article>
                     );
@@ -796,11 +770,9 @@ export default function AlbumsPage() {
                   <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
                     <button
                       type="button"
-                      onClick={() =>
-                        goToPage(currentPage - 1)
-                      }
+                      onClick={() => goToPage(currentPage - 1)}
                       disabled={currentPage === 1}
-                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:border-zinc-700 disabled:hover:bg-transparent disabled:hover:shadow-none"
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Previous
                     </button>
@@ -812,9 +784,7 @@ export default function AlbumsPage() {
                       <button
                         key={pageNumber}
                         type="button"
-                        onClick={() =>
-                          goToPage(pageNumber)
-                        }
+                        onClick={() => goToPage(pageNumber)}
                         className={`h-12 min-w-12 rounded-xl px-4 font-bold transition-all duration-300 hover:-translate-y-1 ${
                           currentPage === pageNumber
                             ? "bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-500/30"
@@ -827,11 +797,9 @@ export default function AlbumsPage() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        goToPage(currentPage + 1)
-                      }
+                      onClick={() => goToPage(currentPage + 1)}
                       disabled={currentPage === totalPages}
-                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 disabled:hover:border-zinc-700 disabled:hover:bg-transparent disabled:hover:shadow-none"
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Next
                     </button>
@@ -859,9 +827,7 @@ export default function AlbumsPage() {
                 />
 
                 <div className="min-w-0">
-                  <p className="truncate font-black">
-                    {currentAlbum.title}
-                  </p>
+                  <p className="truncate font-black">{currentAlbum.title}</p>
 
                   <p className="text-sm text-gray-400">
                     Solo Beats Preview
@@ -898,14 +864,9 @@ export default function AlbumsPage() {
                     min="0"
                     max={duration || 0}
                     step="0.1"
-                    value={Math.min(
-                      currentTime,
-                      duration || 0
-                    )}
+                    value={Math.min(currentTime, duration || 0)}
                     onChange={(event) =>
-                      seekAudio(
-                        Number(event.target.value)
-                      )
+                      seekAudio(Number(event.target.value))
                     }
                     className="w-full accent-fuchsia-500"
                     aria-label="Preview progress"
@@ -929,9 +890,7 @@ export default function AlbumsPage() {
                   step="0.01"
                   value={volume}
                   onChange={(event) =>
-                    changeVolume(
-                      Number(event.target.value)
-                    )
+                    changeVolume(Number(event.target.value))
                   }
                   className="w-full accent-fuchsia-500"
                   aria-label="Preview volume"
