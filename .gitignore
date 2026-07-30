@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# local backups and temporary project files
+*backup*.tsx
+*.before-*
+*.zip
+*.rar
+/add-*.mjs
+/add-*.cjs
+/register-*.mjs
+/remove-*.mjs
+
+# large audio preview files
+*.wav

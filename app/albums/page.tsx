@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePlayer } from "../player/usePlayer";
+import type { PlayerTrack } from "../player/types";
 
 type Album = {
   title: string;
@@ -135,11 +137,6 @@ const releasedAlbums: Album[] = [
     genre: "Electronic",
   },
   {
-    title: "Trust No One",
-    image: "/covers/trust-no-one.jpg",
-    genre: "Complextro",
-  },
-  {
     title: "Full Speed",
     image: "/covers/fullspeed.jpg",
     genre: "Electro House",
@@ -165,26 +162,28 @@ const releasedAlbums: Album[] = [
 
 const ALBUMS_PER_PAGE = 8;
 
-function formatTime(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return "0:00";
-  }
+const genres = [
+  "All Genres",
+  ...Array.from(
+    new Set(
+      [...upcomingAlbums, ...releasedAlbums]
+        .map((album) => album.genre)
+        .filter((genre): genre is string => Boolean(genre))
+    )
+  ).sort((a, b) => a.localeCompare(b)),
+];
 
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.floor(seconds % 60);
-
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-}
 
 export default function AlbumsPage() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [currentAlbum, setCurrentAlbum] = useState<Album | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(0.8);
+  const {
+    currentTrack,
+    isPlaying,
+    playTrack,
+    togglePlay,
+  } = usePlayer();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("newest");
+  const [selectedGenre, setSelectedGenre] = useState("All Genres");
   const [currentPage, setCurrentPage] = useState(1);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -215,8 +214,10 @@ export default function AlbumsPage() {
       const matchesSearch = album.title.toLowerCase().includes(searchText);
       const matchesFavorites =
         !favoritesOnly || favorites.includes(album.title);
+      const matchesGenre =
+        selectedGenre === "All Genres" || album.genre === selectedGenre;
 
-      return matchesSearch && matchesFavorites;
+      return matchesSearch && matchesFavorites && matchesGenre;
     });
   }
 
@@ -234,127 +235,29 @@ export default function AlbumsPage() {
     return favorites.includes(albumTitle);
   }
 
-  async function playPreview(album: Album) {
-    const audio = audioRef.current;
-
-    if (!audio || !album.audio) {
+  function playPreview(album: Album) {
+    if (!album.audio) {
       return;
     }
 
-    if (currentAlbum?.audio === album.audio) {
-      if (audio.paused) {
-        try {
-          await audio.play();
-        } catch (error) {
-          console.error("Preview could not play:", error);
-        }
-      } else {
-        audio.pause();
-      }
+    const track: PlayerTrack = {
+      id: `album-preview-${album.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}`,
+      title: `${album.title} Preview`,
+      artist: "Solo Beats",
+      albumTitle: album.title,
+      audio: album.audio,
+      cover: album.image,
+    };
 
+    if (currentTrack?.id === track.id) {
+      togglePlay();
       return;
     }
 
-    audio.src = album.audio;
-    audio.currentTime = 0;
-    setCurrentAlbum(album);
-    setCurrentTime(0);
-    setDuration(0);
-
-    try {
-      await audio.play();
-    } catch (error) {
-      console.error("Preview could not play:", error);
-      setIsPlaying(false);
-    }
-  }
-
-  async function togglePlayer() {
-    const audio = audioRef.current;
-
-    if (!audio || !currentAlbum?.audio) {
-      return;
-    }
-
-    if (audio.paused) {
-      try {
-        await audio.play();
-      } catch (error) {
-        console.error("Preview could not play:", error);
-      }
-    } else {
-      audio.pause();
-    }
-  }
-
-  function stopPlayer() {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    audio.pause();
-    audio.currentTime = 0;
-    setIsPlaying(false);
-    setCurrentTime(0);
-  }
-
-  function closePlayer() {
-    stopPlayer();
-    setCurrentAlbum(null);
-    setDuration(0);
-  }
-
-  function seekAudio(value: number) {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    audio.currentTime = value;
-    setCurrentTime(value);
-  }
-
-  function changeVolume(value: number) {
-    const audio = audioRef.current;
-    setVolume(value);
-
-    if (audio) {
-      audio.volume = value;
-    }
-  }
-
-  function handleAudioTimeUpdate() {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    setCurrentTime(audio.currentTime);
-  }
-
-  function handleAudioMetadata() {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
-  }
-
-  function handleAudioEnded() {
-    const audio = audioRef.current;
-
-    if (audio) {
-      audio.currentTime = 0;
-    }
-
-    setIsPlaying(false);
-    setCurrentTime(0);
+    playTrack(track);
   }
 
   const visibleUpcomingAlbums = filterAlbums(upcomingAlbums);
@@ -410,21 +313,13 @@ export default function AlbumsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, sortBy, favoritesOnly]);
+  }, [search, sortBy, favoritesOnly, selectedGenre]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-
-    if (audio) {
-      audio.volume = volume;
-    }
-  }, [volume]);
 
   function goToPage(pageNumber: number) {
     setCurrentPage(pageNumber);
@@ -441,25 +336,13 @@ export default function AlbumsPage() {
     setSearch("");
     setFavoritesOnly(false);
     setSortBy("newest");
+    setSelectedGenre("All Genres");
   }
 
   return (
     <main
-      className={`min-h-screen bg-black px-5 py-12 text-white md:px-10 ${
-        currentAlbum ? "pb-96 md:pb-48" : ""
-      }`}
+      className="min-h-screen bg-black px-5 py-12 pb-40 text-white md:px-10"
     >
-      <audio
-        ref={audioRef}
-        preload="metadata"
-        onTimeUpdate={handleAudioTimeUpdate}
-        onLoadedMetadata={handleAudioMetadata}
-        onDurationChange={handleAudioMetadata}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={handleAudioEnded}
-      />
-
       <section className="mx-auto max-w-7xl">
         <h1 className="text-center text-4xl font-black md:text-6xl">
           SOLO BEATS ALBUMS
@@ -502,6 +385,48 @@ export default function AlbumsPage() {
           </button>
         </div>
 
+        <div className="mx-auto mb-6 max-w-5xl">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-fuchsia-400">
+              Filter by genre
+            </p>
+
+            <p className="text-sm text-gray-500">
+              {selectedGenre === "All Genres"
+                ? "Showing every genre"
+                : `Showing ${selectedGenre}`}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {genres.map((genre) => {
+              const genreCount =
+                genre === "All Genres"
+                  ? [...upcomingAlbums, ...releasedAlbums].length
+                  : [...upcomingAlbums, ...releasedAlbums].filter(
+                      (album) => album.genre === genre
+                    ).length;
+
+              const active = selectedGenre === genre;
+
+              return (
+                <button
+                  key={genre}
+                  type="button"
+                  onClick={() => setSelectedGenre(genre)}
+                  className={`rounded-full border px-4 py-2 text-sm font-bold transition-all duration-300 ${
+                    active
+                      ? "border-fuchsia-500 bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/25"
+                      : "border-zinc-700 bg-zinc-900 text-gray-300 hover:border-fuchsia-500 hover:text-fuchsia-300"
+                  }`}
+                >
+                  {genre} ({genreCount})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="mx-auto mb-14 flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm">
           <p className="text-gray-400">
             Showing{" "}
@@ -509,7 +434,7 @@ export default function AlbumsPage() {
             album{totalVisibleAlbums === 1 ? "" : "s"}
           </p>
 
-          {(search || favoritesOnly || sortBy !== "newest") && (
+          {(search || favoritesOnly || sortBy !== "newest" || selectedGenre !== "All Genres") && (
             <button
               type="button"
               onClick={clearFilters}
@@ -553,7 +478,7 @@ export default function AlbumsPage() {
                 <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
                   {visibleUpcomingAlbums.map((album) => {
                     const albumIsPlaying =
-                      currentAlbum?.audio === album.audio && isPlaying;
+                      currentTrack?.audio === album.audio && isPlaying;
                     const albumIsFavorite = isFavorite(album.title);
 
                     return (
@@ -614,11 +539,11 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album · Solo Beats
+                          Upcoming Album Â� Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} · {album.tracks}
+                          {album.year} Â� {album.tracks}
                         </p>
 
                         <button
@@ -665,7 +590,7 @@ export default function AlbumsPage() {
                   {paginatedReleasedAlbums.map((album) => {
                     const albumIsFavorite = isFavorite(album.title);
                     const albumIsPlaying =
-                      currentAlbum?.audio === album.audio && isPlaying;
+                      currentTrack?.audio === album.audio && isPlaying;
 
                     return (
                       <article
@@ -722,7 +647,7 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Released Album · Solo Beats
+                          Released Album Â� Solo Beats
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -815,100 +740,8 @@ export default function AlbumsPage() {
         )}
       </section>
 
-      {currentAlbum && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-fuchsia-500/40 bg-zinc-950/95 px-4 py-4 shadow-[0_-10px_40px_rgba(217,70,239,0.18)] backdrop-blur-xl md:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="grid items-center gap-5 md:grid-cols-[260px_1fr_220px_50px]">
-              <div className="flex min-w-0 items-center gap-3">
-                <img
-                  src={currentAlbum.image}
-                  alt={`${currentAlbum.title} album cover`}
-                  className="h-16 w-16 flex-none rounded-xl object-cover"
-                />
-
-                <div className="min-w-0">
-                  <p className="truncate font-black">{currentAlbum.title}</p>
-
-                  <p className="text-sm text-gray-400">
-                    Solo Beats Preview
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-2 flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={stopPlayer}
-                    className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500"
-                  >
-                    Stop
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={togglePlayer}
-                    className="rounded-xl bg-fuchsia-600 px-6 py-3 font-black transition-all duration-300 hover:-translate-y-1 hover:scale-105 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
-                  >
-                    {isPlaying ? "Pause" : "Play"}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="w-11 text-right text-xs text-gray-400">
-                    {formatTime(currentTime)}
-                  </span>
-
-                  <input
-                    type="range"
-                    min="0"
-                    max={duration || 0}
-                    step="0.1"
-                    value={Math.min(currentTime, duration || 0)}
-                    onChange={(event) =>
-                      seekAudio(Number(event.target.value))
-                    }
-                    className="w-full accent-fuchsia-500"
-                    aria-label="Preview progress"
-                  />
-
-                  <span className="w-11 text-xs text-gray-400">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-gray-400">
-                  Volume
-                </span>
-
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={volume}
-                  onChange={(event) =>
-                    changeVolume(Number(event.target.value))
-                  }
-                  className="w-full accent-fuchsia-500"
-                  aria-label="Preview volume"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={closePlayer}
-                aria-label="Close player"
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-700 text-lg font-bold text-gray-300 transition-all duration-300 hover:rotate-90 hover:border-red-500 hover:bg-red-500 hover:text-white"
-              >
-                X
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
+
+
