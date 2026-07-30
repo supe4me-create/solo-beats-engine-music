@@ -21,7 +21,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/darkhorse.png",
-    audio: "/previews/darkhorse.wav",
+    audio: "/previews/darkhorse.mp3",
     link: "/albums/dark-horse",
     genre: "Complextro",
   },
@@ -30,7 +30,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/bassking.png",
-    audio: "/previews/bassking.wav",
+    audio: "/previews/bassking.mp3",
     link: "/albums/bass-king",
     genre: "Electro House",
   },
@@ -39,7 +39,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/zombiebassline.png",
-    audio: "/previews/zombiebassline.wav",
+    audio: "/previews/zombiebassline.mp3",
     link: "/albums/zombie-bassline",
     genre: "Complextro",
   },
@@ -48,7 +48,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/aworldbuiltonsound.png",
-    audio: "/previews/aworldbuiltonsound.wav",
+    audio: "/previews/aworldbuiltonsound.mp3",
     link: "/albums/aworldbuiltonsound",
     genre: "Electronic",
   },
@@ -57,7 +57,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/blacksea.png",
-    audio: "/previews/blacksea.wav",
+    
     link: "/albums/black-sea",
     genre: "Complextro",
   },
@@ -107,7 +107,7 @@ const releasedAlbums: Album[] = [
   {
     title: "Invincible",
     image: "/covers/Invincible-cover.jpg",
-    audio: "/previews/invincible/Courageous Time 1.wav",
+    audio: "/previews/invincible/Courageous Time 1.mp3",
     link: "/albums/invincible",
     genre: "Electronic",
   },
@@ -144,7 +144,7 @@ const releasedAlbums: Album[] = [
   {
     title: "Night Terror",
     image: "/covers/nightterror.jpg",
-    audio: "/previews/nightterror.wav",
+    audio: "/previews/nightterror.mp3",
     genre: "Complextro",
   },
   {
@@ -155,7 +155,7 @@ const releasedAlbums: Album[] = [
   {
     title: "Strange Feeling",
     image: "/covers/strangefeeling.png",
-    audio: "/previews/strangefeeling.wav",
+    audio: "/previews/strangefeeling.mp3",
     genre: "Complextro",
   },
 ];
@@ -539,11 +539,11 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album Â� Solo Beats
+                          Upcoming Album • Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} Â� {album.tracks}
+                          {album.year} • {album.tracks}
                         </p>
 
                         <button
@@ -647,7 +647,7 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Released Album Â� Solo Beats
+                          Released Album • Solo Beats
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
