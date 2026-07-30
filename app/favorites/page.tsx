@@ -70,7 +70,7 @@ const catalogExtras: FavoriteAlbumCard[] = [
     id: "black-sea",
     audio: "/previews/blacksea.wav",
     title: "Black Sea",
-    cover: "/covers/blacksea.png",
+    cover: "/covers/black-sea.png",
     genre: "Complextro",
     year: 2026,
     tracks: 20,
@@ -368,3 +368,4 @@ export default function FavoritesPage() {
     </main>
   );
 }
+

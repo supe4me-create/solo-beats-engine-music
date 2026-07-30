@@ -42,7 +42,7 @@ export default function AlbumPage() {
     artist: "Solo Beats",
     albumTitle: "Black Sea",
     audio: track.audio,
-    cover: "/covers/blacksea.png",
+    cover: "/covers/black-sea.png",
     trackNumber: track.number,
   }));
 
@@ -63,7 +63,7 @@ export default function AlbumPage() {
         </Link>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[380px_1fr] lg:items-center">
-          <img src="/covers/blacksea.png" alt="Black Sea" className="aspect-square w-full rounded-3xl object-cover shadow-2xl" />
+          <img src="/covers/black-sea.png" alt="Black Sea" className="aspect-square w-full rounded-3xl object-cover shadow-2xl" />
 
           <div>
             <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">Upcoming Album</p>
@@ -109,3 +109,4 @@ export default function AlbumPage() {
     </main>
   );
 }
+

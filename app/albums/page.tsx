@@ -56,7 +56,7 @@ const upcomingAlbums: Album[] = [
     title: "Black Sea",
     year: "2026",
     tracks: "20 Tracks",
-    image: "/covers/blacksea.png",
+    image: "/covers/black-sea.png",
     
     link: "/albums/black-sea",
     genre: "Complextro",
@@ -743,5 +743,6 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
