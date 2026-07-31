@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePlayer } from "../player/usePlayer";
 import type { PlayerTrack } from "../player/types";
+import { albums as storeAlbums } from "../store/albums";
 
 type Album = {
   title: string;
@@ -14,6 +15,24 @@ type Album = {
   link?: string;
   genre?: string;
 };
+
+function normalizeAlbumTitle(title: string) {
+  return title.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getAlbumPreview(album: Album) {
+  if (album.title === "Black Sea") {
+    return "/previews/18-black-sea.wav";
+  }
+
+  return (
+    album.audio ??
+    storeAlbums.find(
+      (item) =>
+        normalizeAlbumTitle(item.title) === normalizeAlbumTitle(album.title)
+    )?.albumPreview
+  );
+}
 
 const upcomingAlbums: Album[] = [
   {
@@ -236,7 +255,9 @@ export default function AlbumsPage() {
   }
 
   function playPreview(album: Album) {
-    if (!album.audio) {
+    const preview = getAlbumPreview(album);
+
+    if (!preview) {
       return;
     }
 
@@ -248,7 +269,7 @@ export default function AlbumsPage() {
       title: `${album.title} Preview`,
       artist: "Solo Beats",
       albumTitle: album.title,
-      audio: album.audio,
+      audio: preview,
       cover: album.image,
     };
 
@@ -478,7 +499,7 @@ export default function AlbumsPage() {
                 <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
                   {visibleUpcomingAlbums.map((album) => {
                     const albumIsPlaying =
-                      currentTrack?.audio === album.audio && isPlaying;
+                      currentTrack?.audio === getAlbumPreview(album) && isPlaying;
                     const albumIsFavorite = isFavorite(album.title);
 
                     return (
@@ -590,7 +611,7 @@ export default function AlbumsPage() {
                   {paginatedReleasedAlbums.map((album) => {
                     const albumIsFavorite = isFavorite(album.title);
                     const albumIsPlaying =
-                      currentTrack?.audio === album.audio && isPlaying;
+                      currentTrack?.audio === getAlbumPreview(album) && isPlaying;
 
                     return (
                       <article
@@ -651,7 +672,7 @@ export default function AlbumsPage() {
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
-                          {album.audio ? (
+                          {getAlbumPreview(album) ? (
                             <button
                               type="button"
                               onClick={() => playPreview(album)}
