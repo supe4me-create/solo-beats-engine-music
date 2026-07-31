@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -223,12 +223,12 @@ export default function ArtistPromotionReviewPage() {
 
   async function reviewSubmission(
     submissionId: string,
-    action: "approve" | "reject"
+    action: "approve" | "reject", reasonOverride?: string
   ) {
     if (!user) return;
 
     const rejectionReason =
-      rejectionReasons[submissionId]?.trim() ||
+      reasonOverride?.trim() || rejectionReasons[submissionId]?.trim() ||
       "";
 
     if (
@@ -622,7 +622,7 @@ export default function ArtistPromotionReviewPage() {
                       </h2>
 
                       <p className="mt-2 text-white/45">
-                        {submission.genre} •{" "}
+                        {submission.genre} â€¢{" "}
                         {
                           submission.promotionDurationDays
                         }{" "}
@@ -1012,7 +1012,7 @@ export default function ArtistPromotionReviewPage() {
                           <p className="mt-2 text-sm">
                             {submission.placementLocation ||
                               "placement"}{" "}
-                            •{" "}
+                            â€¢{" "}
                             {submission.scheduleStartDate ||
                               "start date"}{" "}
                             to{" "}
@@ -1025,7 +1025,9 @@ export default function ArtistPromotionReviewPage() {
                         </div>
                       ) : null}
 
-                      {submission.rejectionReason ? (
+                      {submission.reviewStatus === "approved" ? (<button type="button" disabled={reviewingId === submission.submissionId} onClick={() => reviewSubmission(submission.submissionId, "reject", "Removed after testing.")} className="mt-6 rounded-2xl border border-red-300/20 bg-red-300/10 px-5 py-4 font-black text-red-200 disabled:opacity-50">{reviewingId === submission.submissionId ? "Deactivating..." : "Deactivate Promotion"}</button>) : null}
+
+{submission.rejectionReason ? (
                         <p className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-red-200">
                           Rejection reason:{" "}
                           {
@@ -1082,3 +1084,6 @@ function InfoBox({
     </div>
   );
 }
+
+
+

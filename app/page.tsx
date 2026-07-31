@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePlayer } from "./player/usePlayer";
 import type { PlayerTrack } from "./player/types";
+import { albums as storeAlbums } from "./store/albums";
 
 type Album = {
   title: string;
@@ -112,7 +113,7 @@ const upcomingAlbums: Album[] = [
   },
 ];
 
-const releasedAlbums: Album[] = [
+const releasedAlbumBase: Album[] = [
   {
     title: "Neon Lights",
     image: "/covers/neonlights.jpg",
@@ -208,6 +209,8 @@ const releasedAlbums: Album[] = [
     genre: "Complextro",
   },
 ];
+
+const releasedAlbums: Album[] = releasedAlbumBase.map((album) => { const match = storeAlbums.find((item) => item.title.toLowerCase().replace(/[^a-z0-9]/g, "") === album.title.toLowerCase().replace(/[^a-z0-9]/g, "")); return { ...album, audio: match?.albumPreview || album.audio, link: "/store", year: match ? String(match.year) : album.year, tracks: match ? `${match.tracks.length} Tracks` : album.tracks }; });
 
 const ALBUMS_PER_PAGE = 8;
 
@@ -483,7 +486,7 @@ export default function AlbumsPage() {
       className="min-h-screen bg-black px-5 py-12 pb-40 text-white md:px-10"
     >
 
-      <section className="mx-auto max-w-7xl"><section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/30"><img src="/covers/hero-home-v2.png" alt="Solo Beats Engine Music" className="w-full" /></section>
+      <section className="mx-auto max-w-7xl"><section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/30"><img src="/covers/hero-home-final.png" alt="Solo Beats Engine Music" className="w-full object-cover" /></section>
         <h1 className="text-center text-4xl font-black md:text-6xl">
           SOLO BEATS ALBUMS
         </h1>
@@ -511,7 +514,7 @@ export default function AlbumsPage() {
               </h2>
 
               <p className="mt-4 text-lg text-white/55">
-                Upcoming â€¢ 20 Tracks â€¢ Solo Beats
+                Upcoming • 20 Tracks • Solo Beats
               </p>
 
               <p className="mt-6 max-w-3xl text-lg leading-8 text-white/65">
@@ -768,7 +771,7 @@ export default function AlbumsPage() {
                 : "border-zinc-700 bg-zinc-900 text-gray-200 hover:border-pink-500 hover:text-pink-400"
             }`}
           >
-            â™¥ Favorites
+            ♥ Favorites
           </button>
         </div>
 
@@ -887,7 +890,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "â™¥" : "â™¡"}
+                          {albumIsFavorite ? "♥" : "♡"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -926,11 +929,11 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album Ã‚ï¿½ Solo Beats
+                          Upcoming Album • Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} Ã‚ï¿½ {album.tracks}
+                          {album.year} • {album.tracks}
                         </p>
 
                         <button
@@ -998,7 +1001,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "â™¥" : "â™¡"}
+                          {albumIsFavorite ? "♥" : "♡"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -1034,7 +1037,7 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Released Album Ã‚ï¿½ Solo Beats
+                          Released Album • Solo Beats
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1130,6 +1133,13 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
+
+
+
+
+
 
 
 
