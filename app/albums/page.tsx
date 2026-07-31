@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -19,6 +19,8 @@ type Album = {
 function normalizeAlbumTitle(title: string) {
   return title.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
+
+function getAlbumLink(album: Album) { return "/store"; }
 
 function getAlbumPreview(album: Album) {
   if (album.title === "Black Sea") {
@@ -525,9 +527,9 @@ export default function AlbumsPage() {
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
-                          {album.link ? (
+                          {getAlbumLink(album) ? (
                             <Link
-                              href={album.link}
+                              href={getAlbumLink(album)}
                               className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-500"
                             >
                               <img
@@ -577,7 +579,7 @@ export default function AlbumsPage() {
 
                         {album.link && (
                           <Link
-                            href={album.link}
+                            href={getAlbumLink(album)}
                             className="mt-3 block w-full rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
                           >
                             View Album
@@ -636,8 +638,8 @@ export default function AlbumsPage() {
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
-                          {album.link ? (
-                            <Link href={album.link}>
+                          {getAlbumLink(album) ? (
+                            <Link href={getAlbumLink(album)}>
                               <img
                                 src={album.image}
                                 alt={`${album.title} album cover`}
@@ -690,9 +692,9 @@ export default function AlbumsPage() {
                             </button>
                           )}
 
-                          {album.link ? (
+                          {getAlbumLink(album) ? (
                             <Link
-                              href={album.link}
+                              href={getAlbumLink(album)}
                               className="rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/30"
                             >
                               Buy
@@ -764,6 +766,9 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
+
 
 
 
