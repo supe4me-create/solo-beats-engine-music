@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -461,6 +461,28 @@ export async function POST(request: Request) {
     await purchaseRef.set(purchaseRecord, {
       merge: true,
     });
+    if (!existingPurchase.exists) {
+      await adminDb
+        .collection("ownerNotifications")
+        .doc(`music-order-${completedOrder.id}`)
+        .set({
+          type: "music_order",
+          category: "orders",
+          title: "New music order",
+          message: `${payerName || payerEmail || "A customer"} purchased ${purchasedItems.length} item${purchasedItems.length === 1 ? "" : "s"} for ${currency} ${totalAmount || "0.00"}.`,
+          targetUrl: `/developer/orders?orderId=${encodeURIComponent(completedOrder.id)}`,
+          relatedId: completedOrder.id,
+          orderId: completedOrder.id,
+          captureId: paymentCapture.id || null,
+          amount: totalAmount,
+          currency,
+          customerEmail: payerEmail,
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+    }
+
 
     return NextResponse.json({
       success: true,
