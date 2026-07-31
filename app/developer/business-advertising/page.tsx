@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -154,10 +154,10 @@ export default function BusinessAdvertisingReviewPage() {
     [submissions]
   );
 
-  async function review(submissionId: string, action: "approve" | "reject") {
+  async function review(submissionId: string, action: "approve" | "reject", reasonOverride?: string) {
     if (!user) return;
     const finalPrice = finalPrices[submissionId]?.trim() || "";
-    const rejectionReason = rejectionReasons[submissionId]?.trim() || "";
+    const rejectionReason = reasonOverride?.trim() || rejectionReasons[submissionId]?.trim() || "";
 
     if (action === "approve" && (!finalPrice || Number(finalPrice) <= 0)) {
       setError("Enter a valid final campaign price before approving.");
@@ -407,7 +407,7 @@ export default function BusinessAdvertisingReviewPage() {
                     <div>
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-cyan-300">{submission.businessName}</p>
                       <h2 className="mt-2 text-4xl font-black">{submission.campaignName}</h2>
-                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} • {submission.requestedDurationDays} days</p>
+                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} â€¢ {submission.requestedDurationDays} days</p>
                       <h3 className="mt-5 text-2xl font-black">{submission.headline}</h3>
                       <p className="mt-3 leading-7 text-white/60">{submission.description}</p>
 
@@ -631,7 +631,7 @@ export default function BusinessAdvertisingReviewPage() {
                         <div className="mt-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-5 text-emerald-100">
                           <p className="font-black">Business campaign scheduled</p>
                           <p className="mt-2 text-sm">
-                            {submission.placementLocation || "placement"} •{" "}
+                            {submission.placementLocation || "placement"} â€¢{" "}
                             {submission.scheduleStartDate || "start date"} to{" "}
                             {submission.scheduleEndDate || "end date"}
                           </p>
@@ -641,7 +641,9 @@ export default function BusinessAdvertisingReviewPage() {
                         </div>
                       ) : null}
 
-                      {submission.rejectionReason ? (
+                      {submission.reviewStatus === "approved" ? (<button type="button" disabled={reviewingId === submission.submissionId} onClick={() => review(submission.submissionId, "reject", "Removed after testing.")} className="mt-6 rounded-2xl border border-red-300/20 bg-red-300/10 px-5 py-4 font-black text-red-200 disabled:opacity-50">{reviewingId === submission.submissionId ? "Deactivating..." : "Deactivate Campaign"}</button>) : null}
+
+{submission.rejectionReason ? (
                         <p className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-red-200">
                           Rejection reason: {submission.rejectionReason}
                         </p>
@@ -666,3 +668,5 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+

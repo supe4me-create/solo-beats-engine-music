@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -483,7 +483,7 @@ export default function AlbumsPage() {
       className="min-h-screen bg-black px-5 py-12 pb-40 text-white md:px-10"
     >
 
-      <section className="mx-auto max-w-7xl">
+      <section className="mx-auto max-w-7xl"><section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/30"><img src="/covers/hero-home-v2.png" alt="Solo Beats Engine Music" className="w-full" /></section>
         <h1 className="text-center text-4xl font-black md:text-6xl">
           SOLO BEATS ALBUMS
         </h1>
@@ -511,7 +511,7 @@ export default function AlbumsPage() {
               </h2>
 
               <p className="mt-4 text-lg text-white/55">
-                Upcoming • 20 Tracks • Solo Beats
+                Upcoming â€¢ 20 Tracks â€¢ Solo Beats
               </p>
 
               <p className="mt-6 max-w-3xl text-lg leading-8 text-white/65">
@@ -768,7 +768,7 @@ export default function AlbumsPage() {
                 : "border-zinc-700 bg-zinc-900 text-gray-200 hover:border-pink-500 hover:text-pink-400"
             }`}
           >
-            ♥ Favorites
+            â™¥ Favorites
           </button>
         </div>
 
@@ -887,7 +887,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "♥" : "♡"}
+                          {albumIsFavorite ? "â™¥" : "â™¡"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -926,11 +926,11 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album Â� Solo Beats
+                          Upcoming Album Ã‚ï¿½ Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} Â� {album.tracks}
+                          {album.year} Ã‚ï¿½ {album.tracks}
                         </p>
 
                         <button
@@ -998,7 +998,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "♥" : "♡"}
+                          {albumIsFavorite ? "â™¥" : "â™¡"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -1034,7 +1034,7 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Released Album Â� Solo Beats
+                          Released Album Ã‚ï¿½ Solo Beats
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1130,6 +1130,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 

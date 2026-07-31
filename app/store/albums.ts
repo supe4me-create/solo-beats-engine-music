@@ -213,7 +213,7 @@ const albumCatalog: Album[] = [
     genre: "Electronic",
     status: "released",
     cover: "/covers/reboot.jpg",
-    albumPreviewFileName: "6 Reboot .wav",
+    albumPreviewFileName: "6 Reboot.wav",
     description:
       "Experience Reboot, a twenty-track Solo Beats album packed with powerful electronic energy, heavy bass, bold melodies and relentless momentum.",
     tracks: [
