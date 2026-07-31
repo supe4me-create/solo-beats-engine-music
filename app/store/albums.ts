@@ -1,4 +1,4 @@
-export type Track = {
+﻿export type Track = {
   id: string;
   number: number;
   title: string;
@@ -248,7 +248,7 @@ const albumCatalog: Album[] = [
     genre: "Electronic",
     status: "released",
     cover: "/covers/strangefeeling.png",
-    albumPreviewFileName: "strangefeeling.wav",
+    albumPreviewFileName: "20-strange-feeling.wav",
     description:
       "Experience Strange Feeling, a powerful twenty-track Solo Beats album packed with electronic energy, atmospheric melodies and unforgettable sound.",
     tracks: [
@@ -650,3 +650,4 @@ export function getTrackById(trackId: string) {
 
   return undefined;
 }
+
