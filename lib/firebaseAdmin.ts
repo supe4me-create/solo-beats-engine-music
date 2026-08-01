@@ -1,4 +1,4 @@
-import {
+﻿import {
   applicationDefault,
   cert,
   getApps,
@@ -18,7 +18,7 @@ function toServiceAccount(value: ServiceAccountJson): ServiceAccount {
   return {
     projectId: value.project_id,
     clientEmail: value.client_email,
-    privateKey: value.private_key,
+    privateKey: value.private_key.replace(/\\n/g, "\n"),
   };
 }
 
@@ -28,13 +28,27 @@ const STORAGE_BUCKET =
 
 const inlineJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
+const separateServiceAccount =
+  process.env.FIREBASE_PROJECT_ID &&
+  process.env.FIREBASE_CLIENT_EMAIL &&
+  process.env.FIREBASE_PRIVATE_KEY &&
+  process.env.FIREBASE_PRIVATE_KEY.length > 500
+    ? {
+        project_id: process.env.FIREBASE_PROJECT_ID,
+        client_email: process.env.FIREBASE_CLIENT_EMAIL,
+        private_key: process.env.FIREBASE_PRIVATE_KEY,
+      }
+    : null;
+
 const credential = inlineJson
   ? cert(
       toServiceAccount(
         JSON.parse(inlineJson) as ServiceAccountJson
       )
     )
-  : applicationDefault();
+  : separateServiceAccount
+    ? cert(toServiceAccount(separateServiceAccount))
+    : applicationDefault();
 
 const existingApp = getApps()[0];
 
@@ -55,3 +69,4 @@ export {
   adminStorage,
   firebaseAdminApp,
 };
+
