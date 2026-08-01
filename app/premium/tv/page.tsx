@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -333,8 +333,8 @@ export default function PremiumTvPage() {
     useState<SponsoredBusinessCampaign[]>([]);
 
   const allPrograms = useMemo(
-    () =>
-      premiumAlbums.flatMap((album) =>
+    () => [
+      ...premiumAlbums.flatMap((album) =>
         album.tracks.map((track) => ({
           id: track.id,
           title: track.title,
@@ -344,6 +344,15 @@ export default function PremiumTvPage() {
           src: track.preview,
         }))
       ),
+      {
+        id: "bullet-carnage-tv-bass-drop",
+        title: "Bass Drop",
+        albumTitle: "Bullet Carnage",
+        artist: "Solo Beats",
+        cover: "/covers/bullet-carnage.png",
+        src: "/previews/bullet-carnage/18 Bass Drop.mp3",
+      },
+    ],
     []
   );
 
@@ -1427,7 +1436,7 @@ export default function PremiumTvPage() {
                     </h2>
 
                     <p className="mt-2 text-lg text-white/55">
-                      {currentProgram.artist} • {currentProgram.albumTitle}
+                      {currentProgram.artist} â€¢ {currentProgram.albumTitle}
                     </p>
                   </div>
 

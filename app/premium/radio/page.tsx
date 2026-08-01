@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -387,8 +387,8 @@ export default function PremiumRadioPage() {
     useState<SponsoredBusinessCampaign[]>([]);
 
   const stationTracks = useMemo(
-    () =>
-      premiumAlbums.flatMap((album) =>
+    () => [
+      ...premiumAlbums.flatMap((album) =>
         album.tracks.map((track) => ({
           id: track.id,
           title: track.title,
@@ -398,6 +398,15 @@ export default function PremiumRadioPage() {
           src: track.preview,
         }))
       ),
+      {
+        id: "bullet-carnage-radio-stutter-warfare",
+        title: "Stutter Warfare",
+        albumTitle: "Bullet Carnage",
+        artist: "Solo Beats",
+        cover: "/covers/bullet-carnage.png",
+        src: "/previews/bullet-carnage/10 Stutter Warfare.mp3",
+      },
+    ],
     []
   );
 
@@ -897,7 +906,7 @@ export default function PremiumRadioPage() {
                   </h2>
 
                   <p className="mt-1 text-white/50">
-                    {currentTrack.artist} • {currentTrack.albumTitle}
+                    {currentTrack.artist} â€¢ {currentTrack.albumTitle}
                   </p>
                 </>
               ) : (
