@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { useAuth } from "../auth/AuthContext";
 import { useFavorites } from "../favorites/useFavorites";
+import OwnerNotifications from "./OwnerNotifications";
 
 const OWNER_EMAIL = "supe4.me@gmail.com";
 
@@ -81,6 +82,8 @@ export default function GlobalHeader() {
         </nav>
 
         <div className="order-2 flex items-center gap-3 md:order-3">
+          <OwnerNotifications />
+
           {loading ? (
             <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/45">
               Loading...
@@ -155,6 +158,3 @@ export default function GlobalHeader() {
     </header>
   );
 }
-
-
-
