@@ -215,7 +215,7 @@ export default function OwnerNotifications() {
         aria-label="Owner notifications"
         className="relative grid h-11 w-11 place-items-center rounded-full border border-violet-400/30 bg-violet-500/10 text-xl text-violet-100 transition hover:bg-violet-500/20 hover:text-white"
       >
-        <span aria-hidden="true">ðŸ””</span>
+        <span aria-hidden="true">&#128276;</span>
 
         {unreadCount > 0 ? (
           <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white">
@@ -320,6 +320,7 @@ export default function OwnerNotifications() {
     </div>
   );
 }
+
 
 
 
