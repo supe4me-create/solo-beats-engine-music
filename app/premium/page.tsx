@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -15,8 +15,8 @@ const benefits = [
   { title: "Cancel Anytime", text: "Manage or cancel the subscription from the customer account." },
 ];
 
-const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "";
-const premiumPlanId = process.env.NEXT_PUBLIC_PAYPAL_PREMIUM_PLAN_ID || "";
+const paypalClientId = (process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "").replace(/\s+/g, "");
+const premiumPlanId = (process.env.NEXT_PUBLIC_PAYPAL_PREMIUM_PLAN_ID || "").replace(/\s+/g, "");
 
 export default function PremiumPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -157,7 +157,7 @@ export default function PremiumPage() {
           <p className="text-sm font-black uppercase tracking-[0.2em] text-cyan-300">Development roadmap</p>
           <h2 className="mt-2 text-3xl font-black">Premium Phase 1</h2>
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {["Premium landing page — complete", "PayPal subscription checkout — complete", "Member account status — next", "Premium streaming access"].map((item, index) => (
+            {["Premium landing page â€” complete", "PayPal subscription checkout â€” complete", "Member account status â€” next", "Premium streaming access"].map((item, index) => (
               <div key={item} className="rounded-2xl border border-white/10 bg-black/20 p-5">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-white/35">Step {index + 1}</p>
                 <p className="mt-2 font-black">{item}</p>
@@ -169,3 +169,4 @@ export default function PremiumPage() {
     </main>
   );
 }
+
