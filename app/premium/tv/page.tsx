@@ -341,7 +341,7 @@ export default function PremiumTvPage() {
           albumTitle: album.title,
           artist: album.artist,
           cover: album.cover,
-          src: track.preview,
+          src: track.preview.replace(/\.wav$/i, ".mp3"),
         }))
       ),
       {
@@ -1820,3 +1820,4 @@ export default function PremiumTvPage() {
     </main>
   );
 }
+
