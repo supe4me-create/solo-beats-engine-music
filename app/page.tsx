@@ -48,20 +48,36 @@ type PromotedCampaign = {
 
 const flagshipTracks: PlayerTrack[] = [
   {
-    id: "no-tomorrow-lonely-ghost",
-    title: "Lonely Ghost",
+    id: "bullet-carnage-fantasy",
+    title: "Fantasy",
     artist: "Solo Beats",
-    albumTitle: "No Tomorrow",
-    audio: "/previews/no-tomorrow/1 Lonely Ghost.wav",
-    cover: "/covers/no-tomorrow.jpg",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/1 Fantasy.mp3",
+    cover: "/covers/bullet-carnage.png",
   },
   {
-    id: "no-tomorrow-lord-of-speed",
-    title: "Power Bass",
+    id: "bullet-carnage-neon-execution",
+    title: "Neon Execution",
     artist: "Solo Beats",
-    albumTitle: "No Tomorrow",
-    audio: "/previews/no-tomorrow/20 Power Bass.wav",
-    cover: "/covers/no-tomorrow.jpg",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/3 Neon Execution.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-title-track",
+    title: "Bullet Carnage",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/7 Bullet Carnage.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-terminal-erasure",
+    title: "Terminal Erasure",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/16 Terminal Erasure.mp3",
+    cover: "/covers/bullet-carnage.png",
   },
 ];
 
@@ -499,8 +515,8 @@ export default function AlbumsPage() {
         <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/25 bg-gradient-to-br from-red-950 via-black to-zinc-950 p-6 shadow-2xl md:p-10">
           <div className="grid gap-8 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center">
             <img
-              src="/covers/no-tomorrow.jpg"
-              alt="No Tomorrow album cover"
+              src="/covers/bullet-carnage.png"
+              alt="Bullet Carnage album cover"
               className="aspect-square w-full rounded-[2rem] object-cover shadow-2xl shadow-red-950/60"
             />
 
@@ -510,7 +526,7 @@ export default function AlbumsPage() {
               </p>
 
               <h2 className="mt-3 text-5xl font-black md:text-7xl">
-                No Tomorrow
+                Bullet Carnage
               </h2>
 
               <p className="mt-4 text-lg text-white/55">
@@ -518,9 +534,9 @@ export default function AlbumsPage() {
               </p>
 
               <p className="mt-6 max-w-3xl text-lg leading-8 text-white/65">
-                A hard-hitting unreleased electronic album built for listeners who want speed,
-                energy, atmosphere, and power. Premium members will get early access to selected
-                previews before the full release.
+                A devastating unreleased electronic album built with aggressive bass,
+                dark futuristic energy, speed, and cinematic power. Preview four flagship tracks
+                now, with additional exclusive tracks coming to Premium Radio and Premium TV.
               </p>
 
               <div className="mt-7 grid gap-3 sm:grid-cols-2">
@@ -1133,6 +1149,8 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
 
 
 
