@@ -814,7 +814,7 @@ export default function PremiumRadioPage() {
   }
 
   return (
-    <main className="min-h-screen px-5 pb-48 pt-52 sm:px-8">
+    <main className="min-h-screen overflow-x-hidden px-5 pb-48 pt-52 sm:px-8">
       <audio
         ref={audioRef}
         onPlay={() =>
@@ -858,10 +858,10 @@ export default function PremiumRadioPage() {
               <div className="mt-7 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={startRadio}
+                  onClick={togglePlayPause}
                   className="rounded-2xl bg-white px-6 py-4 font-black text-black"
                 >
-                  Start Radio
+                  {isPlaying ? "Pause Radio" : currentTime > 0 ? "Resume Radio" : "Start Radio"}
                 </button>
 
                 <button
@@ -897,6 +897,12 @@ export default function PremiumRadioPage() {
                     className="mt-5 aspect-square w-full rounded-2xl object-cover"
                   />
 
+                  {currentTrack.albumTitle === "Bullet Carnage" ? (
+                    <p className="mt-5 inline-flex rounded-full border border-orange-300/30 bg-orange-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-orange-200">
+                      Upcoming Exclusive
+                    </p>
+                  ) : null}
+
                   <p className="mt-5 text-sm font-black uppercase tracking-[0.14em] text-white/40">
                     Now Playing
                   </p>
@@ -906,7 +912,7 @@ export default function PremiumRadioPage() {
                   </h2>
 
                   <p className="mt-1 text-white/50">
-                    {currentTrack.artist} â€¢ {currentTrack.albumTitle}
+                    {currentTrack.artist} &bull; {currentTrack.albumTitle}
                   </p>
                 </>
               ) : (
@@ -1102,6 +1108,7 @@ export default function PremiumRadioPage() {
     </main>
   );
 }
+
 
 
 
