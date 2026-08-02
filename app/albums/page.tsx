@@ -24,7 +24,7 @@ function getAlbumLink(album: Album) { return "/store"; }
 
 function getAlbumPreview(album: Album) {
   if (album.title === "Black Sea") {
-    return "/previews/18-black-sea.wav";
+    return "/previews/18-black-sea.mp3";
   }
 
   return (
@@ -766,6 +766,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 
