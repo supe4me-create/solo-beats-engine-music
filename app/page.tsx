@@ -123,7 +123,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/black-sea.png",
-    audio: "/previews/blacksea.wav",
+    audio: "/previews/18-black-sea.mp3",
     link: "/albums/black-sea",
     genre: "Complextro",
   },
@@ -1149,6 +1149,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 
