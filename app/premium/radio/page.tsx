@@ -31,6 +31,9 @@ type RadioTrack = {
   src: string;
 };
 
+const RADIO_PREVIEW_LIMIT = 2;
+const RADIO_PREVIEW_STORAGE_KEY = "solo-beats-radio-preview-count";
+
 
 type SponsoredBusinessCampaign = {
   submissionId: string;
@@ -424,12 +427,47 @@ export default function PremiumRadioPage() {
     useState(0);
   const [volume, setVolume] =
     useState(1);
+  const [previewPlays, setPreviewPlays] =
+    useState(0);
+  const [previewLocked, setPreviewLocked] =
+    useState(false);
+  const [previewLoaded, setPreviewLoaded] =
+    useState(false);
 
   const audioRef =
     useRef<HTMLAudioElement | null>(null);
 
   const currentTrack =
     queue[currentIndex] || null;
+
+  const hasPremiumAccess =
+    accessState === "active";
+  const isPublicPreview =
+    accessState !== "loading" &&
+    !hasPremiumAccess;
+
+  useEffect(() => {
+    try {
+      const savedCount = Number(
+        window.localStorage.getItem(
+          RADIO_PREVIEW_STORAGE_KEY
+        ) || "0"
+      );
+      const safeCount = Number.isFinite(savedCount)
+        ? Math.max(0, savedCount)
+        : 0;
+
+      setPreviewPlays(safeCount);
+      setPreviewLocked(
+        safeCount >= RADIO_PREVIEW_LIMIT
+      );
+    } catch {
+      setPreviewPlays(0);
+      setPreviewLocked(false);
+    } finally {
+      setPreviewLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -618,7 +656,8 @@ export default function PremiumRadioPage() {
     if (
       !audio ||
       !currentTrack ||
-      accessState !== "active"
+      accessState === "loading" ||
+      (isPublicPreview && previewLocked)
     ) {
       return;
     }
@@ -634,12 +673,20 @@ export default function PremiumRadioPage() {
   }, [
     currentTrack,
     accessState,
+    isPublicPreview,
+    previewLocked,
   ]);
 
   async function startRadio() {
     const audio = audioRef.current;
 
-    if (!audio || !currentTrack) return;
+    if (
+      !audio ||
+      !currentTrack ||
+      (isPublicPreview && previewLocked)
+    ) {
+      return;
+    }
 
     await audio.play();
     setIsPlaying(true);
@@ -648,7 +695,13 @@ export default function PremiumRadioPage() {
   async function togglePlayPause() {
     const audio = audioRef.current;
 
-    if (!audio || !currentTrack) return;
+    if (
+      !audio ||
+      !currentTrack ||
+      (isPublicPreview && previewLocked)
+    ) {
+      return;
+    }
 
     if (audio.paused) {
       await audio.play();
@@ -699,6 +752,35 @@ export default function PremiumRadioPage() {
 
   function handleEnded() {
     setIsPlaying(false);
+
+    if (isPublicPreview) {
+      const nextPreviewCount = Math.min(
+        previewPlays + 1,
+        RADIO_PREVIEW_LIMIT
+      );
+
+      setPreviewPlays(nextPreviewCount);
+
+      try {
+        window.localStorage.setItem(
+          RADIO_PREVIEW_STORAGE_KEY,
+          String(nextPreviewCount)
+        );
+      } catch {
+        // The in-memory limit still applies.
+      }
+
+      if (
+        nextPreviewCount >=
+        RADIO_PREVIEW_LIMIT
+      ) {
+        setPreviewLocked(true);
+        setMessage(
+          "Your two-song Radio preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited Radio and TV."
+        );
+        return;
+      }
+    }
 
     if (autoplay) {
       nextTrack();
@@ -755,64 +837,6 @@ export default function PremiumRadioPage() {
       </main>
     );
   }
-
-  if (accessState === "signed-out") {
-    return (
-      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
-        <section className="mx-auto max-w-5xl rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-500/20 via-white/[0.04] to-cyan-400/10 p-10 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-violet-300">
-            Premium Radio Locked
-          </p>
-          <h1 className="mt-3 text-5xl font-black">
-            Sign in to listen
-          </h1>
-          <Link
-            href="/account"
-            className="mt-7 inline-flex rounded-2xl bg-white px-6 py-4 font-black text-black"
-          >
-            Open Account
-          </Link>
-        </section>
-      </main>
-    );
-  }
-
-  if (
-    accessState === "inactive" ||
-    accessState === "error"
-  ) {
-    return (
-      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
-        <section className="mx-auto max-w-5xl rounded-[2rem] border border-red-300/15 bg-gradient-to-br from-red-500/10 via-white/[0.03] to-violet-500/10 p-10 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-red-200">
-            Premium Access Required
-          </p>
-          <h1 className="mt-3 text-5xl font-black">
-            Premium Radio is locked
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-white/55">
-            {message ||
-              "An active SOLO BEATS PREMIUM membership is required."}
-          </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/premium"
-              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
-            >
-              Join Premium
-            </Link>
-            <Link
-              href="/account"
-              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
-            >
-              Open Account
-            </Link>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen overflow-x-hidden px-5 pb-48 pt-52 sm:px-8">
       <audio
@@ -837,11 +861,55 @@ export default function PremiumRadioPage() {
       />
 
       <div className="mx-auto max-w-7xl">
-        <section className="overflow-hidden rounded-[2.5rem] border border-violet-300/20 bg-gradient-to-br from-violet-700/35 via-black/40 to-cyan-500/20 p-8 shadow-2xl sm:p-12">
+        {isPublicPreview ? (
+          <section className="mb-6 rounded-[2rem] border border-amber-300/25 bg-gradient-to-r from-amber-500/15 via-white/[0.04] to-violet-500/15 p-6 sm:p-8">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-200">
+              Free Radio Preview
+            </p>
+
+            {previewLocked ? (
+              <>
+                <h2 className="mt-2 text-3xl font-black">
+                  Your two-song preview is complete
+                </h2>
+                <p className="mt-3 max-w-3xl text-white/60">
+                  Subscribe to SOLO BEATS PREMIUM for unlimited Radio, Premium TV, the Premium Library, and member downloads.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Link
+                    href="/premium"
+                    className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+                  >
+                    Subscribe Now
+                  </Link>
+                  <Link
+                    href="/account"
+                    className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-2 text-3xl font-black">
+                  Listen to two songs free
+                </h2>
+                <p className="mt-3 text-white/60">
+                  {Math.max(
+                    RADIO_PREVIEW_LIMIT - previewPlays,
+                    0
+                  )} free {RADIO_PREVIEW_LIMIT - previewPlays === 1 ? "song" : "songs"} remaining. Playback stops after your second song.
+                </p>
+              </>
+            )}
+          </section>
+        ) : null}
+<section className="overflow-hidden rounded-[2.5rem] border border-violet-300/20 bg-gradient-to-br from-violet-700/35 via-black/40 to-cyan-500/20 p-8 shadow-2xl sm:p-12">
           <div className="grid gap-10 lg:grid-cols-[1fr_360px] lg:items-center">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.22em] text-emerald-300">
-                Premium Access Confirmed
+                {hasPremiumAccess ? "Premium Access Confirmed" : "Public Preview Access"}
               </p>
 
               <h1 className="mt-4 text-5xl font-black sm:text-7xl">
@@ -852,13 +920,19 @@ export default function PremiumRadioPage() {
               </h1>
 
               <p className="mt-5 max-w-3xl text-lg leading-8 text-white/60">
-                A continuous member station powered by {premiumAlbums.length} selected albums and {stationTracks.length} tracks.
+                {hasPremiumAccess
+                  ? `A continuous member station powered by ${premiumAlbums.length} selected albums and ${stationTracks.length} tracks.`
+                  : "Preview two songs, then subscribe for unlimited Radio and TV."}
               </p>
 
               <div className="mt-7 flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={togglePlayPause}
+                  disabled={
+                    !previewLoaded ||
+                    (isPublicPreview && previewLocked)
+                  }
                   className="rounded-2xl bg-white px-6 py-4 font-black text-black"
                 >
                   {isPlaying ? "Pause Radio" : currentTime > 0 ? "Resume Radio" : "Start Radio"}
@@ -885,7 +959,7 @@ export default function PremiumRadioPage() {
               <div className="flex items-center gap-3">
                 <span className="h-3 w-3 animate-pulse rounded-full bg-emerald-400" />
                 <span className="text-sm font-black uppercase tracking-[0.18em] text-emerald-300">
-                  Member Station
+                  {hasPremiumAccess ? "Member Station" : "Preview Station"}
                 </span>
               </div>
 
@@ -952,7 +1026,11 @@ export default function PremiumRadioPage() {
               <button
                 type="button"
                 onClick={togglePlayPause}
-                className="min-w-32 rounded-2xl bg-white px-6 py-4 font-black text-black"
+                  disabled={
+                    !previewLoaded ||
+                    (isPublicPreview && previewLocked)
+                  }
+                  className="min-w-32 rounded-2xl bg-white px-6 py-4 font-black text-black"
               >
                 {isPlaying
                   ? "Pause"
@@ -1108,6 +1186,7 @@ export default function PremiumRadioPage() {
     </main>
   );
 }
+
 
 
 
