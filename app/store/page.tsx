@@ -828,7 +828,7 @@ export default function StorePage() {
       return {
         id: `album-${album.id}`,
         type: "album",
-        title: `${album.title} â€” Full Album`,
+        title: `${album.title} - Full Album`,
         albumTitle: album.title,
         price: album.albumPrice,
         cover: album.cover,
@@ -1423,7 +1423,7 @@ export default function StorePage() {
                           : "Add to Favorites"
                       }
                     >
-                      {albumIsFavorite ? "â™¥" : "â™¡"}
+                      {albumIsFavorite ? "\u2665" : "\u2661"}
                     </button>
 
                     <img
@@ -1488,10 +1488,7 @@ export default function StorePage() {
                         }
                       >
                         <span className="album-play-icon">
-                          {albumIsCurrent &&
-                          isPlaying
-                            ? "âšâš"
-                            : "â–¶"}
+                          {albumIsCurrent && isPlaying ? "\u23F8" : "\u25B6"}
                         </span>
 
                         <span>
@@ -3494,6 +3491,7 @@ export default function StorePage() {
     </main>
   );
 }
+
 
 
 
