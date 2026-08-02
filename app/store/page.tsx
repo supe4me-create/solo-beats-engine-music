@@ -694,43 +694,39 @@ export default function StorePage() {
   }
 
   function addAlbumToCart(albumId: string) {
-    const album = albums.find(
-      (item) => item.id === albumId
-    );
+    const album = albums.find((item) => item.id === albumId);
 
-    if (
-      !album ||
-      album.status !== "released"
-    ) {
+    if (!album || album.status !== "released") {
       return;
     }
 
     const cartId = `album-${album.id}`;
 
-    const alreadyAdded = cart.some(
-      (item) => item.id === cartId
-    );
-
-    if (alreadyAdded) {
-      setCartOpen(true);
-      return;
-    }
-
     resetCheckoutStatus();
-
-    setCart((currentCart) => [
-      ...currentCart,
-      {
-        id: cartId,
-        type: "album",
-        title: `${album.title} â€” Full Album`,
-        albumTitle: album.title,
-        price: album.albumPrice,
-        cover: album.cover,
-      },
-    ]);
-
+    setCheckoutMessage(`${album.title} was added to your cart.`);
     setCartOpen(true);
+
+    setCart((currentCart) => {
+      const alreadyAdded = currentCart.some(
+        (item) => item.id === cartId
+      );
+
+      if (alreadyAdded) {
+        return currentCart;
+      }
+
+      return [
+        ...currentCart,
+        {
+          id: cartId,
+          type: "album",
+          title: `${album.title} - Full Album`,
+          albumTitle: album.title,
+          price: album.albumPrice,
+          cover: album.cover,
+        },
+      ];
+    });
   }
 
   function addTrackToCart(
@@ -3499,4 +3495,5 @@ export default function StorePage() {
     </main>
   );
 }
+
 
