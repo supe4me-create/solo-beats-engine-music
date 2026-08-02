@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -18,9 +18,54 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SOLO BEATS ENGINE MUSIC",
+  metadataBase: new URL("https://www.solobeatsenginemusic.com"),
+  title: {
+    default: "SOLO BEATS ENGINE MUSIC | Official Music Platform",
+    template: "%s | SOLO BEATS ENGINE MUSIC",
+  },
   description:
-    "The official SOLO BEATS ENGINE MUSIC platform for music, albums, previews, purchases, and premium listening.",
+    "Discover Solo Beats albums, music previews, secure purchases, Premium Radio, Premium TV, artist promotion, and business advertising.",
+  applicationName: "SOLO BEATS ENGINE MUSIC",
+  authors: [{ name: "Solo Beats" }],
+  creator: "Solo Beats",
+  publisher: "SOLO BEATS ENGINE MUSIC",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "SOLO BEATS ENGINE MUSIC",
+    title: "SOLO BEATS ENGINE MUSIC | Official Music Platform",
+    description:
+      "Discover Solo Beats albums, previews, purchases, Premium Radio, Premium TV, artist promotion, and advertising.",
+    images: [
+      {
+        url: "/covers/hero-home-final.png",
+        width: 1200,
+        height: 630,
+        alt: "SOLO BEATS ENGINE MUSIC",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SOLO BEATS ENGINE MUSIC | Official Music Platform",
+    description:
+      "Discover Solo Beats albums, previews, purchases, Premium Radio, Premium TV, artist promotion, and advertising.",
+    images: ["/covers/hero-home-final.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 
@@ -48,7 +93,7 @@ function SocialFooter() {
             SOLO BEATS ENGINE MUSIC
           </p>
           <p className="mt-2 text-sm text-white/45">
-            © 2026 Solo Beats Engine Music. All rights reserved.
+            {"\u00A9"} 2026 Solo Beats Engine Music. All rights reserved.
           </p>
         </div>
 
@@ -96,3 +141,4 @@ export default function RootLayout({
     </html>
   );
 }
+
