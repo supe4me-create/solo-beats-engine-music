@@ -1742,13 +1742,12 @@ export default function StorePage() {
                 onClick={() => setCartOpen(false)}
                 aria-label="Close shopping cart"
               >
-                Ã—
-              </button>
+                {"\u00D7"}</button>
             </div>
 
             {paymentComplete ? (
               <div className="payment-success">
-                <div className="success-icon">âœ“</div>
+                <div className="success-icon">{"\u2713"}</div>
 
                 <h3>Payment Confirmed</h3>
 
@@ -3491,6 +3490,7 @@ export default function StorePage() {
     </main>
   );
 }
+
 
 
 
