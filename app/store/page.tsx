@@ -358,8 +358,7 @@ const CART_STORAGE_KEY = "solo-beats-store-cart";
 const PURCHASE_STORAGE_KEY =
   "solo-beats-last-completed-purchase";
 
-const paypalClientId =
-  process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "";
+const paypalClientId = (process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "").replace(/\s+/g, "");
 
 async function getAccountAuthorizationHeaders(): Promise<
   Record<string, string>
@@ -3495,5 +3494,6 @@ export default function StorePage() {
     </main>
   );
 }
+
 
 
