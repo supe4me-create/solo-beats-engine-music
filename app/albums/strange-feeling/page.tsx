@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePlayer } from "../../player/usePlayer";
@@ -11,26 +11,26 @@ type Track = {
 };
 
 const tracks: Track[] = [
-  { number: 1, title: "Steel Venom", audio: "/previews/strange-feeling/01-steel-venom.wav" },
-  { number: 2, title: "Meltdown", audio: "/previews/strange-feeling/02-meltdown.wav" },
-  { number: 3, title: "Nickel Tempest", audio: "/previews/strange-feeling/03-nickel-tempest.wav" },
-  { number: 4, title: "Blade Runner", audio: "/previews/strange-feeling/04-blade-runner.wav" },
-  { number: 5, title: "Wrong Turn", audio: "/previews/strange-feeling/05-wrong-turn.wav" },
-  { number: 6, title: "Cold Exit", audio: "/previews/strange-feeling/06-cold-exit.wav" },
-  { number: 7, title: "Empty Throne", audio: "/previews/strange-feeling/07-empty-throne.wav" },
-  { number: 8, title: "Grey Ticket", audio: "/previews/strange-feeling/08-grey-ticket.wav" },
-  { number: 9, title: "Silent Empire", audio: "/previews/strange-feeling/09-silent-empire.wav" },
-  { number: 10, title: "Bad Intentions", audio: "/previews/strange-feeling/10-bad-intentions.wav" },
-  { number: 11, title: "Maximum Damage", audio: "/previews/strange-feeling/11-maximum-damage.wav" },
-  { number: 12, title: "Nothing to Lose", audio: "/previews/strange-feeling/12-nothing-to-lose.wav" },
-  { number: 13, title: "Too Late", audio: "/previews/strange-feeling/13-too-late.wav" },
-  { number: 14, title: "Out of Time", audio: "/previews/strange-feeling/14-out-of-time.wav" },
-  { number: 15, title: "Not Today", audio: "/previews/strange-feeling/15-not-today.wav" },
-  { number: 16, title: "Bad Memory", audio: "/previews/strange-feeling/16-bad-memory.wav" },
-  { number: 17, title: "Last Mistake", audio: "/previews/strange-feeling/17-last-mistake.wav" },
-  { number: 18, title: "Into the Dark", audio: "/previews/strange-feeling/18-into-the-dark.wav" },
-  { number: 19, title: "Between Worlds", audio: "/previews/strange-feeling/19-between-worlds.wav" },
-  { number: 20, title: "Strange Feeling", audio: "/previews/strange-feeling/20-strange-feeling.wav" }
+  { number: 1, title: "Steel Venom", audio: "/previews/strange-feeling/01-steel-venom.mp3" },
+  { number: 2, title: "Meltdown", audio: "/previews/strange-feeling/02-meltdown.mp3" },
+  { number: 3, title: "Nickel Tempest", audio: "/previews/strange-feeling/03-nickel-tempest.mp3" },
+  { number: 4, title: "Blade Runner", audio: "/previews/strange-feeling/04-blade-runner.mp3" },
+  { number: 5, title: "Wrong Turn", audio: "/previews/strange-feeling/05-wrong-turn.mp3" },
+  { number: 6, title: "Cold Exit", audio: "/previews/strange-feeling/06-cold-exit.mp3" },
+  { number: 7, title: "Empty Throne", audio: "/previews/strange-feeling/07-empty-throne.mp3" },
+  { number: 8, title: "Grey Ticket", audio: "/previews/strange-feeling/08-grey-ticket.mp3" },
+  { number: 9, title: "Silent Empire", audio: "/previews/strange-feeling/09-silent-empire.mp3" },
+  { number: 10, title: "Bad Intentions", audio: "/previews/strange-feeling/10-bad-intentions.mp3" },
+  { number: 11, title: "Maximum Damage", audio: "/previews/strange-feeling/11-maximum-damage.mp3" },
+  { number: 12, title: "Nothing to Lose", audio: "/previews/strange-feeling/12-nothing-to-lose.mp3" },
+  { number: 13, title: "Too Late", audio: "/previews/strange-feeling/13-too-late.mp3" },
+  { number: 14, title: "Out of Time", audio: "/previews/strange-feeling/14-out-of-time.mp3" },
+  { number: 15, title: "Not Today", audio: "/previews/strange-feeling/15-not-today.mp3" },
+  { number: 16, title: "Bad Memory", audio: "/previews/strange-feeling/16-bad-memory.mp3" },
+  { number: 17, title: "Last Mistake", audio: "/previews/strange-feeling/17-last-mistake.mp3" },
+  { number: 18, title: "Into the Dark", audio: "/previews/strange-feeling/18-into-the-dark.mp3" },
+  { number: 19, title: "Between Worlds", audio: "/previews/strange-feeling/19-between-worlds.mp3" },
+  { number: 20, title: "Strange Feeling", audio: "/previews/strange-feeling/20-strange-feeling.mp3" }
 ];
 
 export default function AlbumPage() {
@@ -59,7 +59,7 @@ export default function AlbumPage() {
     <main className="min-h-screen bg-black pb-36 text-white">
       <section className="mx-auto max-w-7xl px-5 py-12">
         <Link href="/albums" className="font-bold text-purple-300 hover:text-purple-200">
-          ← Back to Albums
+          â† Back to Albums
         </Link>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[380px_1fr] lg:items-center">
@@ -68,7 +68,7 @@ export default function AlbumPage() {
           <div>
             <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">Released Album</p>
             <h1 className="mt-3 text-5xl font-black sm:text-6xl">Strange Feeling</h1>
-            <p className="mt-3 text-gray-400">Solo Beats • 2026 • 20 Tracks • Electronic</p>
+            <p className="mt-3 text-gray-400">Solo Beats â€¢ 2026 â€¢ 20 Tracks â€¢ Electronic</p>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">Experience Strange Feeling, a powerful twenty-track Solo Beats album packed with electronic energy, atmospheric melodies, and unforgettable sound.</p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -96,7 +96,7 @@ export default function AlbumPage() {
                 <div className="font-black text-gray-500">{String(track.number).padStart(2, "0")}</div>
                 <div>
                   <h3 className="text-lg font-bold">{track.title}</h3>
-                  <p className="text-sm text-gray-500">Strange Feeling • Solo Beats</p>
+                  <p className="text-sm text-gray-500">Strange Feeling â€¢ Solo Beats</p>
                 </div>
                 <button type="button" onClick={() => playTrack(track)} className={`rounded-full px-5 py-3 text-sm font-black transition ${playing ? "bg-purple-500" : "border border-white/20 bg-white/10 hover:bg-white/20"}`}>
                   {playing ? "Pause Preview" : active ? "Resume Preview" : "Play Preview"}
@@ -109,4 +109,5 @@ export default function AlbumPage() {
     </main>
   );
 }
+
 

@@ -87,7 +87,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/darkhorse.png",
-    audio: "/previews/darkhorse.wav",
+    audio: "/previews/darkhorse.mp3",
     link: "/albums/dark-horse",
     genre: "Complextro",
   },
@@ -96,7 +96,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/bassking.png",
-    audio: "/previews/bassking.wav",
+    audio: "/previews/bassking.mp3",
     link: "/albums/bass-king",
     genre: "Electro House",
   },
@@ -105,7 +105,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/zombiebassline.png",
-    audio: "/previews/zombiebassline.wav",
+    audio: "/previews/zombiebassline.mp3",
     link: "/albums/zombie-bassline",
     genre: "Complextro",
   },
@@ -114,7 +114,7 @@ const upcomingAlbums: Album[] = [
     year: "2026",
     tracks: "20 Tracks",
     image: "/covers/aworldbuiltonsound.png",
-    audio: "/previews/aworldbuiltonsound.wav",
+    audio: "/previews/aworldbuiltonsound.mp3",
     link: "/albums/aworldbuiltonsound",
     genre: "Electronic",
   },
@@ -173,7 +173,7 @@ const releasedAlbumBase: Album[] = [
   {
     title: "Invincible",
     image: "/covers/Invincible-cover.jpg",
-    audio: "/previews/invincible/Courageous Time 1.wav",
+    audio: "/previews/invincible/Courageous Time 1.mp3",
     link: "/albums/invincible",
     genre: "Electronic",
   },
@@ -210,7 +210,7 @@ const releasedAlbumBase: Album[] = [
   {
     title: "Night Terror",
     image: "/covers/nightterror.jpg",
-    audio: "/previews/nightterror.wav",
+    audio: "/previews/nightterror.mp3",
     genre: "Complextro",
   },
   {
@@ -221,7 +221,7 @@ const releasedAlbumBase: Album[] = [
   {
     title: "Strange Feeling",
     image: "/covers/strangefeeling.png",
-    audio: "/previews/strangefeeling.wav",
+    audio: "/previews/strangefeeling.mp3",
     genre: "Complextro",
   },
 ];
@@ -1149,6 +1149,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 

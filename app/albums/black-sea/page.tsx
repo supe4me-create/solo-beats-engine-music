@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePlayer } from "../../player/usePlayer";
@@ -11,26 +11,26 @@ type Track = {
 };
 
 const tracks: Track[] = [
-  { number: 1, title: "Wishes", audio: "/previews/01-wishes.wav" },
-  { number: 2, title: "Haunted", audio: "/previews/02-Haunted.wav" },
-  { number: 3, title: "Chalk Thunder", audio: "/previews/03-chalk-thunder.wav" },
-  { number: 4, title: "Bluemoon", audio: "/previews/04-bluemoon.wav" },
-  { number: 5, title: "Soul Taker", audio: "/previews/05-soul-taker.wav" },
-  { number: 6, title: "Feel The Drums", audio: "/previews/06-feel-the-drums.wav" },
-  { number: 7, title: "One Chance", audio: "/previews/07-one-chance.wav" },
-  { number: 8, title: "Laser", audio: "/previews/08-laser.wav" },
-  { number: 9, title: "Hope", audio: "/previews/09-hope.wav" },
-  { number: 10, title: "Supertune", audio: "/previews/10-supertune.wav" },
-  { number: 11, title: "Crystal", audio: "/previews/11-crystal.wav" },
-  { number: 12, title: "Cracked Neonize", audio: "/previews/12-cracked-neonize.wav" },
-  { number: 13, title: "Roar Anthem", audio: "/previews/13-roar-anthem.wav" },
-  { number: 14, title: "Treasure", audio: "/previews/14-treasure.wav" },
-  { number: 15, title: "Sweet Summer", audio: "/previews/15-sweet-summer.wav" },
-  { number: 16, title: "Pump It", audio: "/previews/16-pump-it.wav" },
+  { number: 1, title: "Wishes", audio: "/previews/01-wishes.mp3" },
+  { number: 2, title: "Haunted", audio: "/previews/02-Haunted.mp3" },
+  { number: 3, title: "Chalk Thunder", audio: "/previews/03-chalk-thunder.mp3" },
+  { number: 4, title: "Bluemoon", audio: "/previews/04-bluemoon.mp3" },
+  { number: 5, title: "Soul Taker", audio: "/previews/05-soul-taker.mp3" },
+  { number: 6, title: "Feel The Drums", audio: "/previews/06-feel-the-drums.mp3" },
+  { number: 7, title: "One Chance", audio: "/previews/07-one-chance.mp3" },
+  { number: 8, title: "Laser", audio: "/previews/08-laser.mp3" },
+  { number: 9, title: "Hope", audio: "/previews/09-hope.mp3" },
+  { number: 10, title: "Supertune", audio: "/previews/10-supertune.mp3" },
+  { number: 11, title: "Crystal", audio: "/previews/11-crystal.mp3" },
+  { number: 12, title: "Cracked Neonize", audio: "/previews/12-cracked-neonize.mp3" },
+  { number: 13, title: "Roar Anthem", audio: "/previews/13-roar-anthem.mp3" },
+  { number: 14, title: "Treasure", audio: "/previews/14-treasure.mp3" },
+  { number: 15, title: "Sweet Summer", audio: "/previews/15-sweet-summer.mp3" },
+  { number: 16, title: "Pump It", audio: "/previews/16-pump-it.mp3" },
   { number: 17, title: "No Haters", audio: "/previews/17-no-haters.wav" },
-  { number: 18, title: "Black Sea", audio: "/previews/18-black-sea.wav" },
-  { number: 19, title: "Lost", audio: "/previews/19-lost.wav" },
-  { number: 20, title: "Hot Mic", audio: "/previews/20-hot-mic.wav" }
+  { number: 18, title: "Black Sea", audio: "/previews/18-black-sea.mp3" },
+  { number: 19, title: "Lost", audio: "/previews/19-lost.mp3" },
+  { number: 20, title: "Hot Mic", audio: "/previews/20-hot-mic.mp3" }
 ];
 
 export default function AlbumPage() {
@@ -59,7 +59,7 @@ export default function AlbumPage() {
     <main className="min-h-screen bg-black pb-36 text-white">
       <section className="mx-auto max-w-7xl px-5 py-12">
         <Link href="/albums" className="font-bold text-purple-300 hover:text-purple-200">
-          ← Back to Albums
+          â† Back to Albums
         </Link>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[380px_1fr] lg:items-center">
@@ -68,7 +68,7 @@ export default function AlbumPage() {
           <div>
             <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">Upcoming Album</p>
             <h1 className="mt-3 text-5xl font-black sm:text-6xl">Black Sea</h1>
-            <p className="mt-3 text-gray-400">Solo Beats • 2026 • 20 Tracks • Complextro</p>
+            <p className="mt-3 text-gray-400">Solo Beats â€¢ 2026 â€¢ 20 Tracks â€¢ Complextro</p>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">Black Sea is a powerful Solo Beats release built around aggressive bass movement, cinematic energy, sharp electronic leads, and high-impact rhythm.</p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -96,7 +96,7 @@ export default function AlbumPage() {
                 <div className="font-black text-gray-500">{String(track.number).padStart(2, "0")}</div>
                 <div>
                   <h3 className="text-lg font-bold">{track.title}</h3>
-                  <p className="text-sm text-gray-500">Black Sea • Solo Beats</p>
+                  <p className="text-sm text-gray-500">Black Sea â€¢ Solo Beats</p>
                 </div>
                 <button type="button" onClick={() => playTrack(track)} className={`rounded-full px-5 py-3 text-sm font-black transition ${playing ? "bg-purple-500" : "border border-white/20 bg-white/10 hover:bg-white/20"}`}>
                   {playing ? "Pause Preview" : active ? "Resume Preview" : "Play Preview"}
@@ -109,4 +109,5 @@ export default function AlbumPage() {
     </main>
   );
 }
+
 

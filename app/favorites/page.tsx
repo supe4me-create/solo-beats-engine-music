@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useMemo } from "react";
@@ -24,7 +24,7 @@ type FavoriteAlbumCard = {
 const catalogExtras: FavoriteAlbumCard[] = [
   {
     id: "dark-horse",
-    audio: "/previews/darkhorse.wav",
+    audio: "/previews/darkhorse.mp3",
     title: "Dark Horse",
     cover: "/covers/darkhorse.png",
     genre: "Complextro",
@@ -35,7 +35,7 @@ const catalogExtras: FavoriteAlbumCard[] = [
   },
   {
     id: "bass-king",
-    audio: "/previews/bassking.wav",
+    audio: "/previews/bassking.mp3",
     title: "Bass King",
     cover: "/covers/bassking.png",
     genre: "Electro House",
@@ -46,7 +46,7 @@ const catalogExtras: FavoriteAlbumCard[] = [
   },
   {
     id: "zombie-bassline",
-    audio: "/previews/zombiebassline.wav",
+    audio: "/previews/zombiebassline.mp3",
     title: "Zombie Bassline",
     cover: "/covers/zombiebassline.png",
     genre: "Complextro",
@@ -57,7 +57,7 @@ const catalogExtras: FavoriteAlbumCard[] = [
   },
   {
     id: "a-world-built-on-sound",
-    audio: "/previews/aworldbuiltonsound.wav",
+    audio: "/previews/aworldbuiltonsound.mp3",
     title: "A World Built on Sound",
     cover: "/covers/aworldbuiltonsound.png",
     genre: "Electronic",
@@ -295,8 +295,8 @@ export default function FavoritesPage() {
 
                       <p className="mt-2 text-sm text-white/50">
                         {album.genre}
-                        {album.year ? ` Â· ${album.year}` : ""}
-                        {album.tracks ? ` Â· ${album.tracks} tracks` : ""}
+                        {album.year ? ` Ã‚Â· ${album.year}` : ""}
+                        {album.tracks ? ` Ã‚Â· ${album.tracks} tracks` : ""}
                       </p>
 
                       <div className="mt-5 grid gap-3">
@@ -368,4 +368,5 @@ export default function FavoritesPage() {
     </main>
   );
 }
+
 

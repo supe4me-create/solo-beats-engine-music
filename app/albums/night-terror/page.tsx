@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePlayer } from "../../player/usePlayer";
@@ -18,115 +18,115 @@ const tracks: Track[] = [
   {
     number: 1,
     title: "Vagabond Tune",
-    audio: "/previews/night-terror/1 Vagabond Tune.wav",
+    audio: "/previews/night-terror/1 Vagabond Tune.mp3",
     paypal: "https://www.paypal.com/ncp/payment/MUQHBBQSL2EDC",
   },
   {
     number: 2,
     title: "Paper Bloom",
-    audio: "/previews/night-terror/2 Paper Bloom.wav",
+    audio: "/previews/night-terror/2 Paper Bloom.mp3",
     paypal: "https://www.paypal.com/ncp/payment/W94LE9S3YY6ZC",
   },
   {
     number: 3,
     title: "Solar Kiss",
-    audio: "/previews/night-terror/3 Solar Kiss.wav",
+    audio: "/previews/night-terror/3 Solar Kiss.mp3",
     paypal: "https://www.paypal.com/ncp/payment/5X9CYYU75N9BY",
   },
   {
     number: 4,
     title: "Cloud Bloom",
-    audio: "/previews/night-terror/4 Cloud Bloom.wav",
+    audio: "/previews/night-terror/4 Cloud Bloom.mp3",
     paypal: "https://www.paypal.com/ncp/payment/H9CD6Z9BAXXTW",
   },
   {
     number: 5,
     title: "First Frost",
-    audio: "/previews/night-terror/5 First Frost.wav",
+    audio: "/previews/night-terror/5 First Frost.mp3",
     paypal: "https://www.paypal.com/ncp/payment/T49T837FUTKH4",
   },
   {
     number: 6,
     title: "Glowstream",
-    audio: "/previews/night-terror/6 Glowstream.wav",
+    audio: "/previews/night-terror/6 Glowstream.mp3",
     paypal: "https://www.paypal.com/ncp/payment/B8JYTBP57SDAJ",
   },
   {
     number: 7,
     title: "Stillpoint",
-    audio: "/previews/night-terror/7 Stillpoint.wav",
+    audio: "/previews/night-terror/7 Stillpoint.mp3",
     paypal: "https://www.paypal.com/ncp/payment/ST2QAX7LQVQBE",
   },
   {
     number: 8,
     title: "Deepdrift",
-    audio: "/previews/night-terror/8 Deepdrift.wav",
+    audio: "/previews/night-terror/8 Deepdrift.mp3",
     paypal: "https://www.paypal.com/ncp/payment/FT7GVGZYLMT9J",
   },
   {
     number: 9,
     title: "Cloudsong",
-    audio: "/previews/night-terror/9 Cloudsong.wav",
+    audio: "/previews/night-terror/9 Cloudsong.mp3",
     paypal: "https://www.paypal.com/ncp/payment/8KLLYAJVSD3UG",
   },
   {
     number: 10,
     title: "Everdark",
-    audio: "/previews/night-terror/10 Everdark.wav",
+    audio: "/previews/night-terror/10 Everdark.mp3",
     paypal: "https://www.paypal.com/ncp/payment/M6PT7GWQQK9GS",
   },
   {
     number: 11,
     title: "Ghostveil",
-    audio: "/previews/night-terror/11 Ghostveil.wav",
+    audio: "/previews/night-terror/11 Ghostveil.mp3",
     paypal: "https://www.paypal.com/ncp/payment/R5NDND9V2YZUY",
   },
   {
     number: 12,
     title: "Dreamshard",
-    audio: "/previews/night-terror/12 Dreamshard.wav",
+    audio: "/previews/night-terror/12 Dreamshard.mp3",
     paypal: "https://www.paypal.com/ncp/payment/LRRPDVWQ3ZEWS",
   },
   {
     number: 13,
     title: "Raindrop Soul",
-    audio: "/previews/night-terror/13 Raindrop Soul.wav",
+    audio: "/previews/night-terror/13 Raindrop Soul.mp3",
     paypal: "https://www.paypal.com/ncp/payment/6HNEZ7ZPBG2XU",
   },
   {
     number: 14,
     title: "Glass Sea",
-    audio: "/previews/night-terror/14 Glass Sea.wav",
+    audio: "/previews/night-terror/14 Glass Sea.mp3",
     paypal: "https://www.paypal.com/ncp/payment/YNPWTVHMQNSD4",
   },
   {
     number: 15,
     title: "Silent Core",
-    audio: "/previews/night-terror/15 Silent Core.wav",
+    audio: "/previews/night-terror/15 Silent Core.mp3",
     paypal: "https://www.paypal.com/ncp/payment/BFKUXZ4GC972J",
   },
   {
     number: 16,
     title: "Starfall",
-    audio: "/previews/night-terror/16 Starfall.wav",
+    audio: "/previews/night-terror/16 Starfall.mp3",
     paypal: "https://www.paypal.com/ncp/payment/XE637XDMDEJVA",
   },
   {
     number: 17,
     title: "Wild Scars",
-    audio: "/previews/night-terror/17 Wild Scars.wav",
+    audio: "/previews/night-terror/17 Wild Scars.mp3",
     paypal: "https://www.paypal.com/ncp/payment/A38TT8CJAPQ7Q",
   },
   {
     number: 18,
     title: "Fear Strike",
-    audio: "/previews/night-terror/18 Fear Strike.wav",
+    audio: "/previews/night-terror/18 Fear Strike.mp3",
     paypal: "https://www.paypal.com/ncp/payment/CSB3HJVBGANAC",
   },
   {
     number: 19,
     title: "Night Terror",
-    audio: "/previews/night-terror/19 Night Terror.wav",
+    audio: "/previews/night-terror/19 Night Terror.mp3",
     paypal: "https://www.paypal.com/ncp/payment/UFLCZBV7FRCGC",
   },
 ];
@@ -216,7 +216,7 @@ export default function NightTerrorPage() {
               href="/albums"
               className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-purple-300 transition hover:text-purple-200"
             >
-              ← Back to Albums
+              â† Back to Albums
             </Link>
 
             <div className="mb-4 flex flex-wrap gap-3">
@@ -253,7 +253,7 @@ export default function NightTerrorPage() {
                 onClick={buyAlbum}
                 className="rounded-full bg-white px-8 py-4 font-black text-black shadow-lg transition hover:scale-105 hover:bg-purple-200 focus:outline-none focus:ring-4 focus:ring-purple-500/40"
               >
-                Buy Full Album — $19.00
+                Buy Full Album â€” $19.00
               </button>
 
               <button
@@ -268,7 +268,7 @@ export default function NightTerrorPage() {
             </div>
 
             <p className="mt-5 text-sm text-gray-500">
-              Full album: $19.00 • Individual tracks: $1.00 each
+              Full album: $19.00 â€¢ Individual tracks: $1.00 each
             </p>
           </div>
         </div>
@@ -281,7 +281,7 @@ export default function NightTerrorPage() {
           </p>
 
           <h2 className="mt-3 text-3xl font-black sm:text-4xl">
-            Night Terror — 19 Tracks
+            Night Terror â€” 19 Tracks
           </h2>
 
           <p className="mt-3 text-gray-400">
@@ -311,7 +311,7 @@ export default function NightTerrorPage() {
                   </h3>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Solo Beats • Night Terror
+                    Solo Beats â€¢ Night Terror
                   </p>
                 </div>
 
@@ -333,7 +333,7 @@ export default function NightTerrorPage() {
                     onClick={() => buyTrack(track)}
                     className="min-w-[125px] rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:scale-105 hover:bg-purple-200 focus:outline-none focus:ring-4 focus:ring-white/20"
                   >
-                    Buy Track — $1
+                    Buy Track â€” $1
                   </button>
                 </div>
               </div>
@@ -363,16 +363,17 @@ export default function NightTerrorPage() {
               onClick={buyAlbum}
               className="rounded-full bg-white px-8 py-4 font-black text-black transition hover:scale-105 hover:bg-purple-200 focus:outline-none focus:ring-4 focus:ring-purple-500/40"
             >
-              Buy Album — $19.00
+              Buy Album â€” $19.00
             </button>
           </div>
         </div>
       </section>
 
       <footer className="border-t border-white/10 px-5 py-10 text-center text-sm text-gray-500">
-        © 2026 Solo Beats Engine Music. All rights reserved.
+        Â© 2026 Solo Beats Engine Music. All rights reserved.
       </footer>
 
     </main>
   );
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePlayer } from "../../player/usePlayer";
@@ -11,16 +11,16 @@ type Track = {
 };
 
 const tracks: Track[] = [
-  { number: 1, title: "Courageous Time", audio: "/previews/invincible/Courageous Time 1.wav" },
-  { number: 2, title: "Free Hugs", audio: "/previews/invincible/Free Hugs2.wav" },
-  { number: 3, title: "No Mercy", audio: "/previews/invincible/No Mercy3.wav" },
-  { number: 4, title: "Bad Option", audio: "/previews/invincible/Bad Option 4.wav" },
-  { number: 5, title: "Open Light", audio: "/previews/invincible/Open Light5.wav" },
-  { number: 6, title: "Powerful Swag", audio: "/previews/invincible/Powerful Swag6.wav" },
-  { number: 7, title: "Time Of Power", audio: "/previews/invincible/Time Of Power7.wav" },
-  { number: 8, title: "Green Feelings", audio: "/previews/invincible/Green Feelings8.wav" },
-  { number: 9, title: "Silver Madness", audio: "/previews/invincible/Silver Madness9.wav" },
-  { number: 10, title: "Attractive Touch", audio: "/previews/invincible/Attractive Touch 10.wav" }
+  { number: 1, title: "Courageous Time", audio: "/previews/invincible/Courageous Time 1.mp3" },
+  { number: 2, title: "Free Hugs", audio: "/previews/invincible/Free Hugs2.mp3" },
+  { number: 3, title: "No Mercy", audio: "/previews/invincible/No Mercy3.mp3" },
+  { number: 4, title: "Bad Option", audio: "/previews/invincible/Bad Option 4.mp3" },
+  { number: 5, title: "Open Light", audio: "/previews/invincible/Open Light5.mp3" },
+  { number: 6, title: "Powerful Swag", audio: "/previews/invincible/Powerful Swag6.mp3" },
+  { number: 7, title: "Time Of Power", audio: "/previews/invincible/Time Of Power7.mp3" },
+  { number: 8, title: "Green Feelings", audio: "/previews/invincible/Green Feelings8.mp3" },
+  { number: 9, title: "Silver Madness", audio: "/previews/invincible/Silver Madness9.mp3" },
+  { number: 10, title: "Attractive Touch", audio: "/previews/invincible/Attractive Touch 10.mp3" }
 ];
 
 export default function AlbumPage() {
@@ -49,7 +49,7 @@ export default function AlbumPage() {
     <main className="min-h-screen bg-black pb-36 text-white">
       <section className="mx-auto max-w-7xl px-5 py-12">
         <Link href="/albums" className="font-bold text-purple-300 hover:text-purple-200">
-          ← Back to Albums
+          â† Back to Albums
         </Link>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[380px_1fr] lg:items-center">
@@ -58,7 +58,7 @@ export default function AlbumPage() {
           <div>
             <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">Released Album</p>
             <h1 className="mt-3 text-5xl font-black sm:text-6xl">Invincible</h1>
-            <p className="mt-3 text-gray-400">Solo Beats • 2026 • 10 Tracks • Electronic</p>
+            <p className="mt-3 text-gray-400">Solo Beats â€¢ 2026 â€¢ 10 Tracks â€¢ Electronic</p>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">Invincible is a ten-track Solo Beats album filled with bold electronic energy, uplifting melodies, and powerful momentum.</p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -86,7 +86,7 @@ export default function AlbumPage() {
                 <div className="font-black text-gray-500">{String(track.number).padStart(2, "0")}</div>
                 <div>
                   <h3 className="text-lg font-bold">{track.title}</h3>
-                  <p className="text-sm text-gray-500">Invincible • Solo Beats</p>
+                  <p className="text-sm text-gray-500">Invincible â€¢ Solo Beats</p>
                 </div>
                 <button type="button" onClick={() => playTrack(track)} className={`rounded-full px-5 py-3 text-sm font-black transition ${playing ? "bg-purple-500" : "border border-white/20 bg-white/10 hover:bg-white/20"}`}>
                   {playing ? "Pause Preview" : active ? "Resume Preview" : "Play Preview"}
@@ -99,4 +99,5 @@ export default function AlbumPage() {
     </main>
   );
 }
+
 
