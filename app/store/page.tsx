@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -723,7 +723,7 @@ export default function StorePage() {
       {
         id: cartId,
         type: "album",
-        title: `${album.title} — Full Album`,
+        title: `${album.title} â€” Full Album`,
         albumTitle: album.title,
         price: album.albumPrice,
         cover: album.cover,
@@ -833,7 +833,7 @@ export default function StorePage() {
       return {
         id: `album-${album.id}`,
         type: "album",
-        title: `${album.title} — Full Album`,
+        title: `${album.title} â€” Full Album`,
         albumTitle: album.title,
         price: album.albumPrice,
         cover: album.cover,
@@ -1428,7 +1428,7 @@ export default function StorePage() {
                           : "Add to Favorites"
                       }
                     >
-                      {albumIsFavorite ? "♥" : "♡"}
+                      {albumIsFavorite ? "â™¥" : "â™¡"}
                     </button>
 
                     <img
@@ -1495,8 +1495,8 @@ export default function StorePage() {
                         <span className="album-play-icon">
                           {albumIsCurrent &&
                           isPlaying
-                            ? "❚❚"
-                            : "▶"}
+                            ? "âšâš"
+                            : "â–¶"}
                         </span>
 
                         <span>
@@ -1676,8 +1676,8 @@ export default function StorePage() {
                                     <span>
                                       {trackIsCurrent &&
                                       isPlaying
-                                        ? "❚❚"
-                                        : "▶"}
+                                        ? "âšâš"
+                                        : "â–¶"}
                                     </span>
 
                                     {trackIsCurrent
@@ -1750,13 +1750,13 @@ export default function StorePage() {
                 onClick={() => setCartOpen(false)}
                 aria-label="Close shopping cart"
               >
-                ×
+                Ã—
               </button>
             </div>
 
             {paymentComplete ? (
               <div className="payment-success">
-                <div className="success-icon">✓</div>
+                <div className="success-icon">âœ“</div>
 
                 <h3>Payment Confirmed</h3>
 
@@ -2077,7 +2077,7 @@ export default function StorePage() {
 
       <footer>
         <p>
-          © 2026 Solo Beats Engine Music. All rights
+          Â© 2026 Solo Beats Engine Music. All rights
           reserved.
         </p>
 
@@ -3499,3 +3499,4 @@ export default function StorePage() {
     </main>
   );
 }
+
