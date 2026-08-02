@@ -275,7 +275,7 @@ export default function AlbumsPage() {
       cover: album.image,
     };
 
-    if (currentTrack?.id === track.id) {
+    if (currentTrack?.id === track.id && currentTrack.audio === track.audio) {
       togglePlay();
       return;
     }
@@ -766,6 +766,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 
