@@ -37,6 +37,9 @@ type TvProgram = {
   src: string;
 };
 
+const TV_PREVIEW_LIMIT = 2;
+const TV_PREVIEW_STORAGE_KEY = "solo-beats-tv-preview-count";
+
 
 type SponsoredBusinessCampaign = {
   submissionId: string;
@@ -378,6 +381,12 @@ export default function PremiumTvPage() {
     useState<VisualizerMode>("bars");
   const [isVisualizerFullscreen, setIsVisualizerFullscreen] =
     useState(false);
+  const [previewPlays, setPreviewPlays] =
+    useState(0);
+  const [previewLocked, setPreviewLocked] =
+    useState(false);
+  const [previewLoaded, setPreviewLoaded] =
+    useState(false);
 
   const audioRef =
     useRef<HTMLAudioElement | null>(null);
@@ -396,6 +405,35 @@ export default function PremiumTvPage() {
 
   const currentProgram =
     queue[currentIndex] || null;
+
+  const hasPremiumAccess =
+    accessState === "active";
+  const isPublicPreview =
+    accessState !== "loading" &&
+    !hasPremiumAccess;
+
+  useEffect(() => {
+    try {
+      const savedCount = Number(
+        window.localStorage.getItem(
+          TV_PREVIEW_STORAGE_KEY
+        ) || "0"
+      );
+      const safeCount = Number.isFinite(savedCount)
+        ? Math.max(0, savedCount)
+        : 0;
+
+      setPreviewPlays(safeCount);
+      setPreviewLocked(
+        safeCount >= TV_PREVIEW_LIMIT
+      );
+    } catch {
+      setPreviewPlays(0);
+      setPreviewLocked(false);
+    } finally {
+      setPreviewLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -580,7 +618,8 @@ export default function PremiumTvPage() {
     if (
       !audio ||
       !currentProgram ||
-      accessState !== "active"
+      accessState === "loading" ||
+      (isPublicPreview && previewLocked)
     ) {
       return;
     }
@@ -596,12 +635,20 @@ export default function PremiumTvPage() {
   }, [
     currentProgram,
     accessState,
+    isPublicPreview,
+    previewLocked,
   ]);
 
   async function playCurrentProgram() {
     const audio = audioRef.current;
 
-    if (!audio || !currentProgram) return;
+    if (
+      !audio ||
+      !currentProgram ||
+      (isPublicPreview && previewLocked)
+    ) {
+      return;
+    }
 
     try {
       setPlaybackMessage("");
@@ -634,7 +681,13 @@ export default function PremiumTvPage() {
   async function togglePlayPause() {
     const audio = audioRef.current;
 
-    if (!audio || !currentProgram) return;
+    if (
+      !audio ||
+      !currentProgram ||
+      (isPublicPreview && previewLocked)
+    ) {
+      return;
+    }
 
     if (audio.paused) {
       await playCurrentProgram();
@@ -684,6 +737,35 @@ export default function PremiumTvPage() {
 
   function handleEnded() {
     setIsPlaying(false);
+
+    if (isPublicPreview) {
+      const nextPreviewCount = Math.min(
+        previewPlays + 1,
+        TV_PREVIEW_LIMIT
+      );
+
+      setPreviewPlays(nextPreviewCount);
+
+      try {
+        window.localStorage.setItem(
+          TV_PREVIEW_STORAGE_KEY,
+          String(nextPreviewCount)
+        );
+      } catch {
+        // The in-memory limit still applies.
+      }
+
+      if (
+        nextPreviewCount >=
+        TV_PREVIEW_LIMIT
+      ) {
+        setPreviewLocked(true);
+        setPlaybackMessage(
+          "Your two-program TV preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited TV and Radio."
+        );
+        return;
+      }
+    }
 
     if (autoplay) {
       nextProgram();
@@ -1260,64 +1342,6 @@ export default function PremiumTvPage() {
       </main>
     );
   }
-
-  if (accessState === "signed-out") {
-    return (
-      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
-        <section className="mx-auto max-w-5xl rounded-[2rem] border border-white/10 bg-gradient-to-br from-fuchsia-500/20 via-white/[0.04] to-cyan-400/10 p-10 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-fuchsia-300">
-            Premium TV Locked
-          </p>
-          <h1 className="mt-3 text-5xl font-black">
-            Sign in to watch
-          </h1>
-          <Link
-            href="/account"
-            className="mt-7 inline-flex rounded-2xl bg-white px-6 py-4 font-black text-black"
-          >
-            Open Account
-          </Link>
-        </section>
-      </main>
-    );
-  }
-
-  if (
-    accessState === "inactive" ||
-    accessState === "error"
-  ) {
-    return (
-      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
-        <section className="mx-auto max-w-5xl rounded-[2rem] border border-red-300/15 bg-gradient-to-br from-red-500/10 via-white/[0.03] to-fuchsia-500/10 p-10 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-red-200">
-            Premium Access Required
-          </p>
-          <h1 className="mt-3 text-5xl font-black">
-            Premium TV is locked
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-white/55">
-            {message ||
-              "An active SOLO BEATS PREMIUM membership is required."}
-          </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
-            <Link
-              href="/premium"
-              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
-            >
-              Join Premium
-            </Link>
-            <Link
-              href="/account"
-              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
-            >
-              Open Account
-            </Link>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="min-h-screen px-5 pb-48 pt-52 sm:px-8">
       <audio
@@ -1356,17 +1380,63 @@ export default function PremiumTvPage() {
       />
 
       <div className="mx-auto max-w-7xl">
-        <section className="rounded-[2.5rem] border border-fuchsia-300/20 bg-gradient-to-br from-fuchsia-700/25 via-black/50 to-cyan-500/15 p-6 shadow-2xl sm:p-10">
+        {isPublicPreview ? (
+          <section className="mb-6 rounded-[2rem] border border-amber-300/25 bg-gradient-to-r from-amber-500/15 via-white/[0.04] to-fuchsia-500/15 p-6 sm:p-8">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-200">
+              Free TV Preview
+            </p>
+
+            {previewLocked ? (
+              <>
+                <h2 className="mt-2 text-3xl font-black">
+                  Your two-program preview is complete
+                </h2>
+                <p className="mt-3 max-w-3xl text-white/60">
+                  Subscribe to SOLO BEATS PREMIUM for unlimited Premium TV, Radio, the Premium Library, and member downloads.
+                </p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Link
+                    href="/premium"
+                    className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+                  >
+                    Subscribe Now
+                  </Link>
+                  <Link
+                    href="/account"
+                    className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-2 text-3xl font-black">
+                  Watch two programs free
+                </h2>
+                <p className="mt-3 text-white/60">
+                  {Math.max(
+                    TV_PREVIEW_LIMIT - previewPlays,
+                    0
+                  )} free {TV_PREVIEW_LIMIT - previewPlays === 1 ? "program" : "programs"} remaining. Playback stops after your second program.
+                </p>
+              </>
+            )}
+          </section>
+        ) : null}
+<section className="rounded-[2.5rem] border border-fuchsia-300/20 bg-gradient-to-br from-fuchsia-700/25 via-black/50 to-cyan-500/15 p-6 shadow-2xl sm:p-10">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.22em] text-emerald-300">
-                Premium Access Confirmed
+                {hasPremiumAccess ? "Premium Access Confirmed" : "Public Preview Access"}
               </p>
               <h1 className="mt-3 text-4xl font-black sm:text-6xl">
                 SOLO BEATS PREMIUM TV
               </h1>
               <p className="mt-3 max-w-3xl text-white/55">
-                Continuous visual music programming powered by {premiumAlbums.length} selected albums and {allPrograms.length} tracks.
+                {hasPremiumAccess
+                  ? `Continuous visual music programming powered by ${premiumAlbums.length} selected albums and ${allPrograms.length} tracks.`
+                  : "Preview two programs, then subscribe for unlimited Premium TV and Radio."}
               </p>
             </div>
 
@@ -1374,6 +1444,10 @@ export default function PremiumTvPage() {
               <button
                 type="button"
                 onClick={startTv}
+                disabled={
+                  !previewLoaded ||
+                  (isPublicPreview && previewLocked)
+                }
                 className="rounded-2xl bg-white px-6 py-4 font-black text-black"
               >
                 Start TV
@@ -1820,4 +1894,5 @@ export default function PremiumTvPage() {
     </main>
   );
 }
+
 
