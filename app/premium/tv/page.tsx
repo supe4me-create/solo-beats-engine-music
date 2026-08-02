@@ -1510,7 +1510,7 @@ export default function PremiumTvPage() {
                     </h2>
 
                     <p className="mt-2 text-lg text-white/55">
-                      {currentProgram.artist} â€¢ {currentProgram.albumTitle}
+                      {currentProgram.artist} {"\u2022"} {currentProgram.albumTitle}
                     </p>
                   </div>
 
@@ -1894,5 +1894,6 @@ export default function PremiumTvPage() {
     </main>
   );
 }
+
 
 
