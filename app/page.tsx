@@ -503,6 +503,57 @@ export default function AlbumsPage() {
     >
 
       <section className="mx-auto max-w-7xl"><section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/30"><img src="/covers/hero-home-final.png" alt="Solo Beats Engine Music" className="w-full object-cover" /></section>
+        <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-700/25 via-zinc-950 to-cyan-500/15 p-6 shadow-2xl md:p-10">
+          <div className="max-w-4xl">
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-fuchsia-300">
+              Grow Your Audience
+            </p>
+            <h2 className="mt-3 text-4xl font-black leading-tight md:text-6xl">
+              Promote Your Music. Advertise on SOLO BEATS TV and Radio.
+            </h2>
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-white/65">
+              Artists can feature songs, artwork, and promotional videos. Businesses can run sponsored campaigns across the homepage, SOLO BEATS Radio, and SOLO BEATS TV.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-5 lg:grid-cols-2">
+            <article className="rounded-[2rem] border border-fuchsia-300/20 bg-black/30 p-6">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-fuchsia-300">
+                For Artists
+              </p>
+              <h3 className="mt-3 text-3xl font-black">
+                Promote Your Song or Video
+              </h3>
+              <p className="mt-3 leading-7 text-white/60">
+                Get your music featured with audio, artwork, video, artist links, and clear Promoted placement across the platform.
+              </p>
+              <Link
+                href="/artist-promotion"
+                className="mt-6 inline-flex rounded-2xl bg-white px-6 py-4 font-black text-black"
+              >
+                Start Artist Promotion
+              </Link>
+            </article>
+
+            <article className="rounded-[2rem] border border-cyan-300/20 bg-black/30 p-6">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
+                For Businesses and Brands
+              </p>
+              <h3 className="mt-3 text-3xl font-black">
+                Advertise on SOLO BEATS TV and Radio
+              </h3>
+              <p className="mt-3 leading-7 text-white/60">
+                Reach music listeners with sponsored business campaigns, video advertising, branded creative, and calls to action.
+              </p>
+              <Link
+                href="/business-advertising"
+                className="mt-6 inline-flex rounded-2xl bg-cyan-300 px-6 py-4 font-black text-black"
+              >
+                Advertise Your Business
+              </Link>
+            </article>
+          </div>
+        </section>
         <h1 className="text-center text-4xl font-black md:text-6xl">
           SOLO BEATS ALBUMS
         </h1>
@@ -1149,6 +1200,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 
