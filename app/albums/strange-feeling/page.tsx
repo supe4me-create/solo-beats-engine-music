@@ -58,9 +58,7 @@ export default function AlbumPage() {
   return (
     <main className="min-h-screen bg-black pb-36 text-white">
       <section className="mx-auto max-w-7xl px-5 py-12">
-        <Link href="/albums" className="font-bold text-purple-300 hover:text-purple-200">
-          â† Back to Albums
-        </Link>
+        <Link href="/albums" className="font-bold text-purple-300 hover:text-purple-200">`r`n          {"\u2190"} Back to Albums`r`n        </Link>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[380px_1fr] lg:items-center">
           <img src="/covers/strangefeeling.png" alt="Strange Feeling" className="aspect-square w-full rounded-3xl object-cover shadow-2xl" />
@@ -69,7 +67,7 @@ export default function AlbumPage() {
             <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">Released Album</p>
             <h1 className="mt-3 text-5xl font-black sm:text-6xl">Strange Feeling</h1>
             <p className="mt-3 text-gray-400">Solo Beats â€¢ 2026 â€¢ 20 Tracks â€¢ Electronic</p>
-            <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">Experience Strange Feeling, a powerful twenty-track Solo Beats album packed with electronic energy, atmospheric melodies, and unforgettable sound.</p>
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">Experience Strange Feeling {"\u2022"} Solo Beats album packed with electronic energy, atmospheric melodies, and unforgettable sound.</p>
 
             <div className="mt-8 flex flex-wrap gap-4">
               <button type="button" onClick={() => playTrack(tracks[0])} className="rounded-full bg-purple-600 px-7 py-3 font-black transition hover:bg-purple-500">
@@ -96,7 +94,7 @@ export default function AlbumPage() {
                 <div className="font-black text-gray-500">{String(track.number).padStart(2, "0")}</div>
                 <div>
                   <h3 className="text-lg font-bold">{track.title}</h3>
-                  <p className="text-sm text-gray-500">Strange Feeling â€¢ Solo Beats</p>
+                  <p className="text-sm text-gray-500">Strange Feeling {"\u2022"} Solo Beats</p>
                 </div>
                 <button type="button" onClick={() => playTrack(track)} className={`rounded-full px-5 py-3 text-sm font-black transition ${playing ? "bg-purple-500" : "border border-white/20 bg-white/10 hover:bg-white/20"}`}>
                   {playing ? "Pause Preview" : active ? "Resume Preview" : "Play Preview"}
@@ -109,5 +107,6 @@ export default function AlbumPage() {
     </main>
   );
 }
+
 
 
