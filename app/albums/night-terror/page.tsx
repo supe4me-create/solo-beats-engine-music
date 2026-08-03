@@ -147,6 +147,7 @@ export default function NightTerrorPage() {
     audio: track.audio,
     cover: "/covers/nightterror.jpg",
     trackNumber: track.number,
+    previewLimitSeconds: track.number > 3 ? 60 : undefined,
   }));
 
   function playTrack(track: Track) {
@@ -376,4 +377,5 @@ export default function NightTerrorPage() {
     </main>
   );
 }
+
 

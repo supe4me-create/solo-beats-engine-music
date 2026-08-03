@@ -620,6 +620,11 @@ export default function StorePage() {
         cover: album.cover,
         audio: track.preview,
         trackNumber: track.number,
+        previewLimitSeconds:
+          album.status === "released" &&
+          track.number > 3
+            ? 60
+            : undefined,
       }));
   }
 
@@ -3485,6 +3490,9 @@ export default function StorePage() {
     </main>
   );
 }
+
+
+
 
 
 

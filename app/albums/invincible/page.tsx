@@ -34,6 +34,7 @@ export default function AlbumPage() {
     audio: track.audio,
     cover: "/covers/Invincible-cover.jpg",
     trackNumber: track.number,
+    previewLimitSeconds: track.number > 3 ? 60 : undefined,
   }));
 
   function playTrack(track: Track) {
@@ -99,5 +100,6 @@ export default function AlbumPage() {
     </main>
   );
 }
+
 
 

@@ -1,4 +1,4 @@
-
+﻿
 "use client";
 
 import {
@@ -273,17 +273,20 @@ export function PlayerProvider({
       return;
     }
 
+    const maximumTime = currentTrack?.previewLimitSeconds ?? (Number.isFinite(audio.duration) ? audio.duration : 0);
+
     const safeTime = clamp(
       time,
       0,
-      Number.isFinite(audio.duration)
-        ? audio.duration
-        : 0
+      Math.min(
+        Number.isFinite(audio.duration) ? audio.duration : maximumTime,
+        maximumTime
+      )
     );
 
     audio.currentTime = safeTime;
     setCurrentTime(safeTime);
-  }, []);
+  }, [currentTrack]);
 
   const setPlayerVolume = useCallback(
     (nextVolume: number) => {
@@ -426,9 +429,16 @@ export function PlayerProvider({
         ref={audioRef}
         preload="metadata"
         onTimeUpdate={(event) => {
-          setCurrentTime(
-            event.currentTarget.currentTime
-          );
+          const audio = event.currentTarget;
+          const previewLimit = currentTrack?.previewLimitSeconds;
+          if (previewLimit && audio.currentTime >= previewLimit) {
+            audio.pause();
+            audio.currentTime = previewLimit;
+            setCurrentTime(previewLimit);
+            setIsPlaying(false);
+            return;
+          }
+          setCurrentTime(audio.currentTime);
         }}
         onLoadedMetadata={(event) => {
           const nextDuration =
@@ -458,3 +468,5 @@ export function PlayerProvider({
     </PlayerContext.Provider>
   );
 }
+
+

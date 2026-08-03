@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -27,6 +27,7 @@ type SearchResult =
       href: string;
       preview: string;
       trackNumber: number;
+      albumStatus: string;
     };
 
 function normalize(value: unknown) {
@@ -72,7 +73,7 @@ export default function SearchPage() {
           key: `album-${album.id}`,
           type: "album",
           title: album.title,
-          subtitle: `${album.artist} • ${album.genre} • ${album.year}`,
+          subtitle: `${album.artist} â€¢ ${album.genre} â€¢ ${album.year}`,
           cover: album.cover,
           href: album.pageLink || `/store?album=${album.id}`,
           status: album.status,
@@ -90,11 +91,12 @@ export default function SearchPage() {
             key: `track-${album.id}-${track.id}`,
             type: "track",
             title: track.title,
-            subtitle: `${album.title} • Track ${track.number}`,
+            subtitle: `${album.title} â€¢ Track ${track.number}`,
             cover: album.cover,
             href: `/store?album=${album.id}&track=${track.id}`,
             preview: track.preview,
             trackNumber: track.number,
+            albumStatus: album.status,
           });
         }
       }
@@ -111,7 +113,7 @@ export default function SearchPage() {
       return;
     }
 
-    const albumTitle = result.subtitle.split(" • ")[0] || "Solo Beats";
+    const albumTitle = result.subtitle.split(" â€¢ ")[0] || "Solo Beats";
 
     const track: PlayerTrack = {
       id: result.key,
@@ -121,6 +123,11 @@ export default function SearchPage() {
       audio: result.preview,
       cover: result.cover,
       trackNumber: result.trackNumber,
+      previewLimitSeconds:
+        result.albumStatus === "released" &&
+        result.trackNumber > 3
+          ? 60
+          : undefined,
     };
 
     if (currentTrack?.id === track.id) {
@@ -193,7 +200,7 @@ export default function SearchPage() {
           <section className="mt-8 rounded-[2rem] border border-dashed border-white/15 bg-white/[0.025] p-10 text-center">
             <h2 className="text-2xl font-black">No results found</h2>
             <p className="mt-3 text-white/55">
-              No albums or tracks matched “{query}”.
+              No albums or tracks matched â€œ{query}â€.
             </p>
           </section>
         ) : (
@@ -256,7 +263,7 @@ export default function SearchPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-300 hover:text-pink-300"
                           }`}
                         >
-                          {favorite ? "♥" : "♡"}
+                          {favorite ? "â™¥" : "â™¡"}
                         </button>
 
                         <Link href={result.href} className="block">
@@ -353,4 +360,7 @@ export default function SearchPage() {
     </main>
   );
 }
+
+
+
 
