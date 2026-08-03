@@ -56,11 +56,11 @@ const flagshipTracks: PlayerTrack[] = [
     cover: "/covers/bullet-carnage.png",
   },
   {
-    id: "bullet-carnage-neon-execution",
-    title: "Neon Execution",
+    id: "bullet-carnage-sexy-beat",
+    title: "Sexy Beat",
     artist: "Solo Beats",
     albumTitle: "Bullet Carnage",
-    audio: "/previews/bullet-carnage/3 Neon Execution.mp3",
+    audio: "/previews/bullet-carnage/19 Sexy Beat.mp3",
     cover: "/covers/bullet-carnage.png",
   },
   {
@@ -72,11 +72,19 @@ const flagshipTracks: PlayerTrack[] = [
     cover: "/covers/bullet-carnage.png",
   },
   {
-    id: "bullet-carnage-terminal-erasure",
-    title: "Terminal Erasure",
+    id: "bullet-carnage-electro-pace",
+    title: "Electro Pace",
     artist: "Solo Beats",
     albumTitle: "Bullet Carnage",
-    audio: "/previews/bullet-carnage/16 Terminal Erasure.mp3",
+    audio: "/previews/bullet-carnage/20 Electro Pace.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-bass-drop",
+    title: "Bass Drop",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/18 Bass Drop.mp3",
     cover: "/covers/bullet-carnage.png",
   },
 ];
@@ -1200,6 +1208,13 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
+
+
+
+
+
 
 
 
