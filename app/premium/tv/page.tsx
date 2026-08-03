@@ -1882,14 +1882,6 @@ export default function PremiumTvPage() {
           </aside>
         </section>
 
-        <section className="mt-8 rounded-[2rem] border border-white/10 bg-white/[0.03] p-6 text-white/55">
-          <p className="font-black text-white">
-            Premium TV Phase 1
-          </p>
-          <p className="mt-2 leading-7">
-            This first version uses album artwork and Premium audio as continuous visual programming. Actual music videos can be added later as video files become available.
-          </p>
-        </section>
       </div>
     </main>
   );
