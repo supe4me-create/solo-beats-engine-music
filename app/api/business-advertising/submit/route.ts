@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -646,6 +646,33 @@ export async function POST(
         FieldValue.serverTimestamp(),
     });
 
+    const ownerNotificationType =
+      hasVideo || youtubeLink
+        ? "video_advertising_submission"
+        : "business_advertising_submission";
+
+    await adminDb
+      .collection("ownerNotifications")
+      .doc(`business-advertising-${submissionId}`)
+      .set({
+        type: ownerNotificationType,
+        category: "business_advertising",
+        title:
+          ownerNotificationType === "video_advertising_submission"
+            ? "New video advertising submission"
+            : "New business advertising submission",
+        message: `${businessName} submitted the "${campaignName}" campaign for review.`,
+        targetUrl: `/developer/business-advertising?submissionId=${encodeURIComponent(submissionId)}`,
+        relatedId: submissionId,
+        submissionId,
+        businessName,
+        campaignName,
+        creativeType:
+          hasVideo || youtubeLink ? "video" : "image",
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     return NextResponse.json({
       success: true,
       submissionId,
@@ -672,3 +699,4 @@ export async function POST(
     );
   }
 }
+

@@ -175,11 +175,26 @@ export default function OwnerNotifications() {
   useEffect(() => {
     if (!isOwner) return;
 
-    const interval = window.setInterval(() => {
+    const refreshNotifications = () => {
       void loadNotifications();
-    }, 60000);
+    };
 
-    return () => window.clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshNotifications();
+      }
+    };
+
+    const interval = window.setInterval(refreshNotifications, 15000);
+
+    window.addEventListener("focus", refreshNotifications);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshNotifications);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [isOwner, user]);
 
   useEffect(() => {
@@ -218,7 +233,7 @@ export default function OwnerNotifications() {
         <span aria-hidden="true">&#128276;</span>
 
         {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-fuchsia-500 px-1.5 py-0.5 text-center text-[10px] font-black leading-none text-white">
+          <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full border-2 border-[#10101b] bg-fuchsia-500 px-1 text-center text-[10px] font-black leading-none text-white shadow-lg">
             {badgeText}
           </span>
         ) : null}
@@ -320,6 +335,7 @@ export default function OwnerNotifications() {
     </div>
   );
 }
+
 
 
 

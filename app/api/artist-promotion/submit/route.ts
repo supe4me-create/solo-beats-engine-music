@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -383,6 +383,24 @@ export async function POST(
         FieldValue.serverTimestamp(),
     });
 
+    await adminDb
+      .collection("ownerNotifications")
+      .doc(`artist-promotion-${submissionId}`)
+      .set({
+        type: "artist_promotion_submission",
+        category: "artist_promotions",
+        title: "New artist promotion submission",
+        message: `${artistName} submitted "${songTitle}" for promotion.`,
+        targetUrl: `/developer/artist-promotions?submissionId=${encodeURIComponent(submissionId)}`,
+        relatedId: submissionId,
+        submissionId,
+        artistName,
+        songTitle,
+        genre,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     return NextResponse.json({
       success: true,
       submissionId,
@@ -409,3 +427,4 @@ export async function POST(
     );
   }
 }
+

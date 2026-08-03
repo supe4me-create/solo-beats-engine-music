@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -364,7 +364,7 @@ export default function OwnerDashboardPage() {
       await testDownload(
         "album",
         selectedAlbum.id,
-        `${selectedAlbum.title} — Full Album`
+        `${selectedAlbum.title} â€” Full Album`
       );
 
       for (const track of selectedAlbum.tracks) {
@@ -389,7 +389,7 @@ export default function OwnerDashboardPage() {
         await testDownload(
           "album",
           album.id,
-          `${album.title} — Full Album`
+          `${album.title} â€” Full Album`
         );
 
         for (const track of album.tracks) {
@@ -515,6 +515,58 @@ export default function OwnerDashboardPage() {
           </div>
         </section>
 
+
+        <section className="mt-8 rounded-[2rem] border border-amber-300/20 bg-gradient-to-br from-amber-500/15 via-white/[0.035] to-red-500/10 p-6 sm:p-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-300">
+              Approval Center
+            </p>
+            <h2 className="mt-2 text-3xl font-black">
+              Review every submission from one place
+            </h2>
+            <p className="mt-3 max-w-3xl text-white/55">
+              Open artist promotions, business and video advertising, orders, Premium members, and customer accounts without searching through the site.
+            </p>
+          </div>
+
+          <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            <ManagementLink
+              title="Artist Promotion Approvals"
+              description="Review new artist submissions, approve or reject campaigns, confirm payment, and schedule placements."
+              href="/developer/artist-promotions"
+              action="Review Artist Submissions"
+              badge="Approval"
+            />
+            <ManagementLink
+              title="Business & Video Ads"
+              description="Review business and video advertising submissions, approve pricing, confirm payment, and schedule campaigns."
+              href="/developer/business-advertising"
+              action="Review Ad Submissions"
+              badge="Approval"
+            />
+            <ManagementLink
+              title="Orders"
+              description="Review purchases, payment details, customer items, and completed transactions."
+              href="/developer/orders"
+              action="Open Orders"
+              badge="Sales"
+            />
+            <ManagementLink
+              title="Premium Members"
+              description="Review active, cancelled, and billing-related Premium membership activity."
+              href="#premium-members"
+              action="View Members"
+              badge="Premium"
+            />
+            <ManagementLink
+              title="Customers"
+              description="Review customer accounts, purchases, ownership, and My Music access."
+              href="/developer/customers"
+              action="Open Customers"
+              badge="Accounts"
+            />
+          </div>
+        </section>
 
         <section className="mt-8 rounded-[2rem] border border-cyan-300/15 bg-gradient-to-br from-cyan-500/10 via-white/[0.035] to-violet-500/10 p-6 sm:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -1077,7 +1129,7 @@ export default function OwnerDashboardPage() {
               >
                 {albums.map((album) => (
                   <option key={album.id} value={album.id}>
-                    {album.title} — {album.tracks.length} tracks
+                    {album.title} â€” {album.tracks.length} tracks
                   </option>
                 ))}
               </select>
@@ -1119,7 +1171,7 @@ export default function OwnerDashboardPage() {
 
           <div className="mt-8 grid gap-3">
             <ResultRow
-              title={`${selectedAlbum.title} — Full Album`}
+              title={`${selectedAlbum.title} â€” Full Album`}
               result={
                 results[
                   makeResultKey("album", selectedAlbum.id)
@@ -1129,7 +1181,7 @@ export default function OwnerDashboardPage() {
                 testDownload(
                   "album",
                   selectedAlbum.id,
-                  `${selectedAlbum.title} — Full Album`
+                  `${selectedAlbum.title} â€” Full Album`
                 )
               }
               disabled={testingAll || testingCatalog}
@@ -1365,6 +1417,7 @@ function ResultRow({
     </article>
   );
 }
+
 
 
 
