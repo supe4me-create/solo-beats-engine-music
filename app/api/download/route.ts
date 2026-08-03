@@ -448,7 +448,7 @@ const TRACK_DOWNLOAD_FILES: Record<string, DownloadFile> = {
   ]),
 
   ...registerTracks("neon-overdrive", [
-    { fileName: "Pulse Invaders1.mp3", title: "Pulse Invaders" },
+    { fileName: "Pulse Invaders1.wav", title: "Pulse Invaders" },
     { fileName: "Pixel Riot2.mp3", title: "Pixel Riot" },
     { fileName: "Rhythm Nexus3.mp3", title: "Rhythm Nexus" },
     { fileName: "Voltage Arena4.mp3", title: "Voltage Arena" },
@@ -470,7 +470,7 @@ const TRACK_DOWNLOAD_FILES: Record<string, DownloadFile> = {
     { fileName: "Rise of Motion.mp3", title: "Rise of Motion" },
     { fileName: "Static Reflection.mp3", title: "Static Reflection" },
     { fileName: "Storm of Echoes.mp3", title: "Storm of Echoes" },
-    { fileName: "Unchained Energy.mp3", title: "Unchained Energy" },
+    { fileName: "Unchained Energy.wav", title: "Unchained Energy" },
   ]),
 
   ...registerTracks("novafx", [
@@ -1184,6 +1184,8 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
 
 
 

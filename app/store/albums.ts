@@ -372,7 +372,7 @@ const albumCatalog: Album[] = [
     description:
       "Experience Neon Overdrive, a ten-track Solo Beats album packed with futuristic complextro energy, cyber-powered bass, bright synths and high-speed electronic rhythms.",
     tracks: [
-      { title: "Pulse Invaders", fileName: "Pulse Invaders1.mp3" },
+      { title: "Pulse Invaders", fileName: "Pulse Invaders1.wav" },
       { title: "Pixel Riot", fileName: "Pixel Riot2.mp3" },
       { title: "Rhythm Nexus", fileName: "Rhythm Nexus3.mp3" },
       { title: "Voltage Arena", fileName: "Voltage Arena4.mp3" },
@@ -406,7 +406,7 @@ const albumCatalog: Album[] = [
       { title: "Rise of Motion", fileName: "Rise of Motion.mp3" },
       { title: "Static Reflection", fileName: "Static Reflection.mp3" },
       { title: "Storm of Echoes", fileName: "Storm of Echoes.mp3" },
-      { title: "Unchained Energy", fileName: "Unchained Energy.mp3" },
+      { title: "Unchained Energy", fileName: "Unchained Energy.wav" },
     ],
   }),
 
@@ -650,5 +650,8 @@ export function getTrackById(trackId: string) {
 
   return undefined;
 }
+
+
+
 
 
