@@ -152,22 +152,10 @@ export default function PremiumPage() {
             ))}
           </div>
         </section>
-
-        <section className="mt-10 rounded-[2rem] border border-white/10 bg-gradient-to-r from-white/[0.04] to-violet-500/10 p-7 sm:p-9">
-          <p className="text-sm font-black uppercase tracking-[0.2em] text-cyan-300">Development roadmap</p>
-          <h2 className="mt-2 text-3xl font-black">Premium Phase 1</h2>
-          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {["Premium landing page - complete", "PayPal subscription checkout - complete", "Member account status - complete", "Premium streaming access"].map((item, index) => (
-              <div key={item} className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-white/35">Step {index + 1}</p>
-                <p className="mt-2 font-black">{item}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+</div>
     </main>
   );
 }
+
 
 
