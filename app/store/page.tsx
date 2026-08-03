@@ -1665,12 +1665,7 @@ export default function StorePage() {
                                       !track.preview
                                     }
                                   >
-                                    <span>
-                                      {trackIsCurrent &&
-                                      isPlaying
-                                        ? "âšâš"
-                                        : "â–¶"}
-                                    </span>
+                                    <span>{trackIsCurrent && isPlaying ? "\u23F8" : "\u25B6"}</span>
 
                                     {trackIsCurrent
                                       ? isPlaying
@@ -3490,6 +3485,7 @@ export default function StorePage() {
     </main>
   );
 }
+
 
 
 
