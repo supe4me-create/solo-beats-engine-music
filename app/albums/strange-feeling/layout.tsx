@@ -1,4 +1,5 @@
 ﻿import type { Metadata } from "next";
+import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: "Strange Feeling Album by Solo Beats",
@@ -93,3 +94,4 @@ export default function StrangeFeelingLayout({
     </>
   );
 }
+
