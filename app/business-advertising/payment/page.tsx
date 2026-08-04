@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -38,10 +38,7 @@ export default function BusinessAdvertisingPaymentPage() {
   const [successMessage, setSuccessMessage] =
     useState("");
 
-  const clientId =
-    process.env
-      .NEXT_PUBLIC_PAYPAL_CLIENT_ID ||
-    "";
+  const clientId = (process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "").replace(/\s+/g, "");
 
   useEffect(() => {
     const unsubscribe =
@@ -361,3 +358,4 @@ function Info({
     </article>
   );
 }
+
