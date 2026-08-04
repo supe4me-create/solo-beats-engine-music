@@ -85,6 +85,26 @@ export default function ArtistPromotionPage() {
       return;
     }
 
+    if (
+      songFile.size >
+      100 * 1024 * 1024
+    ) {
+      setErrorMessage(
+        "The song file exceeds the 100 MB limit."
+      );
+      return;
+    }
+
+    if (
+      artworkFile.size >
+      10 * 1024 * 1024
+    ) {
+      setErrorMessage(
+        "The artwork file exceeds the 10 MB limit."
+      );
+      return;
+    }
+
     setSubmitting(true);
     setSuccessMessage("");
     setErrorMessage("");
@@ -93,45 +113,123 @@ export default function ArtistPromotionPage() {
       const idToken =
         await user.getIdToken();
 
-      const formData =
-        new FormData();
+      const fileInfo = (
+        file: File
+      ) => ({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      });
 
-      formData.append(
-        "artistName",
-        artistName
-      );
-      formData.append(
-        "songTitle",
-        songTitle
-      );
-      formData.append(
-        "genre",
-        genre
-      );
-      formData.append(
-        "duration",
-        duration
-      );
-      formData.append(
-        "description",
-        description
-      );
-      formData.append(
-        "socialLink",
-        socialLink
-      );
-      formData.append(
-        "youtubeLink",
-        youtubeLink
-      );
-      formData.append(
-        "songFile",
-        songFile
-      );
-      formData.append(
-        "artworkFile",
-        artworkFile
-      );
+      const submissionData = {
+        artistName,
+        songTitle,
+        genre,
+        duration,
+        description,
+        socialLink,
+        youtubeLink,
+        songFile:
+          fileInfo(songFile),
+        artworkFile:
+          fileInfo(artworkFile),
+      };
+
+      const prepareResponse =
+        await fetch(
+          "/api/artist-promotion/submit",
+          {
+            method: "POST",
+            headers: {
+              Authorization:
+                `Bearer ${idToken}`,
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action: "prepare",
+              ...submissionData,
+            }),
+          }
+        );
+
+      const prepareText =
+        await prepareResponse.text();
+
+      let prepared: {
+        success?: boolean;
+        error?: string;
+        submissionId?: string;
+        songStoragePath?: string;
+        artworkStoragePath?: string;
+        songUploadUrl?: string;
+        artworkUploadUrl?: string;
+      };
+
+      try {
+        prepared =
+          JSON.parse(prepareText);
+      } catch {
+        throw new Error(
+          prepareResponse.status ===
+            413
+            ? "The selected files are too large to submit."
+            : "The promotion service returned an invalid response."
+        );
+      }
+
+      if (
+        !prepareResponse.ok ||
+        !prepared.success ||
+        !prepared.submissionId ||
+        !prepared.songStoragePath ||
+        !prepared.artworkStoragePath ||
+        !prepared.songUploadUrl ||
+        !prepared.artworkUploadUrl
+      ) {
+        throw new Error(
+          prepared.error ||
+            "The promotion submission could not be prepared."
+        );
+      }
+
+      const songUpload =
+        await fetch(
+          prepared.songUploadUrl,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                songFile.type,
+            },
+            body: songFile,
+          }
+        );
+
+      if (!songUpload.ok) {
+        throw new Error(
+          "The song file could not be uploaded."
+        );
+      }
+
+      const artworkUpload =
+        await fetch(
+          prepared.artworkUploadUrl,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                artworkFile.type,
+            },
+            body: artworkFile,
+          }
+        );
+
+      if (!artworkUpload.ok) {
+        throw new Error(
+          "The artwork file could not be uploaded."
+        );
+      }
 
       const response = await fetch(
         "/api/artist-promotion/submit",
@@ -140,15 +238,43 @@ export default function ArtistPromotionPage() {
           headers: {
             Authorization:
               `Bearer ${idToken}`,
+            "Content-Type":
+              "application/json",
           },
-          body: formData,
+          body: JSON.stringify({
+            action: "finalize",
+            ...submissionData,
+            submissionId:
+              prepared.submissionId,
+            songStoragePath:
+              prepared.songStoragePath,
+            artworkStoragePath:
+              prepared.artworkStoragePath,
+          }),
         }
       );
 
-      const data =
-        await response.json();
+      const responseText =
+        await response.text();
 
-      if (!response.ok || !data.success) {
+      let data: {
+        success?: boolean;
+        error?: string;
+      };
+
+      try {
+        data =
+          JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          "The promotion service returned an invalid response."
+        );
+      }
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
         throw new Error(
           data.error ||
             "The promotion submission could not be completed."

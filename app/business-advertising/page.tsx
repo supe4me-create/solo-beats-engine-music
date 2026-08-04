@@ -149,6 +149,28 @@ export default function BusinessAdvertisingPage() {
       return;
     }
 
+    if (
+      imageFile &&
+      imageFile.size >
+        10 * 1024 * 1024
+    ) {
+      setErrorMessage(
+        "The advertising image exceeds the 10 MB limit."
+      );
+      return;
+    }
+
+    if (
+      videoFile &&
+      videoFile.size >
+        250 * 1024 * 1024
+    ) {
+      setErrorMessage(
+        "The promotional video exceeds the 250 MB limit."
+      );
+      return;
+    }
+
     setSubmitting(true);
     setSuccessMessage("");
     setErrorMessage("");
@@ -157,88 +179,144 @@ export default function BusinessAdvertisingPage() {
       const idToken =
         await user.getIdToken();
 
-      const formData =
-        new FormData();
+      const fileInfo = (
+        file: File | null
+      ) =>
+        file
+          ? {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+            }
+          : null;
 
-      formData.append(
-        "businessName",
-        businessName
-      );
-      formData.append(
-        "contactName",
-        contactName
-      );
-      formData.append(
-        "businessEmail",
-        businessEmail
-      );
-      formData.append(
-        "businessWebsite",
-        businessWebsite
-      );
-      formData.append(
-        "campaignName",
-        campaignName
-      );
-      formData.append(
-        "campaignGoal",
-        campaignGoal
-      );
-      formData.append(
-        "headline",
-        headline
-      );
-      formData.append(
-        "description",
-        description
-      );
-      formData.append(
-        "callToAction",
-        callToAction
-      );
-      formData.append(
-        "targetAudience",
-        targetAudience
-      );
-      formData.append(
-        "targetGenre",
-        targetGenre
-      );
-      formData.append(
-        "duration",
-        duration
-      );
-      formData.append(
-        "budget",
-        budget
-      );
-      formData.append(
-        "preferredStartDate",
-        preferredStartDate
-      );
-      formData.append(
-        "youtubeLink",
-        youtubeLink
-      );
-      formData.append(
-        "placements",
-        JSON.stringify(
-          placements
-        )
-      );
+      const submissionData = {
+        businessName,
+        contactName,
+        businessEmail,
+        businessWebsite,
+        campaignName,
+        campaignGoal,
+        headline,
+        description,
+        callToAction,
+        targetAudience,
+        targetGenre,
+        duration,
+        budget,
+        preferredStartDate,
+        youtubeLink,
+        placements,
+        imageFile:
+          fileInfo(imageFile),
+        videoFile:
+          fileInfo(videoFile),
+      };
 
-      if (imageFile) {
-        formData.append(
-          "imageFile",
-          imageFile
+      const prepareResponse =
+        await fetch(
+          "/api/business-advertising/submit",
+          {
+            method: "POST",
+            headers: {
+              Authorization:
+                `Bearer ${idToken}`,
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action: "prepare",
+              ...submissionData,
+            }),
+          }
+        );
+
+      const prepareText =
+        await prepareResponse.text();
+
+      let prepared: {
+        success?: boolean;
+        error?: string;
+        submissionId?: string;
+        imageStoragePath?:
+          string | null;
+        videoStoragePath?:
+          string | null;
+        imageUploadUrl?:
+          string | null;
+        videoUploadUrl?:
+          string | null;
+      };
+
+      try {
+        prepared =
+          JSON.parse(prepareText);
+      } catch {
+        throw new Error(
+          prepareResponse.status ===
+            413
+            ? "The selected files are too large to submit."
+            : "The business advertising service returned an invalid response."
         );
       }
 
-      if (videoFile) {
-        formData.append(
-          "videoFile",
-          videoFile
+      if (
+        !prepareResponse.ok ||
+        !prepared.success ||
+        !prepared.submissionId
+      ) {
+        throw new Error(
+          prepared.error ||
+            "The business advertising submission could not be prepared."
         );
+      }
+
+      if (
+        imageFile &&
+        prepared.imageUploadUrl
+      ) {
+        const imageUpload =
+          await fetch(
+            prepared.imageUploadUrl,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type":
+                  imageFile.type,
+              },
+              body: imageFile,
+            }
+          );
+
+        if (!imageUpload.ok) {
+          throw new Error(
+            "The advertising image could not be uploaded."
+          );
+        }
+      }
+
+      if (
+        videoFile &&
+        prepared.videoUploadUrl
+      ) {
+        const videoUpload =
+          await fetch(
+            prepared.videoUploadUrl,
+            {
+              method: "PUT",
+              headers: {
+                "Content-Type":
+                  videoFile.type,
+              },
+              body: videoFile,
+            }
+          );
+
+        if (!videoUpload.ok) {
+          throw new Error(
+            "The promotional video could not be uploaded."
+          );
+        }
       }
 
       const response = await fetch(
@@ -248,28 +326,38 @@ export default function BusinessAdvertisingPage() {
           headers: {
             Authorization:
               `Bearer ${idToken}`,
+            "Content-Type":
+              "application/json",
           },
-          body: formData,
+          body: JSON.stringify({
+            action: "finalize",
+            ...submissionData,
+            submissionId:
+              prepared.submissionId,
+            imageStoragePath:
+              prepared.imageStoragePath,
+            videoStoragePath:
+              prepared.videoStoragePath,
+          }),
         }
       );
 
-      const contentType =
-        response.headers.get(
-          "content-type"
-        ) || "";
+      const responseText =
+        await response.text();
 
-      if (
-        !contentType.includes(
-          "application/json"
-        )
-      ) {
+      let data: {
+        success?: boolean;
+        error?: string;
+      };
+
+      try {
+        data =
+          JSON.parse(responseText);
+      } catch {
         throw new Error(
           "The business advertising service returned an invalid response."
         );
       }
-
-      const data =
-        await response.json();
 
       if (
         !response.ok ||
