@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -72,6 +72,7 @@ export default function BusinessAdvertisingReviewPage() {
   const [filter, setFilter] = useState<FilterValue>("pending");
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [copiedPaymentId, setCopiedPaymentId] = useState<string | null>(null);
   const [finalPrices, setFinalPrices] = useState<Record<string, string>>({});
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
   const [scheduleValues, setScheduleValues] = useState<
@@ -154,6 +155,21 @@ export default function BusinessAdvertisingReviewPage() {
     [submissions]
   );
 
+  async function copyPaymentLink(submissionId: string) {
+    const paymentUrl =
+      `${window.location.origin}/business-advertising/payment`;
+
+    try {
+      await navigator.clipboard.writeText(paymentUrl);
+      setCopiedPaymentId(submissionId);
+      window.setTimeout(() => setCopiedPaymentId(null), 2500);
+    } catch {
+      setError(
+        "The payment link could not be copied. Open the customer payment page and copy the browser address."
+      );
+    }
+  }
+
   async function review(submissionId: string, action: "approve" | "reject", reasonOverride?: string) {
     if (!user) return;
     const finalPrice = finalPrices[submissionId]?.trim() || "";
@@ -216,9 +232,21 @@ export default function BusinessAdvertisingReviewPage() {
 
       setMessage(
         action === "approve"
-          ? "The business campaign was approved and is ready for payment."
+          ? "The business campaign was approved. The payment request is ready below."
           : "The business campaign was rejected."
       );
+
+      if (action === "approve") {
+        setFilter("approved");
+        window.setTimeout(() => {
+          document
+            .getElementById(`business-submission-${submissionId}`)
+            ?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+        }, 100);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The campaign could not be reviewed.");
     } finally {
@@ -391,7 +419,11 @@ export default function BusinessAdvertisingReviewPage() {
             visible.map((submission) => {
               const embed = youtubeEmbed(submission.youtubeLink);
               return (
-                <article key={submission.submissionId} className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035]">
+                <article
+                  id={`business-submission-${submission.submissionId}`}
+                  key={submission.submissionId}
+                  className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035]"
+                >
                   <div className="grid gap-6 p-6 lg:grid-cols-[280px_minmax(0,1fr)]">
                     <div>
                       {submission.imageUrl ? (
@@ -407,7 +439,7 @@ export default function BusinessAdvertisingReviewPage() {
                     <div>
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-cyan-300">{submission.businessName}</p>
                       <h2 className="mt-2 text-4xl font-black">{submission.campaignName}</h2>
-                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} â€¢ {submission.requestedDurationDays} days</p>
+                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} • {submission.requestedDurationDays} days</p>
                       <h3 className="mt-5 text-2xl font-black">{submission.headline}</h3>
                       <p className="mt-3 leading-7 text-white/60">{submission.description}</p>
 
@@ -494,16 +526,27 @@ export default function BusinessAdvertisingReviewPage() {
                       {submission.reviewStatus === "approved" &&
                       submission.paymentStatus !== "paid" ? (
                         <div className="mt-6 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-5 text-amber-100">
-                          <p className="font-black">Awaiting business payment</p>
+                          <p className="font-black">Payment required</p>
                           <p className="mt-2 text-sm">
-                            Final price: ${submission.finalPrice || "0.00"} {submission.currency}
+                            Approved price: ${submission.finalPrice || "0.00"} {submission.currency}
                           </p>
-                          <Link
-                            href="/business-advertising/payment"
-                            className="mt-4 inline-flex rounded-xl bg-white px-4 py-3 font-black text-black"
+                          <p className="mt-2 text-sm text-amber-100/75">
+                            Send the payment link to{" "}
+                            {submission.businessEmail ||
+                              submission.advertiserAccountEmail ||
+                              "the advertiser"}. They must sign in with the same account used for this submission.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyPaymentLink(submission.submissionId)
+                            }
+                            className="mt-4 rounded-xl bg-white px-4 py-3 font-black text-black"
                           >
-                            Open Payment Page
-                          </Link>
+                            {copiedPaymentId === submission.submissionId
+                              ? "Payment Link Copied"
+                              : "Copy Business Payment Link"}
+                          </button>
                         </div>
                       ) : null}
 
@@ -631,7 +674,7 @@ export default function BusinessAdvertisingReviewPage() {
                         <div className="mt-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-5 text-emerald-100">
                           <p className="font-black">Business campaign scheduled</p>
                           <p className="mt-2 text-sm">
-                            {submission.placementLocation || "placement"} â€¢{" "}
+                            {submission.placementLocation || "placement"} •{" "}
                             {submission.scheduleStartDate || "start date"} to{" "}
                             {submission.scheduleEndDate || "end date"}
                           </p>

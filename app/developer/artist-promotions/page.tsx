@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
@@ -11,6 +11,12 @@ import { useAuth } from "../../auth/AuthContext";
 
 const OWNER_EMAIL =
   "supe4.me@gmail.com";
+
+const PROMOTION_PRICES: Record<number, number> = {
+  7: 19.99,
+  14: 34.99,
+  30: 59.99,
+};
 
 type ReviewStatus =
   | "pending"
@@ -100,6 +106,8 @@ export default function ArtistPromotionReviewPage() {
   const [filter, setFilter] =
     useState<FilterValue>("pending");
   const [reviewingId, setReviewingId] =
+    useState<string | null>(null);
+  const [copiedPaymentId, setCopiedPaymentId] =
     useState<string | null>(null);
   const [rejectionReasons, setRejectionReasons] =
     useState<Record<string, string>>({});
@@ -221,6 +229,28 @@ export default function ArtistPromotionReviewPage() {
     [submissions]
   );
 
+  async function copyPaymentLink(
+    submissionId: string
+  ) {
+    const paymentUrl =
+      `${window.location.origin}/artist-promotion/payment`;
+
+    try {
+      await navigator.clipboard.writeText(
+        paymentUrl
+      );
+      setCopiedPaymentId(submissionId);
+      window.setTimeout(
+        () => setCopiedPaymentId(null),
+        2500
+      );
+    } catch {
+      setErrorMessage(
+        "The payment link could not be copied. Open the customer payment page and copy the browser address."
+      );
+    }
+  }
+
   async function reviewSubmission(
     submissionId: string,
     action: "approve" | "reject", reasonOverride?: string
@@ -308,9 +338,23 @@ export default function ArtistPromotionReviewPage() {
 
       setSuccessMessage(
         action === "approve"
-          ? "The submission was approved and is ready for the payment stage."
+          ? "The submission was approved. The payment request is ready below."
           : "The submission was rejected."
       );
+
+      if (action === "approve") {
+        setFilter("approved");
+        window.setTimeout(() => {
+          document
+            .getElementById(
+              `artist-submission-${submissionId}`
+            )
+            ?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+        }, 100);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -570,6 +614,7 @@ export default function ArtistPromotionReviewPage() {
             visibleSubmissions.map(
               (submission) => (
                 <article
+                  id={`artist-submission-${submission.submissionId}`}
                   key={
                     submission.submissionId
                   }
@@ -622,7 +667,7 @@ export default function ArtistPromotionReviewPage() {
                       </h2>
 
                       <p className="mt-2 text-white/45">
-                        {submission.genre} â€¢{" "}
+                        {submission.genre} •{" "}
                         {
                           submission.promotionDurationDays
                         }{" "}
@@ -807,17 +852,40 @@ export default function ArtistPromotionReviewPage() {
                         "paid" ? (
                         <div className="mt-6 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-5">
                           <p className="font-black text-amber-100">
-                            Awaiting artist payment
+                            Payment required
                           </p>
                           <p className="mt-2 text-sm text-amber-100/75">
-                            The artist can complete payment from the promotion payment page.
+                            Approved price: $
+                            {(
+                              PROMOTION_PRICES[
+                                submission.promotionDurationDays
+                              ] || 0
+                            ).toFixed(2)}{" "}
+                            USD for{" "}
+                            {
+                              submission.promotionDurationDays
+                            }{" "}
+                            days.
                           </p>
-                          <Link
-                            href="/artist-promotion/payment"
-                            className="mt-4 inline-flex rounded-xl bg-white px-4 py-3 font-black text-black"
+                          <p className="mt-2 text-sm text-amber-100/75">
+                            Send the payment link to{" "}
+                            {submission.artistAccountEmail ||
+                              "the artist"}. They must sign in with the same account used for this submission.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyPaymentLink(
+                                submission.submissionId
+                              )
+                            }
+                            className="mt-4 rounded-xl bg-white px-4 py-3 font-black text-black"
                           >
-                            Open Payment Page
-                          </Link>
+                            {copiedPaymentId ===
+                            submission.submissionId
+                              ? "Payment Link Copied"
+                              : "Copy Artist Payment Link"}
+                          </button>
                         </div>
                       ) : null}
 
@@ -1012,7 +1080,7 @@ export default function ArtistPromotionReviewPage() {
                           <p className="mt-2 text-sm">
                             {submission.placementLocation ||
                               "placement"}{" "}
-                            â€¢{" "}
+                            •{" "}
                             {submission.scheduleStartDate ||
                               "start date"}{" "}
                             to{" "}
