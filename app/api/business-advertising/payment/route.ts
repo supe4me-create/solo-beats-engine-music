@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -393,13 +393,6 @@ export async function POST(
             ],
           },
         ],
-        application_context: {
-          brand_name:
-            "SOLO BEATS ENGINE MUSIC",
-          shipping_preference:
-            "NO_SHIPPING",
-          user_action: "PAY_NOW",
-        },
       };
 
       if (savePaymentMethod) {
@@ -745,3 +738,4 @@ export async function POST(
     );
   }
 }
+
