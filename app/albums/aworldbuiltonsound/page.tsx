@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePlayer } from "../../player/usePlayer";
@@ -40,7 +40,7 @@ export default function AlbumPage() {
     <main className="min-h-screen bg-black pb-36 text-white">
       <section className="mx-auto max-w-7xl px-5 py-12">
         <Link href="/albums" className="font-bold text-purple-300 hover:text-purple-200">
-          â† Back to Albums
+          ← Back to Albums
         </Link>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[380px_1fr] lg:items-center">
@@ -49,7 +49,7 @@ export default function AlbumPage() {
           <div>
             <p className="text-sm font-black uppercase tracking-[0.3em] text-purple-300">Upcoming Album</p>
             <h1 className="mt-3 text-5xl font-black sm:text-6xl">A World Built on Sound</h1>
-            <p className="mt-3 text-gray-400">Solo Beats â€¢ 2026 â€¢ 1 Tracks â€¢ Electronic</p>
+            <p className="mt-3 text-gray-400">Solo Beats • 2026 • 1 Tracks • Electronic</p>
             <p className="mt-6 max-w-3xl text-lg leading-8 text-gray-300">A World Built on Sound is an expansive electronic experience shaped by cinematic melodies and powerful production.</p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -77,7 +77,7 @@ export default function AlbumPage() {
                 <div className="font-black text-gray-500">{String(track.number).padStart(2, "0")}</div>
                 <div>
                   <h3 className="text-lg font-bold">{track.title}</h3>
-                  <p className="text-sm text-gray-500">A World Built on Sound â€¢ Solo Beats</p>
+                  <p className="text-sm text-gray-500">A World Built on Sound • Solo Beats</p>
                 </div>
                 <button type="button" onClick={() => playTrack(track)} className={`rounded-full px-5 py-3 text-sm font-black transition ${playing ? "bg-purple-500" : "border border-white/20 bg-white/10 hover:bg-white/20"}`}>
                   {playing ? "Pause Preview" : active ? "Resume Preview" : "Play Preview"}

@@ -219,7 +219,7 @@ export default function NightTerrorPage() {
               href="/albums"
               className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-purple-300 transition hover:text-purple-200"
             >
-              â† Back to Albums
+              ← Back to Albums
             </Link>
 
             <div className="mb-4 flex flex-wrap gap-3">
@@ -256,7 +256,7 @@ export default function NightTerrorPage() {
                 onClick={buyAlbum}
                 className="rounded-full bg-white px-8 py-4 font-black text-black shadow-lg transition hover:scale-105 hover:bg-purple-200 focus:outline-none focus:ring-4 focus:ring-purple-500/40"
               >
-                Buy Full Album â€” $19.00
+                Buy Full Album — $19.00
               </button>
 
               <button
@@ -271,7 +271,7 @@ export default function NightTerrorPage() {
             </div>
 
             <p className="mt-5 text-sm text-gray-500">
-              Full album: $19.00 â€¢ Individual tracks: $1.00 each
+              Full album: $19.00 • Individual tracks: $1.00 each
             </p>
           </div>
         </div>
@@ -284,7 +284,7 @@ export default function NightTerrorPage() {
           </p>
 
           <h2 className="mt-3 text-3xl font-black sm:text-4xl">
-            Night Terror â€” 19 Tracks
+            Night Terror — 19 Tracks
           </h2>
 
           <p className="mt-3 text-gray-400">
@@ -314,7 +314,7 @@ export default function NightTerrorPage() {
                   </h3>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Solo Beats â€¢ Night Terror
+                    Solo Beats • Night Terror
                   </p>
                 </div>
 
@@ -336,7 +336,7 @@ export default function NightTerrorPage() {
                     onClick={() => buyTrack(track)}
                     className="min-w-[125px] rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:scale-105 hover:bg-purple-200 focus:outline-none focus:ring-4 focus:ring-white/20"
                   >
-                    Buy Track â€” $1
+                    Buy Track — $1
                   </button>
                 </div>
               </div>
@@ -366,14 +366,14 @@ export default function NightTerrorPage() {
               onClick={buyAlbum}
               className="rounded-full bg-white px-8 py-4 font-black text-black transition hover:scale-105 hover:bg-purple-200 focus:outline-none focus:ring-4 focus:ring-purple-500/40"
             >
-              Buy Album â€” $19.00
+              Buy Album — $19.00
             </button>
           </div>
         </div>
       </section>
 
       <footer className="border-t border-white/10 px-5 py-10 text-center text-sm text-gray-500">
-        Â© 2026 Solo Beats Engine Music. All rights reserved.
+        © 2026 Solo Beats Engine Music. All rights reserved.
       </footer>
 
     </main>
