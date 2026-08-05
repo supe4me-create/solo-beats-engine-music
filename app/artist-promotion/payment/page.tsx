@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
@@ -311,9 +311,19 @@ export default function ArtistPromotionPaymentPage() {
                         );
                       }
 
+                      setErrorMessage("");
                       setSuccessMessage(
-                        result.message
+                        result.message ||
+                          "Payment completed successfully. Opening scheduling..."
                       );
+
+                      window.setTimeout(() => {
+                        window.location.assign(
+                          `/developer/artist-promotions?submissionId=${encodeURIComponent(
+                            submission.submissionId
+                          )}&payment=success`
+                        );
+                      }, 1200);
                     }}
                     onError={(error) => {
                       console.error(
