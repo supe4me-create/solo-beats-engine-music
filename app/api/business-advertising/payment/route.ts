@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -243,6 +243,11 @@ export async function POST(
     const savePaymentMethod =
       body?.savePaymentMethod === true;
 
+    const paymentSource =
+      body?.paymentSource === "card"
+        ? "card"
+        : "paypal";
+
     if (!action || !submissionId) {
       return NextResponse.json(
         {
@@ -398,7 +403,33 @@ export async function POST(
         ],
       };
 
-      if (savePaymentMethod) {
+      if (paymentSource === "card") {
+        if (!savePaymentMethod) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "You must authorize saving the card before using automatic campaign charging.",
+            },
+            { status: 400 }
+          );
+        }
+
+        orderBody.payment_source = {
+          card: {
+            attributes: {
+              vault: {
+                store_in_vault:
+                  "ON_SUCCESS",
+              },
+              verification: {
+                method:
+                  "SCA_WHEN_REQUIRED",
+              },
+            },
+          },
+        };
+      } else if (savePaymentMethod) {
         orderBody.payment_source = {
           paypal: {
             attributes: {
@@ -472,6 +503,8 @@ export async function POST(
           paypalOrderId: order.id,
           savePaymentMethodRequested:
             savePaymentMethod,
+          checkoutPaymentSource:
+            paymentSource,
           businessAdvertisingPrice:
             price.toFixed(2),
           businessAdvertisingCurrency:
