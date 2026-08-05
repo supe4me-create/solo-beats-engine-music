@@ -1,4 +1,5 @@
-﻿import { NextResponse } from "next/server";
+﻿import { chargeSavedMethod } from "../../../../lib/paypalVault";
+import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminBucket, adminDb, firebaseAdminApp } from "../../../../lib/firebaseAdmin";
@@ -349,17 +350,78 @@ export async function POST(request: Request) {
       });
     }
 
+    let automaticPayment:
+      | Awaited<
+          ReturnType<
+            typeof chargeSavedMethod
+          >
+        >
+      | null = null;
+
+    if (action === "approve") {
+      const submission =
+        snapshot.data() || {};
+      const lockedPrice = Number(
+        submission.proposedBudget
+      ).toFixed(2);
+
+      automaticPayment =
+        await chargeSavedMethod({
+          uid:
+            submission.advertiserUid ||
+            "",
+          submissionId,
+          amount: lockedPrice,
+          campaignName:
+            submission.campaignName ||
+            "Business Advertising",
+        });
+    }
+
     const update =
       action === "approve"
         ? {
             reviewStatus: "approved",
-            paymentStatus: "awaiting_payment",
-            placementStatus: "not_scheduled",
+            paymentStatus:
+              automaticPayment?.success
+                ? "paid"
+                : "awaiting_payment",
+            placementStatus:
+              automaticPayment?.success
+                ? "ready_to_schedule"
+                : "not_scheduled",
             finalPrice: Number(
           snapshot.data()?.proposedBudget ||
           requestedFinalPrice
         ).toFixed(2),
             rejectionReason: null,
+            automaticPaymentAttempted:
+              true,
+            automaticPaymentError:
+              automaticPayment &&
+              !automaticPayment.success
+                ? automaticPayment.error
+                : null,
+            paymentOrderId:
+              automaticPayment?.success
+                ? automaticPayment.orderId
+                : null,
+            paymentCaptureId:
+              automaticPayment?.success
+                ? automaticPayment.captureId
+                : null,
+            paidAmount:
+              automaticPayment?.success
+                ? automaticPayment.amount
+                : null,
+            paidCurrency:
+              automaticPayment?.success
+                ? automaticPayment.currency
+                : null,
+            paidAt:
+              automaticPayment?.success
+                ? FieldValue.serverTimestamp()
+                : null,
             reviewedByUid: owner.uid,
             reviewedByEmail: owner.email || null,
             reviewedAt: FieldValue.serverTimestamp(),
@@ -382,8 +444,36 @@ export async function POST(request: Request) {
       success: true,
       submissionId,
       reviewStatus: action === "approve" ? "approved" : "rejected",
-      paymentStatus: action === "approve" ? "awaiting_payment" : "not_requested",
-      placementStatus: "not_scheduled",
+      paymentStatus:
+        action === "approve"
+          ? automaticPayment?.success
+            ? "paid"
+            : "awaiting_payment"
+          : "not_requested",
+      placementStatus:
+        action === "approve" &&
+        automaticPayment?.success
+          ? "ready_to_schedule"
+          : "not_scheduled",
+      automaticPayment:
+        action === "approve"
+          ? automaticPayment?.success
+            ? {
+                success: true,
+                orderId:
+                  automaticPayment.orderId,
+                captureId:
+                  automaticPayment.captureId,
+              }
+            : {
+                success: false,
+                fallbackToCheckout:
+                  true,
+                error:
+                  automaticPayment?.error ||
+                  "The customer must complete normal checkout.",
+              }
+          : null,
       finalPrice: action === "approve"
         ? Number(snapshot.data()?.proposedBudget).toFixed(2)
         : null,
@@ -406,4 +496,6 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
 

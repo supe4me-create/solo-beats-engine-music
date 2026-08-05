@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -6,16 +6,11 @@ import {
   adminDb,
   firebaseAdminApp,
 } from "../../../../lib/firebaseAdmin";
-
-const PAYPAL_CLIENT_ID =
-  process.env.PAYPAL_CLIENT_ID;
-const PAYPAL_CLIENT_SECRET =
-  process.env.PAYPAL_CLIENT_SECRET;
-
-const PAYPAL_BASE_URL = (
-  process.env.PAYPAL_BASE_URL ||
-  "https://api-m.paypal.com"
-).replace(/\/+$/, "");
+import {
+  getPayPalAccessToken,
+  PAYPAL_BASE_URL,
+  saveVaultProfile,
+} from "../../../../lib/paypalVault";
 
 function getBearerToken(
   request: Request
@@ -43,46 +38,6 @@ async function verifyCustomer(
   return getAuth(
     firebaseAdminApp
   ).verifyIdToken(idToken);
-}
-
-async function getPayPalAccessToken() {
-  if (
-    !PAYPAL_CLIENT_ID ||
-    !PAYPAL_CLIENT_SECRET
-  ) {
-    throw new Error(
-      "PayPal server credentials are missing."
-    );
-  }
-
-  const credentials = Buffer.from(
-    `${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`
-  ).toString("base64");
-
-  const response = await fetch(
-    `${PAYPAL_BASE_URL}/v1/oauth2/token`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        "Content-Type":
-          "application/x-www-form-urlencoded",
-      },
-      body: "grant_type=client_credentials",
-      cache: "no-store",
-    }
-  );
-
-  const data = await response.json();
-
-  if (!response.ok || !data.access_token) {
-    throw new Error(
-      data.error_description ||
-        "PayPal authentication failed."
-    );
-  }
-
-  return data.access_token as string;
 }
 
 async function getSubmissionForUser(
@@ -140,10 +95,34 @@ export async function GET(
         customer.uid
       );
 
+    const vaultSnapshot =
+      await adminDb
+        .collection("paypalVaultProfiles")
+        .doc(customer.uid)
+        .get();
+
+    const vaultData =
+      vaultSnapshot.exists
+        ? vaultSnapshot.data() || {}
+        : {};
+
     if (!submission) {
       return NextResponse.json({
         success: true,
         submission: null,
+        savedPaymentMethod:
+          vaultData.status === "active"
+            ? {
+                methodType:
+                  vaultData.methodType ||
+                  "paypal",
+                brand:
+                  vaultData.brand || null,
+                lastDigits:
+                  vaultData.lastDigits ||
+                  null,
+              }
+            : null,
       });
     }
 
@@ -176,18 +155,33 @@ export async function GET(
           submission.businessName || "",
         campaignName:
           submission.campaignName || "",
-        requestedDurationDays: durationDays,
-        requestedPlacements: Array.isArray(
-          submission.requestedPlacements
-        )
-          ? submission.requestedPlacements
-          : [],
+        requestedDurationDays:
+          durationDays,
+        requestedPlacements:
+          Array.isArray(
+            submission.requestedPlacements
+          )
+            ? submission.requestedPlacements
+            : [],
         price: price.toFixed(2),
         currency: "USD",
         paymentStatus:
           submission.paymentStatus ||
           "awaiting_payment",
       },
+      savedPaymentMethod:
+        vaultData.status === "active"
+          ? {
+              methodType:
+                vaultData.methodType ||
+                "paypal",
+              brand:
+                vaultData.brand || null,
+              lastDigits:
+                vaultData.lastDigits ||
+                null,
+            }
+          : null,
     });
   } catch (error) {
     if (
@@ -242,6 +236,9 @@ export async function POST(
       typeof body?.submissionId === "string"
         ? body.submissionId.trim()
         : "";
+
+    const savePaymentMethod =
+      body?.savePaymentMethod === true;
 
     if (!action || !submissionId) {
       return NextResponse.json(
@@ -307,8 +304,7 @@ export async function POST(
     }
 
     if (
-      submission.paymentStatus ===
-      "paid"
+      submission.paymentStatus === "paid"
     ) {
       return NextResponse.json(
         {
@@ -320,15 +316,12 @@ export async function POST(
       );
     }
 
-    const durationDays =
-      Number(
-        submission.requestedDurationDays
-      );
-
-    const price =
-      Number(
-        submission.finalPrice
-      );
+    const durationDays = Number(
+      submission.requestedDurationDays
+    );
+    const price = Number(
+      submission.finalPrice
+    );
 
     if (
       !Number.isFinite(price) ||
@@ -348,6 +341,94 @@ export async function POST(
       await getPayPalAccessToken();
 
     if (action === "create") {
+      const orderBody: Record<
+        string,
+        unknown
+      > = {
+        intent: "CAPTURE",
+        purchase_units: [
+          {
+            reference_id:
+              `business-advertising-${submissionId}`,
+            custom_id: submissionId,
+            description:
+              "SOLO BEATS ENGINE MUSIC business advertising",
+            amount: {
+              currency_code: "USD",
+              value: price.toFixed(2),
+              breakdown: {
+                item_total: {
+                  currency_code: "USD",
+                  value:
+                    price.toFixed(2),
+                },
+              },
+            },
+            items: [
+              {
+                name:
+                  `${submission.campaignName || "Business Advertising"} - ${durationDays} Days`.slice(
+                    0,
+                    127
+                  ),
+                description:
+                  `Sponsored placement for ${submission.businessName || "Business Advertiser"}`.slice(
+                    0,
+                    127
+                  ),
+                sku:
+                  `business-ad-${submissionId}`.slice(
+                    0,
+                    127
+                  ),
+                quantity: "1",
+                category:
+                  "DIGITAL_GOODS",
+                unit_amount: {
+                  currency_code: "USD",
+                  value:
+                    price.toFixed(2),
+                },
+              },
+            ],
+          },
+        ],
+        application_context: {
+          brand_name:
+            "SOLO BEATS ENGINE MUSIC",
+          shipping_preference:
+            "NO_SHIPPING",
+          user_action: "PAY_NOW",
+        },
+      };
+
+      if (savePaymentMethod) {
+        orderBody.payment_source = {
+          paypal: {
+            attributes: {
+              vault: {
+                store_in_vault:
+                  "ON_SUCCESS",
+                usage_type:
+                  "MERCHANT",
+              },
+              customer: {
+                merchant_customer_id:
+                  customer.uid,
+              },
+            },
+            experience_context: {
+              brand_name:
+                "SOLO BEATS ENGINE MUSIC",
+              shipping_preference:
+                "NO_SHIPPING",
+              user_action:
+                "PAY_NOW",
+            },
+          },
+        };
+      }
+
       const paypalResponse =
         await fetch(
           `${PAYPAL_BASE_URL}/v2/checkout/orders`,
@@ -363,69 +444,8 @@ export async function POST(
               "PayPal-Request-Id":
                 crypto.randomUUID(),
             },
-            body: JSON.stringify({
-              intent: "CAPTURE",
-              purchase_units: [
-                {
-                  reference_id:
-                    `business-advertising-${submissionId}`,
-                  custom_id:
-                    submissionId,
-                  description:
-                    "SOLO BEATS ENGINE MUSIC business advertising",
-                  amount: {
-                    currency_code:
-                      "USD",
-                    value:
-                      price.toFixed(2),
-                    breakdown: {
-                      item_total: {
-                        currency_code:
-                          "USD",
-                        value:
-                          price.toFixed(2),
-                      },
-                    },
-                  },
-                  items: [
-                    {
-                      name:
-                        `${submission.campaignName || "Business Advertising"} â€” ${durationDays} Days`.slice(
-                          0,
-                          127
-                        ),
-                      description:
-                        `Sponsored placement for ${submission.businessName || "Business Advertiser"}`.slice(
-                          0,
-                          127
-                        ),
-                      sku:
-                        `business-ad-${submissionId}`.slice(
-                          0,
-                          127
-                        ),
-                      quantity: "1",
-                      category:
-                        "DIGITAL_GOODS",
-                      unit_amount: {
-                        currency_code:
-                          "USD",
-                        value:
-                          price.toFixed(2),
-                      },
-                    },
-                  ],
-                },
-              ],
-              application_context: {
-                brand_name:
-                  "SOLO BEATS ENGINE MUSIC",
-                shipping_preference:
-                  "NO_SHIPPING",
-                user_action:
-                  "PAY_NOW",
-              },
-            }),
+            body:
+              JSON.stringify(orderBody),
             cache: "no-store",
           }
         );
@@ -449,8 +469,9 @@ export async function POST(
         {
           paymentStatus:
             "payment_started",
-          paypalOrderId:
-            order.id,
+          paypalOrderId: order.id,
+          savePaymentMethodRequested:
+            savePaymentMethod,
           businessAdvertisingPrice:
             price.toFixed(2),
           businessAdvertisingCurrency:
@@ -514,7 +535,6 @@ export async function POST(
 
     const purchaseUnit =
       captured.purchase_units?.[0];
-
     const paymentCapture =
       purchaseUnit?.payments
         ?.captures?.[0];
@@ -554,6 +574,66 @@ export async function POST(
       );
     }
 
+    const paypalSource =
+      captured.payment_source?.paypal;
+    const cardSource =
+      captured.payment_source?.card;
+    const vault =
+      paypalSource?.attributes?.vault ||
+      cardSource?.attributes?.vault;
+    const vaultId =
+      typeof vault?.id === "string"
+        ? vault.id
+        : "";
+    const customerId =
+      typeof vault?.customer?.id ===
+      "string"
+        ? vault.customer.id
+        : typeof paypalSource
+            ?.attributes?.customer?.id ===
+          "string"
+          ? paypalSource.attributes
+              .customer.id
+          : null;
+
+    if (vaultId) {
+      await saveVaultProfile({
+        uid: customer.uid,
+        email:
+          customer.email || null,
+        vaultId,
+        customerId,
+        methodType: cardSource
+          ? "card"
+          : "paypal",
+        brand:
+          cardSource?.brand || null,
+        lastDigits:
+          cardSource?.last_digits ||
+          null,
+      });
+    } else if (customerId) {
+      await adminDb
+        .collection(
+          "paypalVaultProfiles"
+        )
+        .doc(customer.uid)
+        .set(
+          {
+            uid: customer.uid,
+            email:
+              customer.email || null,
+            paypalCustomerId:
+              customerId,
+            status:
+              "pending_token",
+            updatedAt:
+              FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+    }
+
     const paymentRef =
       adminDb
         .collection(
@@ -568,20 +648,19 @@ export async function POST(
           {
             orderId,
             captureId:
-              paymentCapture.id ||
-              null,
+              paymentCapture.id || null,
             submissionId,
             advertiserUid:
               customer.uid,
             advertiserEmail:
-              customer.email ||
-              null,
+              customer.email || null,
             durationDays,
             amount:
               price.toFixed(2),
             currency: "USD",
-            status:
-              "COMPLETED",
+            status: "COMPLETED",
+            savedPaymentMethod:
+              Boolean(vaultId),
             createdAt:
               FieldValue.serverTimestamp(),
             updatedAt:
@@ -595,21 +674,20 @@ export async function POST(
         transaction.set(
           submissionRef,
           {
-            paymentStatus:
-              "paid",
+            paymentStatus: "paid",
             paymentOrderId:
               orderId,
             paymentCaptureId:
-              paymentCapture.id ||
-              null,
+              paymentCapture.id || null,
             paidAmount:
               price.toFixed(2),
-            paidCurrency:
-              "USD",
+            paidCurrency: "USD",
             paidAt:
               FieldValue.serverTimestamp(),
             placementStatus:
               "ready_to_schedule",
+            savedPaymentMethod:
+              Boolean(vaultId),
             updatedAt:
               FieldValue.serverTimestamp(),
           },
@@ -626,13 +704,14 @@ export async function POST(
       submissionId,
       orderId,
       captureId:
-        paymentCapture.id ||
-        null,
-      amount:
-        price.toFixed(2),
+        paymentCapture.id || null,
+      amount: price.toFixed(2),
       currency: "USD",
-      message:
-        "Business advertising payment completed. The campaign is ready to be scheduled.",
+      savedPaymentMethod:
+        Boolean(vaultId),
+      message: vaultId
+        ? "Payment completed and PayPal was saved for future approved campaigns."
+        : "Payment completed. PayPal is finishing the saved-payment setup.",
     });
   } catch (error) {
     if (
@@ -666,4 +745,3 @@ export async function POST(
     );
   }
 }
-

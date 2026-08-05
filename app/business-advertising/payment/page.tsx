@@ -38,6 +38,8 @@ export default function BusinessAdvertisingPaymentPage() {
     useState("");
   const [successMessage, setSuccessMessage] =
     useState("");
+  const [savePaymentMethod, setSavePaymentMethod] =
+    useState(true);
 
   const clientId = (process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || "").replace(/\s+/g, "");
 
@@ -226,7 +228,28 @@ export default function BusinessAdvertisingPaymentPage() {
               />
             </div>
 
-            <div className="mt-8 rounded-2xl bg-white p-5">
+            <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-5">
+              <input
+                type="checkbox"
+                checked={savePaymentMethod}
+                onChange={(event) =>
+                  setSavePaymentMethod(
+                    event.target.checked
+                  )
+                }
+                className="mt-1 h-5 w-5"
+              />
+              <span>
+                <span className="block font-black text-cyan-100">
+                  Save PayPal for future approved campaigns
+                </span>
+                <span className="mt-1 block text-sm text-white/60">
+                  By selecting this, you authorize SOLO BEATS ENGINE MUSIC to charge this saved PayPal payment method only after you submit a future campaign and the owner approves its displayed locked price. You can still use normal checkout if a saved charge is declined.
+                </span>
+              </span>
+            </label>
+
+            <div className="mt-5 rounded-2xl bg-white p-5">
               {clientId ? (
                 <PayPalScriptProvider
                   options={{
@@ -264,6 +287,7 @@ export default function BusinessAdvertisingPaymentPage() {
                                   "create",
                                 submissionId:
                                   submission.submissionId,
+                                savePaymentMethod,
                               }),
                           }
                         );
