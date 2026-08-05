@@ -1,4 +1,4 @@
-﻿
+
 "use client";
 
 import {
@@ -101,7 +101,9 @@ export function PlayerProvider({
 
       setQueue(tracks);
       setCurrentIndex(safeIndex);
-      setIsPlaying(true);
+      setIsPlaying(
+        !tracks[safeIndex]?.requiresPremium
+      );
     },
     []
   );
@@ -340,6 +342,16 @@ export function PlayerProvider({
     const audio = audioRef.current;
 
     if (!audio || !currentTrack) {
+      return;
+    }
+
+    if (currentTrack.requiresPremium) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
       return;
     }
 

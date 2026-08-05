@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { usePlayer } from "./usePlayer";
 function formatTime(seconds: number) {
@@ -53,6 +54,20 @@ export default function GlobalPlayer() {
     );
   }, [currentTime, duration]);
 
+  const previewLimitReached =
+    Boolean(
+      currentTrack?.previewLimitSeconds &&
+        currentTime >=
+          currentTrack.previewLimitSeconds -
+            0.1
+    );
+
+  const showPremiumPrompt =
+    Boolean(
+      currentTrack?.requiresPremium ||
+        previewLimitReached
+    );
+
   if (!currentTrack) {
     return null;
   }
@@ -66,6 +81,60 @@ export default function GlobalPlayer() {
 
   return (
     <>
+      {showPremiumPrompt && (
+        <div
+          className="premium-preview-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Subscribe to SOLO BEATS PREMIUM"
+        >
+          <div className="premium-preview-card">
+            <button
+              type="button"
+              className="premium-preview-close"
+              onClick={clearQueue}
+              aria-label="Close subscription prompt"
+            >
+              ✕
+            </button>
+
+            <p className="premium-preview-kicker">
+              FREE PREVIEW COMPLETE
+            </p>
+
+            <h2>
+              Keep Listening with SOLO BEATS PREMIUM
+            </h2>
+
+            <p className="premium-preview-copy">
+              You received three free song previews and
+              a 60-second preview of Track 4. Subscribe
+              to unlock full albums, Premium Radio,
+              Premium TV, early releases, and monthly
+              downloads.
+            </p>
+
+            <div className="premium-preview-actions">
+              <Link
+                href="/premium"
+                className="premium-preview-primary"
+                onClick={clearQueue}
+              >
+                Subscribe to Premium
+              </Link>
+
+              <Link
+                href="/premium"
+                className="premium-preview-secondary"
+                onClick={clearQueue}
+              >
+                View Premium Benefits
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isExpanded && (
         <div className="player-expanded">
           <button
@@ -853,6 +922,111 @@ export default function GlobalPlayer() {
           border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        .premium-preview-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 10000;
+          display: grid;
+          place-items: center;
+          padding: 20px;
+          background: rgba(2, 2, 10, 0.82);
+          backdrop-filter: blur(16px);
+        }
+
+        .premium-preview-card {
+          position: relative;
+          width: min(660px, 100%);
+          overflow: hidden;
+          border: 1px solid rgba(217, 70, 239, 0.42);
+          border-radius: 30px;
+          padding: 42px;
+          background:
+            radial-gradient(circle at top left, rgba(217, 70, 239, 0.3), transparent 42%),
+            radial-gradient(circle at bottom right, rgba(34, 211, 238, 0.22), transparent 38%),
+            #070711;
+          box-shadow:
+            0 0 45px rgba(217, 70, 239, 0.24),
+            0 28px 90px rgba(0, 0, 0, 0.62);
+          color: white;
+          text-align: center;
+        }
+
+        .premium-preview-close {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          width: 38px;
+          height: 38px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 50%;
+          color: white;
+          background: rgba(255, 255, 255, 0.08);
+          cursor: pointer;
+        }
+
+        .premium-preview-kicker {
+          margin: 0;
+          color: #67e8f9;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.22em;
+        }
+
+        .premium-preview-card h2 {
+          margin: 16px 0 0;
+          font-size: clamp(32px, 6vw, 52px);
+          line-height: 1.02;
+        }
+
+        .premium-preview-copy {
+          max-width: 560px;
+          margin: 20px auto 0;
+          color: rgba(255, 255, 255, 0.72);
+          font-size: 16px;
+          line-height: 1.7;
+        }
+
+        .premium-preview-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 12px;
+          margin-top: 28px;
+        }
+
+        .premium-preview-primary,
+        .premium-preview-secondary {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 210px;
+          border-radius: 16px;
+          padding: 15px 22px;
+          font-weight: 900;
+          text-decoration: none;
+          transition:
+            transform 0.18s ease,
+            filter 0.18s ease;
+        }
+
+        .premium-preview-primary {
+          color: #050510;
+          background: linear-gradient(135deg, #67e8f9, #d946ef);
+          box-shadow: 0 0 28px rgba(217, 70, 239, 0.3);
+        }
+
+        .premium-preview-secondary {
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: white;
+          background: rgba(255, 255, 255, 0.07);
+        }
+
+        .premium-preview-primary:hover,
+        .premium-preview-secondary:hover {
+          transform: translateY(-2px);
+          filter: brightness(1.08);
+        }
+
         .queue-header p,
         .queue-header h3 {
           margin: 0;
@@ -991,6 +1165,21 @@ export default function GlobalPlayer() {
         }
 
         @media (max-width: 620px) {
+          .premium-preview-card {
+            padding: 38px 20px 24px;
+            border-radius: 24px;
+          }
+
+          .premium-preview-actions {
+            display: grid;
+          }
+
+          .premium-preview-primary,
+          .premium-preview-secondary {
+            width: 100%;
+            min-width: 0;
+          }
+
           .global-player {
             min-height: 128px;
             gap: 9px;

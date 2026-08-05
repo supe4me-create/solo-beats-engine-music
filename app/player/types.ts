@@ -1,4 +1,4 @@
-﻿export type RepeatMode = "off" | "all" | "one";
+export type RepeatMode = "off" | "all" | "one";
 
 export type PlayerTrack = {
   id: string;
@@ -9,6 +9,7 @@ export type PlayerTrack = {
   cover: string;
   trackNumber?: number;
   previewLimitSeconds?: number;
+  requiresPremium?: boolean;
   duration?: number;
 };
 

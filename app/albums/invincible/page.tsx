@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePlayer } from "../../player/usePlayer";
@@ -34,7 +34,9 @@ export default function AlbumPage() {
     audio: track.audio,
     cover: "/covers/Invincible-cover.jpg",
     trackNumber: track.number,
-    previewLimitSeconds: track.number > 3 ? 60 : undefined,
+    previewLimitSeconds:
+      track.number === 4 ? 60 : undefined,
+    requiresPremium: track.number > 4,
   }));
 
   function playTrack(track: Track) {
