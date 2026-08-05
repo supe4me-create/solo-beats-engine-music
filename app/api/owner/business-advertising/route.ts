@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminBucket, adminDb, firebaseAdminApp } from "../../../../lib/firebaseAdmin";
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
         : "";
     const rejectionReason =
       typeof body.rejectionReason === "string" ? body.rejectionReason.trim() : "";
-    const finalPrice = Number(body.finalPrice);
+    const requestedFinalPrice = Number(body.finalPrice);
 
     if (!submissionId || !action) {
       return NextResponse.json(
@@ -171,13 +171,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (action === "approve" && (!Number.isFinite(finalPrice) || finalPrice <= 0)) {
-      return NextResponse.json(
-        { success: false, error: "Enter a valid final campaign price before approving." },
-        { status: 400 }
-      );
-    }
-
     const ref = adminDb.collection("businessAdvertisingSubmissions").doc(submissionId);
     const snapshot = await ref.get();
 
@@ -186,6 +179,23 @@ export async function POST(request: Request) {
         { success: false, error: "The business advertising submission was not found." },
         { status: 404 }
       );
+    }
+
+    if (action === "approve") {
+      const lockedPrice = Number(
+        snapshot.data()?.proposedBudget
+      );
+
+      if (!Number.isFinite(lockedPrice) || lockedPrice <= 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "This campaign does not have a valid locked platform price.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     if (action === "schedule") {
@@ -345,7 +355,10 @@ export async function POST(request: Request) {
             reviewStatus: "approved",
             paymentStatus: "awaiting_payment",
             placementStatus: "not_scheduled",
-            finalPrice: finalPrice.toFixed(2),
+            finalPrice: Number(
+          snapshot.data()?.proposedBudget ||
+          requestedFinalPrice
+        ).toFixed(2),
             rejectionReason: null,
             reviewedByUid: owner.uid,
             reviewedByEmail: owner.email || null,
@@ -371,7 +384,9 @@ export async function POST(request: Request) {
       reviewStatus: action === "approve" ? "approved" : "rejected",
       paymentStatus: action === "approve" ? "awaiting_payment" : "not_requested",
       placementStatus: "not_scheduled",
-      finalPrice: action === "approve" ? finalPrice.toFixed(2) : null,
+      finalPrice: action === "approve"
+        ? Number(snapshot.data()?.proposedBudget).toFixed(2)
+        : null,
       rejectionReason: action === "reject" ? rejectionReason : null,
       reviewedAt: new Date().toISOString(),
     });
@@ -391,3 +406,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

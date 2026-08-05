@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -74,7 +74,6 @@ export default function BusinessAdvertisingReviewPage() {
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [copiedPaymentId, setCopiedPaymentId] = useState<string | null>(null);
-  const [finalPrices, setFinalPrices] = useState<Record<string, string>>({});
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
   const [scheduleValues, setScheduleValues] = useState<
     Record<
@@ -119,14 +118,6 @@ export default function BusinessAdvertisingReviewPage() {
         if (!cancelled) {
           const items = Array.isArray(data.submissions) ? data.submissions : [];
           setSubmissions(items);
-          setFinalPrices(
-            Object.fromEntries(
-              items.map((item: Submission) => [
-                item.submissionId,
-                item.finalPrice || item.proposedBudget || "",
-              ])
-            )
-          );
         }
       } catch (cause) {
         if (!cancelled) {
@@ -166,7 +157,7 @@ export default function BusinessAdvertisingReviewPage() {
 
     paymentRedirectHandled.current = true;
     setFilter("approved");
-    setMessage("Payment successful — this campaign is ready to schedule.");
+    setMessage("Payment successful â€” this campaign is ready to schedule.");
 
     window.setTimeout(() => {
       document
@@ -210,13 +201,7 @@ export default function BusinessAdvertisingReviewPage() {
 
   async function review(submissionId: string, action: "approve" | "reject", reasonOverride?: string) {
     if (!user) return;
-    const finalPrice = finalPrices[submissionId]?.trim() || "";
     const rejectionReason = reasonOverride?.trim() || rejectionReasons[submissionId]?.trim() || "";
-
-    if (action === "approve" && (!finalPrice || Number(finalPrice) <= 0)) {
-      setError("Enter a valid final campaign price before approving.");
-      return;
-    }
     if (action === "reject" && !rejectionReason) {
       setError("Enter a rejection reason before rejecting.");
       return;
@@ -237,7 +222,7 @@ export default function BusinessAdvertisingReviewPage() {
         body: JSON.stringify({
           submissionId,
           action,
-          finalPrice: action === "approve" ? finalPrice : null,
+          finalPrice: null,
           rejectionReason: action === "reject" ? rejectionReason : null,
         }),
       });
@@ -477,14 +462,14 @@ export default function BusinessAdvertisingReviewPage() {
                     <div>
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-cyan-300">{submission.businessName}</p>
                       <h2 className="mt-2 text-4xl font-black">{submission.campaignName}</h2>
-                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} • {submission.requestedDurationDays} days</p>
+                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} â€¢ {submission.requestedDurationDays} days</p>
                       <h3 className="mt-5 text-2xl font-black">{submission.headline}</h3>
                       <p className="mt-3 leading-7 text-white/60">{submission.description}</p>
 
                       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <Info label="Contact" value={submission.contactName} />
                         <Info label="Business email" value={submission.businessEmail || "Not available"} />
-                        <Info label="Proposed budget" value={`$${submission.proposedBudget} ${submission.currency}`} />
+                        <Info label="Locked package price" value={`$${submission.proposedBudget} ${submission.currency}`} />
                         <Info label="Placements" value={submission.requestedPlacements.join(", ") || "None"} />
                         <Info label="Target audience" value={submission.targetAudience || "Not specified"} />
                         <Info label="Target genre" value={submission.targetGenre || "Not specified"} />
@@ -508,22 +493,17 @@ export default function BusinessAdvertisingReviewPage() {
 
                       {submission.reviewStatus === "pending" ? (
                         <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
-                          <label className="grid gap-2">
-                            <span className="text-sm font-black text-white/70">Final campaign price (USD)</span>
-                            <input
-                              type="number"
-                              min="1"
-                              step="0.01"
-                              value={finalPrices[submission.submissionId] || ""}
-                              onChange={(event) =>
-                                setFinalPrices((current) => ({
-                                  ...current,
-                                  [submission.submissionId]: event.target.value,
-                                }))
-                              }
-                              className="rounded-2xl border border-white/10 bg-black/25 px-4 py-4"
-                            />
-                          </label>
+                          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
+                            <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-200">
+                              Locked platform price
+                            </p>
+                            <p className="mt-2 text-3xl font-black text-white">
+                              ${submission.proposedBudget} {submission.currency}
+                            </p>
+                            <p className="mt-2 text-sm text-white/60">
+                              Calculated automatically from the selected placements and campaign duration.
+                            </p>
+                          </div>
 
                           <label className="mt-4 grid gap-2">
                             <span className="text-sm font-black text-white/70">Rejection reason</span>
@@ -714,7 +694,7 @@ export default function BusinessAdvertisingReviewPage() {
                                       : "Premium TV"
                               )
                               .join(", ") || "placements"}{" "}
-                            • {submission.scheduleStartDate || "start date"} to{" "}
+                            â€¢ {submission.scheduleStartDate || "start date"} to{" "}
                             {submission.scheduleEndDate || "end date"}
                           </p>
                           <p className="mt-2 text-xs uppercase tracking-[0.14em] text-emerald-200">
@@ -750,5 +730,6 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
 
 

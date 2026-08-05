@@ -65,8 +65,6 @@ export default function BusinessAdvertisingPage() {
     useState("");
   const [duration, setDuration] =
     useState<CampaignDuration>("7");
-  const [budget, setBudget] =
-    useState("");
   const [preferredStartDate, setPreferredStartDate] =
     useState("");
   const [youtubeLink, setYoutubeLink] =
@@ -80,11 +78,21 @@ export default function BusinessAdvertisingPage() {
       "homepage",
     ]);
 
-  const baseBudget = Number(budget || 0);
+  const placementPackagePrices: Record<number, number> = {
+    1: 25,
+    2: 45,
+    3: 60,
+    4: 75,
+  };
+  const durationMultipliers: Record<CampaignDuration, number> = {
+    "7": 1,
+    "14": 2,
+    "30": 3.5,
+  };
+  const placementPackagePrice =
+    placementPackagePrices[placements.length] || 0;
   const packagePrice =
-    Number.isFinite(baseBudget) && baseBudget > 0
-      ? baseBudget * placements.length
-      : 0;
+    placementPackagePrice * durationMultipliers[duration];
 
   const [submitting, setSubmitting] =
     useState(false);
@@ -210,7 +218,7 @@ export default function BusinessAdvertisingPage() {
         targetGenre,
         duration,
         budget: packagePrice.toFixed(2),
-        baseBudget: baseBudget.toFixed(2),
+        baseBudget: placementPackagePrice.toFixed(2),
         preferredStartDate,
         youtubeLink,
         placements,
@@ -398,7 +406,6 @@ export default function BusinessAdvertisingPage() {
       setTargetAudience("");
       setTargetGenre("");
       setDuration("7");
-      setBudget("");
       setPreferredStartDate("");
       setYoutubeLink("");
       setImageFile(null);
@@ -668,17 +675,6 @@ export default function BusinessAdvertisingPage() {
               </label>
 
               <Field
-                label="Budget per placement (USD)"
-                type="number"
-                min="1"
-                step="0.01"
-                value={budget}
-                onChange={setBudget}
-                placeholder="Example: 25.00"
-                required
-              />
-
-              <Field
                 label="Preferred start date"
                 type="date"
                 value={
@@ -780,7 +776,13 @@ export default function BusinessAdvertisingPage() {
                   ${packagePrice.toFixed(2)}
                 </p>
                 <p className="mt-2 text-sm text-white/65">
-                  ${baseBudget > 0 ? baseBudget.toFixed(2) : "0.00"} per placement × {placements.length} selected placement{placements.length === 1 ? "" : "s"}. The owner confirms the final price before payment.
+                  {placements.length === 1
+                    ? "$25 for one placement"
+                    : placements.length === 2
+                      ? "$45 for two placements"
+                      : placements.length === 3
+                        ? "$60 for three placements"
+                        : "$75 for all four placements"} for 7 days. Duration multiplier: {duration === "7" ? "1×" : duration === "14" ? "2×" : "3.5×"}. This locked platform price is charged at checkout.
                 </p>
               </div>
             </fieldset>
@@ -888,7 +890,7 @@ export default function BusinessAdvertisingPage() {
               <InfoCard
                 number="1"
                 title="Submit"
-                text="Provide your business, campaign, audience, placement, budget, and creative details."
+                text="Provide your business, campaign, audience, placement, duration, and creative details."
               />
               <InfoCard
                 number="2"

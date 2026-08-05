@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -181,7 +181,6 @@ export async function POST(request: Request) {
     const targetGenre = cleanText(payload.targetGenre);
     const duration = cleanText(payload.duration);
     const budgetInput = cleanText(payload.budget);
-    const baseBudgetInput = cleanText(payload.baseBudget);
     const preferredStartDate = cleanText(
       payload.preferredStartDate
     );
@@ -264,16 +263,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const proposedBudget = Number(budgetInput);
+    const placementPackagePrices: Record<number, number> = {
+      1: 25,
+      2: 45,
+      3: 60,
+      4: 75,
+    };
+    const durationMultipliers: Record<string, number> = {
+      "7": 1,
+      "14": 2,
+      "30": 3.5,
+    };
+    const placementPackagePrice =
+      placementPackagePrices[placements.length] || 0;
+    const proposedBudget =
+      placementPackagePrice *
+      (durationMultipliers[duration] || 0);
 
-    if (
-      !Number.isFinite(proposedBudget) ||
-      proposedBudget <= 0
-    ) {
+    if (proposedBudget <= 0) {
       return NextResponse.json(
         {
           success: false,
-          error: "Enter a valid proposed budget.",
+          error: "The advertising package price could not be calculated.",
         },
         { status: 400 }
       );
@@ -475,11 +486,10 @@ export async function POST(request: Request) {
       requestedPlacements: placements,
       requestedDurationDays: Number(duration),
       proposedBudget: proposedBudget.toFixed(2),
-      baseBudget: Number.isFinite(Number(baseBudgetInput))
-        ? Number(baseBudgetInput).toFixed(2)
-        : null,
+      finalPrice: proposedBudget.toFixed(2),
+      baseBudget: placementPackagePrice.toFixed(2),
       placementCount: placements.length,
-      pricingModel: "per_placement",
+      pricingModel: "fixed_platform_package",
       currency: "USD",
       preferredStartDate: preferredStartDate || null,
       youtubeLink,
@@ -570,4 +580,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
