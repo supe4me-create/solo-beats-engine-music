@@ -157,7 +157,7 @@ export default function BusinessAdvertisingReviewPage() {
 
     paymentRedirectHandled.current = true;
     setFilter("approved");
-    setMessage("Payment successful â€” this campaign is ready to schedule.");
+    setMessage("Payment successful  -  this campaign is ready to schedule.");
 
     window.setTimeout(() => {
       document
@@ -462,7 +462,7 @@ export default function BusinessAdvertisingReviewPage() {
                     <div>
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-cyan-300">{submission.businessName}</p>
                       <h2 className="mt-2 text-4xl font-black">{submission.campaignName}</h2>
-                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} â€¢ {submission.requestedDurationDays} days</p>
+                      <p className="mt-2 text-white/45">{pretty(submission.campaignGoal)} • {submission.requestedDurationDays} days</p>
                       <h3 className="mt-5 text-2xl font-black">{submission.headline}</h3>
                       <p className="mt-3 leading-7 text-white/60">{submission.description}</p>
 
@@ -694,7 +694,7 @@ export default function BusinessAdvertisingReviewPage() {
                                       : "Premium TV"
                               )
                               .join(", ") || "placements"}{" "}
-                            â€¢ {submission.scheduleStartDate || "start date"} to{" "}
+                            • {submission.scheduleStartDate || "start date"} to{" "}
                             {submission.scheduleEndDate || "end date"}
                           </p>
                           <p className="mt-2 text-xs uppercase tracking-[0.14em] text-emerald-200">
@@ -730,6 +730,8 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+
 
 
 
