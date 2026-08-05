@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -510,7 +510,51 @@ export default function AlbumsPage() {
       className="min-h-screen bg-black px-5 py-12 pb-40 text-white md:px-10"
     >
 
-      <section className="mx-auto max-w-7xl"><section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/30"><img src="/covers/hero-home-final.png" alt="Solo Beats Engine Music" className="w-full object-cover" /></section>
+      <section className="mx-auto max-w-7xl">
+        <section className="mb-8 overflow-hidden rounded-[2.5rem] border border-red-500/30">
+          <img
+            src="/covers/hero-home-final.png"
+            alt="Solo Beats Engine Music"
+            className="w-full object-cover"
+          />
+        </section>
+
+        <section className="relative mb-14 overflow-hidden rounded-[2.5rem] border border-fuchsia-300/40 bg-black px-6 py-10 text-center shadow-[0_0_45px_rgba(217,70,239,0.22)] md:px-10 md:py-14">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,70,239,0.28),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.24),transparent_38%)]" />
+          <div className="pointer-events-none absolute inset-x-10 top-0 h-px animate-pulse bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_20px_rgba(103,232,249,0.95)]" />
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-px animate-pulse bg-gradient-to-r from-transparent via-fuchsia-400 to-transparent shadow-[0_0_20px_rgba(232,121,249,0.95)]" />
+
+          <div className="relative">
+            <span className="inline-flex animate-pulse rounded-full border border-cyan-200/50 bg-cyan-300/10 px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-200 shadow-[0_0_22px_rgba(34,211,238,0.45)]">
+              Live Now
+            </span>
+
+            <h2 className="mt-6 bg-gradient-to-r from-cyan-200 via-white to-fuchsia-300 bg-clip-text text-4xl font-black uppercase tracking-[0.08em] text-transparent drop-shadow-[0_0_18px_rgba(217,70,239,0.65)] md:text-7xl">
+              Now Launched
+            </h2>
+
+            <p className="mx-auto mt-5 max-w-4xl text-lg font-bold leading-8 text-white/80 md:text-xl">
+              Artist Promotion, Business Advertising, and Premium TV Promotion are officially live on SOLO BEATS ENGINE MUSIC.
+            </p>
+
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <Link
+                href="/artist-promotion"
+                className="rounded-2xl bg-gradient-to-r from-fuchsia-500 to-violet-500 px-7 py-4 font-black text-white shadow-[0_0_26px_rgba(217,70,239,0.42)] transition hover:-translate-y-1 hover:brightness-110"
+              >
+                Promote Your Music
+              </Link>
+
+              <Link
+                href="/business-advertising"
+                className="rounded-2xl bg-gradient-to-r from-cyan-300 to-blue-400 px-7 py-4 font-black text-black shadow-[0_0_26px_rgba(34,211,238,0.38)] transition hover:-translate-y-1 hover:brightness-110"
+              >
+                Advertise Your Business
+              </Link>
+            </div>
+          </div>
+        </section>
+
         <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-700/25 via-zinc-950 to-cyan-500/15 p-6 shadow-2xl md:p-10">
           <div className="max-w-4xl">
             <p className="text-sm font-black uppercase tracking-[0.24em] text-fuchsia-300">
