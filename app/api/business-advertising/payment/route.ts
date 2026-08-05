@@ -226,6 +226,9 @@ export async function POST(
     const body =
       await request.json();
 
+    const siteOrigin =
+      new URL(request.url).origin;
+
     const action =
       body?.action === "create" ||
       body?.action === "capture"
@@ -417,6 +420,10 @@ export async function POST(
                 "NO_SHIPPING",
               user_action:
                 "PAY_NOW",
+              return_url:
+                `${siteOrigin}/business-advertising/payment?paypal=approved`,
+              cancel_url:
+                `${siteOrigin}/business-advertising/payment?paypal=cancelled`,
             },
           },
         };
@@ -738,4 +745,5 @@ export async function POST(
     );
   }
 }
+
 
