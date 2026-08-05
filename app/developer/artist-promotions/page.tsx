@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -127,6 +128,9 @@ export default function ArtistPromotionReviewPage() {
     user?.email?.toLowerCase() ===
     OWNER_EMAIL;
 
+  const paymentRedirectHandled =
+    useRef(false);
+
   useEffect(() => {
     if (!user || !isOwner) return;
 
@@ -193,6 +197,58 @@ export default function ArtistPromotionReviewPage() {
       cancelled = true;
     };
   }, [user, isOwner]);
+
+  useEffect(() => {
+    if (
+      paymentRedirectHandled.current ||
+      submissions.length === 0
+    ) {
+      return;
+    }
+
+    const params = new URLSearchParams(
+      window.location.search
+    );
+    const submissionId =
+      params.get("submissionId");
+    const paymentStatus =
+      params.get("payment");
+
+    if (
+      paymentStatus !== "success" ||
+      !submissionId
+    ) {
+      return;
+    }
+
+    const matchingSubmission =
+      submissions.find(
+        (submission) =>
+          submission.submissionId ===
+          submissionId
+      );
+
+    if (!matchingSubmission) {
+      return;
+    }
+
+    paymentRedirectHandled.current = true;
+    setFilter("approved");
+    setSuccessMessage(
+      "Payment successful — this promotion is ready to schedule."
+    );
+
+    window.setTimeout(() => {
+      document
+        .getElementById(
+          `artist-submission-${submissionId}`
+        )
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 250);
+  }, [submissions]);
 
   const visibleSubmissions =
     useMemo(() => {

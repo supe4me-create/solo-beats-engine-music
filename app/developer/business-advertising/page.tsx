@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 
 const OWNER_EMAIL = "supe4.me@gmail.com";
@@ -90,6 +90,8 @@ export default function BusinessAdvertisingReviewPage() {
 
   const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL;
 
+  const paymentRedirectHandled = useRef(false);
+
   useEffect(() => {
     if (!user || !isOwner) return;
 
@@ -139,6 +141,41 @@ export default function BusinessAdvertisingReviewPage() {
       cancelled = true;
     };
   }, [user, isOwner]);
+
+  useEffect(() => {
+    if (paymentRedirectHandled.current || submissions.length === 0) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const submissionId = params.get("submissionId");
+    const paymentStatus = params.get("payment");
+
+    if (paymentStatus !== "success" || !submissionId) {
+      return;
+    }
+
+    const matchingSubmission = submissions.find(
+      (submission) => submission.submissionId === submissionId
+    );
+
+    if (!matchingSubmission) {
+      return;
+    }
+
+    paymentRedirectHandled.current = true;
+    setFilter("approved");
+    setMessage("Payment successful — this campaign is ready to schedule.");
+
+    window.setTimeout(() => {
+      document
+        .getElementById(`business-submission-${submissionId}`)
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 250);
+  }, [submissions]);
 
   const visible = useMemo(
     () => (filter === "all" ? submissions : submissions.filter((item) => item.reviewStatus === filter)),
