@@ -114,6 +114,14 @@ export async function GET(request: Request) {
           createdAt: toIso(data.createdAt),
           reviewedAt: toIso(data.reviewedAt),
           rejectionReason: data.rejectionReason || null,
+          scheduleStartDate: data.scheduleStartDate || null,
+          scheduleEndDate: data.scheduleEndDate || null,
+          placementLocation: data.placementLocation || null,
+          placementLocations: Array.isArray(data.placementLocations)
+            ? data.placementLocations
+            : data.placementLocation
+              ? [data.placementLocation]
+              : [],
           imageUrl,
           videoUrl,
         };
@@ -210,18 +218,20 @@ export async function POST(request: Request) {
           "string"
           ? body.endDate.trim()
           : "";
-      const placementLocation =
-        typeof body.placementLocation ===
-          "string"
-          ? body.placementLocation.trim()
-          : "";
-
       const requestedPlacements =
-        Array.isArray(
-          submission.requestedPlacements
-        )
-          ? submission.requestedPlacements
+        Array.isArray(submission.requestedPlacements)
+          ? submission.requestedPlacements.filter(
+              (placement: unknown): placement is string =>
+                typeof placement === "string" &&
+                ["homepage", "store", "radio", "tv"].includes(
+                  placement
+                )
+            )
           : [];
+
+      const placementLocations = Array.from(
+        new Set(requestedPlacements)
+      );
 
       const start =
         new Date(
@@ -253,16 +263,12 @@ export async function POST(request: Request) {
         );
       }
 
-      if (
-        !requestedPlacements.includes(
-          placementLocation
-        )
-      ) {
+      if (placementLocations.length === 0) {
         return NextResponse.json(
           {
             success: false,
             error:
-              "Choose one of the placements requested by the advertiser.",
+              "This campaign does not contain a valid purchased placement.",
           },
           { status: 400 }
         );
@@ -303,7 +309,9 @@ export async function POST(request: Request) {
             startDate,
           scheduleEndDate:
             endDate,
-          placementLocation,
+          placementLocation:
+            placementLocations[0],
+          placementLocations,
           scheduledByUid:
             owner.uid,
           scheduledByEmail:
@@ -325,7 +333,9 @@ export async function POST(request: Request) {
           startDate,
         scheduleEndDate:
           endDate,
-        placementLocation,
+        placementLocation:
+          placementLocations[0],
+        placementLocations,
       });
     }
 

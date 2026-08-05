@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -106,6 +106,7 @@ async function getSubmissionForUser(
         finalPrice?: number | string;
         businessName?: string;
         campaignName?: string;
+        requestedPlacements?: string[];
       }),
     }))
     .filter(
@@ -176,6 +177,11 @@ export async function GET(
         campaignName:
           submission.campaignName || "",
         requestedDurationDays: durationDays,
+        requestedPlacements: Array.isArray(
+          submission.requestedPlacements
+        )
+          ? submission.requestedPlacements
+          : [],
         price: price.toFixed(2),
         currency: "USD",
         paymentStatus:
@@ -384,7 +390,7 @@ export async function POST(
                   items: [
                     {
                       name:
-                        `${submission.campaignName || "Business Advertising"} — ${durationDays} Days`.slice(
+                        `${submission.campaignName || "Business Advertising"} â€” ${durationDays} Days`.slice(
                           0,
                           127
                         ),
@@ -660,3 +666,4 @@ export async function POST(
     );
   }
 }
+

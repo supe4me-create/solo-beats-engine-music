@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -50,6 +50,7 @@ type BusinessSubmissionPayload = {
   targetGenre?: string;
   duration?: string;
   budget?: string;
+  baseBudget?: string;
   preferredStartDate?: string;
   youtubeLink?: string;
   placements?: string[];
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
     const targetGenre = cleanText(payload.targetGenre);
     const duration = cleanText(payload.duration);
     const budgetInput = cleanText(payload.budget);
+    const baseBudgetInput = cleanText(payload.baseBudget);
     const preferredStartDate = cleanText(
       payload.preferredStartDate
     );
@@ -473,6 +475,11 @@ export async function POST(request: Request) {
       requestedPlacements: placements,
       requestedDurationDays: Number(duration),
       proposedBudget: proposedBudget.toFixed(2),
+      baseBudget: Number.isFinite(Number(baseBudgetInput))
+        ? Number(baseBudgetInput).toFixed(2)
+        : null,
+      placementCount: placements.length,
+      pricingModel: "per_placement",
       currency: "USD",
       preferredStartDate: preferredStartDate || null,
       youtubeLink,
@@ -563,3 +570,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

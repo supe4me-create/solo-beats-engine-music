@@ -41,6 +41,7 @@ type Submission = {
   scheduleStartDate: string | null;
   scheduleEndDate: string | null;
   placementLocation: string | null;
+  placementLocations: string[];
   imageUrl: string | null;
   videoUrl: string | null;
 };
@@ -301,11 +302,10 @@ export default function BusinessAdvertisingReviewPage() {
 
     if (
       !values?.startDate ||
-      !values?.endDate ||
-      !values?.placementLocation
+      !values?.endDate
     ) {
       setError(
-        "Choose a start date, end date, and placement."
+        "Choose a start date and end date."
       );
       return;
     }
@@ -335,8 +335,6 @@ export default function BusinessAdvertisingReviewPage() {
               values.startDate,
             endDate:
               values.endDate,
-            placementLocation:
-              values.placementLocation,
           }),
         }
       );
@@ -368,13 +366,16 @@ export default function BusinessAdvertisingReviewPage() {
                   data.scheduleEndDate,
                 placementLocation:
                   data.placementLocation,
+                placementLocations:
+                  data.placementLocations ||
+                  submission.requestedPlacements,
               }
             : submission
         )
       );
 
       setMessage(
-        "The paid business campaign was scheduled successfully."
+        `The paid business campaign was scheduled across ${data.placementLocations?.length || 1} placement${(data.placementLocations?.length || 1) === 1 ? "" : "s"} successfully.`
       );
     } catch (error) {
       setError(
@@ -652,33 +653,16 @@ export default function BusinessAdvertisingReviewPage() {
                               />
                             </label>
 
-                            <label className="grid gap-2">
+                            <div className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/10 p-4">
                               <span className="text-sm font-black text-white/70">
-                                Placement
+                                Paid placements
                               </span>
-                              <select
-                                value={
-                                  scheduleValues[submission.submissionId]
-                                    ?.placementLocation ||
-                                  submission.requestedPlacements[0] ||
-                                  "homepage"
-                                }
-                                onChange={(event) =>
-                                  setScheduleValues((current) => ({
-                                    ...current,
-                                    [submission.submissionId]: {
-                                      startDate:
-                                        current[submission.submissionId]?.startDate || "",
-                                      endDate:
-                                        current[submission.submissionId]?.endDate || "",
-                                      placementLocation: event.target.value,
-                                    },
-                                  }))
-                                }
-                                className="rounded-2xl border border-white/10 bg-black/25 px-4 py-4"
-                              >
+                              <div className="mt-3 flex flex-wrap gap-2">
                                 {submission.requestedPlacements.map((placement) => (
-                                  <option key={placement} value={placement}>
+                                  <span
+                                    key={placement}
+                                    className="rounded-full border border-fuchsia-200/25 bg-fuchsia-300/10 px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-fuchsia-100"
+                                  >
                                     {placement === "homepage"
                                       ? "Homepage"
                                       : placement === "store"
@@ -686,10 +670,13 @@ export default function BusinessAdvertisingReviewPage() {
                                         : placement === "radio"
                                           ? "Premium Radio"
                                           : "Premium TV"}
-                                  </option>
+                                  </span>
                                 ))}
-                              </select>
-                            </label>
+                              </div>
+                              <p className="mt-3 text-sm text-white/60">
+                                One approved ad will run across all selected placements.
+                              </p>
+                            </div>
                           </div>
 
                           <button
@@ -711,8 +698,23 @@ export default function BusinessAdvertisingReviewPage() {
                         <div className="mt-6 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-5 text-emerald-100">
                           <p className="font-black">Business campaign scheduled</p>
                           <p className="mt-2 text-sm">
-                            {submission.placementLocation || "placement"} •{" "}
-                            {submission.scheduleStartDate || "start date"} to{" "}
+                            {(submission.placementLocations?.length
+                              ? submission.placementLocations
+                              : submission.placementLocation
+                                ? [submission.placementLocation]
+                                : []
+                            )
+                              .map((placement) =>
+                                placement === "homepage"
+                                  ? "Homepage"
+                                  : placement === "store"
+                                    ? "Store"
+                                    : placement === "radio"
+                                      ? "Premium Radio"
+                                      : "Premium TV"
+                              )
+                              .join(", ") || "placements"}{" "}
+                            • {submission.scheduleStartDate || "start date"} to{" "}
                             {submission.scheduleEndDate || "end date"}
                           </p>
                           <p className="mt-2 text-xs uppercase tracking-[0.14em] text-emerald-200">

@@ -80,6 +80,12 @@ export default function BusinessAdvertisingPage() {
       "homepage",
     ]);
 
+  const baseBudget = Number(budget || 0);
+  const packagePrice =
+    Number.isFinite(baseBudget) && baseBudget > 0
+      ? baseBudget * placements.length
+      : 0;
+
   const [submitting, setSubmitting] =
     useState(false);
   const [successMessage, setSuccessMessage] =
@@ -203,7 +209,8 @@ export default function BusinessAdvertisingPage() {
         targetAudience,
         targetGenre,
         duration,
-        budget,
+        budget: packagePrice.toFixed(2),
+        baseBudget: baseBudget.toFixed(2),
         preferredStartDate,
         youtubeLink,
         placements,
@@ -661,13 +668,13 @@ export default function BusinessAdvertisingPage() {
               </label>
 
               <Field
-                label="Proposed budget (USD)"
+                label="Budget per placement (USD)"
                 type="number"
                 min="1"
                 step="0.01"
                 value={budget}
                 onChange={setBudget}
-                placeholder="100.00"
+                placeholder="Example: 25.00"
                 required
               />
 
@@ -737,6 +744,44 @@ export default function BusinessAdvertisingPage() {
                     );
                   }
                 )}
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/10 p-4">
+                <div>
+                  <p className="font-black text-fuchsia-100">
+                    {placements.length} of 4 placements selected
+                  </p>
+                  <p className="mt-1 text-sm text-white/65">
+                    One approved ad will run across every selected placement.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPlacements([
+                      "homepage",
+                      "store",
+                      "radio",
+                      "tv",
+                    ])
+                  }
+                  className="rounded-xl border border-fuchsia-200/30 bg-fuchsia-300/15 px-4 py-3 font-black text-fuchsia-100"
+                >
+                  Select All 4
+                </button>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-200">
+                  Estimated campaign package
+                </p>
+                <p className="mt-2 text-3xl font-black text-white">
+                  ${packagePrice.toFixed(2)}
+                </p>
+                <p className="mt-2 text-sm text-white/65">
+                  ${baseBudget > 0 ? baseBudget.toFixed(2) : "0.00"} per placement × {placements.length} selected placement{placements.length === 1 ? "" : "s"}. The owner confirms the final price before payment.
+                </p>
               </div>
             </fieldset>
 

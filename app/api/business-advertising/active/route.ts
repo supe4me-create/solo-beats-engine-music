@@ -125,8 +125,16 @@ export async function GET(
               "approved" &&
             data.paymentStatus ===
               "paid" &&
-            data.placementLocation ===
-              placement &&
+            (
+              (Array.isArray(
+                data.placementLocations
+              ) &&
+                data.placementLocations.includes(
+                  placement
+                )) ||
+              data.placementLocation ===
+                placement
+            ) &&
             isActive(
               data.scheduleStartDate,
               data.scheduleEndDate
@@ -195,8 +203,15 @@ export async function GET(
                 data.scheduleEndDate ||
                 null,
               placementLocation:
-                data.placementLocation ||
                 placement,
+              placementLocations:
+                Array.isArray(
+                  data.placementLocations
+                )
+                  ? data.placementLocations
+                  : data.placementLocation
+                    ? [data.placementLocation]
+                    : [placement],
             };
           }
         )

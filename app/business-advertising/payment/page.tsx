@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -21,6 +21,7 @@ type Submission = {
   businessName: string;
   campaignName: string;
   requestedDurationDays: number;
+  requestedPlacements: string[];
   price: string;
   currency: string;
   paymentStatus: string;
@@ -206,6 +207,20 @@ export default function BusinessAdvertisingPaymentPage() {
                 value={`${submission.requestedDurationDays} days`}
               />
               <Info
+                label="Placements"
+                value={submission.requestedPlacements
+                  .map((placement) =>
+                    placement === "homepage"
+                      ? "Homepage"
+                      : placement === "store"
+                        ? "Store"
+                        : placement === "radio"
+                          ? "Premium Radio"
+                          : "Premium TV"
+                  )
+                  .join(", ")}
+              />
+              <Info
                 label="Total"
                 value={`$${submission.price} ${submission.currency}`}
               />
@@ -368,4 +383,5 @@ function Info({
     </article>
   );
 }
+
 
