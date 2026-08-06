@@ -403,7 +403,7 @@ export default function BusinessAdvertisingPaymentPage() {
 
                       window.setTimeout(() => {
                         window.location.assign(
-                          `/developer/business-advertising?submissionId=${encodeURIComponent(
+                          `/business-advertising/success?submissionId=${encodeURIComponent(
                             submission.submissionId
                           )}&payment=success`
                         );
@@ -449,7 +449,7 @@ export default function BusinessAdvertisingPaymentPage() {
                           window.setTimeout(
                             () => {
                               window.location.assign(
-                                `/developer/business-advertising?submissionId=${encodeURIComponent(
+                                `/business-advertising/success?submissionId=${encodeURIComponent(
                                   submission.submissionId
                                 )}&payment=success`
                               );
@@ -827,5 +827,6 @@ function Info({
     </article>
   );
 }
+
 
 
