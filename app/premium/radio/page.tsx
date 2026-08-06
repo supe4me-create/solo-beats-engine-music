@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
@@ -436,6 +436,8 @@ export default function PremiumRadioPage() {
 
   const audioRef =
     useRef<HTMLAudioElement | null>(null);
+  const previewStartedTrackRef =
+    useRef<string | null>(null);
 
   const currentTrack =
     queue[currentIndex] || null;
@@ -677,6 +679,59 @@ export default function PremiumRadioPage() {
     previewLocked,
   ]);
 
+  function registerRadioPreviewStart() {
+    const audio = audioRef.current;
+
+    if (
+      !isPublicPreview ||
+      !currentTrack ||
+      !audio
+    ) {
+      return true;
+    }
+
+    if (
+      previewStartedTrackRef.current ===
+      currentTrack.id
+    ) {
+      return true;
+    }
+
+    if (
+      previewPlays >=
+      RADIO_PREVIEW_LIMIT
+    ) {
+      audio.pause();
+      audio.currentTime = 0;
+      setCurrentTime(0);
+      setIsPlaying(false);
+      setPreviewLocked(true);
+      setMessage(
+        "Your two-song Radio preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited Radio and TV."
+      );
+      return false;
+    }
+
+    const nextPreviewCount =
+      previewPlays + 1;
+
+    previewStartedTrackRef.current =
+      currentTrack.id;
+
+    setPreviewPlays(nextPreviewCount);
+
+    try {
+      window.localStorage.setItem(
+        RADIO_PREVIEW_STORAGE_KEY,
+        String(nextPreviewCount)
+      );
+    } catch {
+      // The in-memory preview limit still applies.
+    }
+
+    return true;
+  }
+
   async function startRadio() {
     const audio = audioRef.current;
 
@@ -753,33 +808,15 @@ export default function PremiumRadioPage() {
   function handleEnded() {
     setIsPlaying(false);
 
-    if (isPublicPreview) {
-      const nextPreviewCount = Math.min(
-        previewPlays + 1,
-        RADIO_PREVIEW_LIMIT
+    if (
+      isPublicPreview &&
+      previewPlays >= RADIO_PREVIEW_LIMIT
+    ) {
+      setPreviewLocked(true);
+      setMessage(
+        "Your two-song Radio preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited Radio and TV."
       );
-
-      setPreviewPlays(nextPreviewCount);
-
-      try {
-        window.localStorage.setItem(
-          RADIO_PREVIEW_STORAGE_KEY,
-          String(nextPreviewCount)
-        );
-      } catch {
-        // The in-memory limit still applies.
-      }
-
-      if (
-        nextPreviewCount >=
-        RADIO_PREVIEW_LIMIT
-      ) {
-        setPreviewLocked(true);
-        setMessage(
-          "Your two-song Radio preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited Radio and TV."
-        );
-        return;
-      }
+      return;
     }
 
     if (autoplay) {
@@ -841,9 +878,10 @@ export default function PremiumRadioPage() {
     <main className="min-h-screen overflow-x-hidden px-5 pb-48 pt-52 sm:px-8">
       <audio
         ref={audioRef}
-        onPlay={() =>
-          setIsPlaying(true)
-        }
+        onPlay={() => {
+          setIsPlaying(true);
+          registerRadioPreviewStart();
+        }}
         onPause={() =>
           setIsPlaying(false)
         }

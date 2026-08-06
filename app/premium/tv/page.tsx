@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
@@ -390,6 +390,8 @@ export default function PremiumTvPage() {
 
   const audioRef =
     useRef<HTMLAudioElement | null>(null);
+  const previewStartedProgramRef =
+    useRef<string | null>(null);
   const canvasRef =
     useRef<HTMLCanvasElement | null>(null);
   const visualizerPanelRef =
@@ -638,6 +640,59 @@ export default function PremiumTvPage() {
     isPublicPreview,
     previewLocked,
   ]);
+
+  function registerTvPreviewStart() {
+    const audio = audioRef.current;
+
+    if (
+      !isPublicPreview ||
+      !currentProgram ||
+      !audio
+    ) {
+      return true;
+    }
+
+    if (
+      previewStartedProgramRef.current ===
+      currentProgram.id
+    ) {
+      return true;
+    }
+
+    if (
+      previewPlays >=
+      TV_PREVIEW_LIMIT
+    ) {
+      audio.pause();
+      audio.currentTime = 0;
+      setCurrentTime(0);
+      setIsPlaying(false);
+      setPreviewLocked(true);
+      setPlaybackMessage(
+        "Your two-program TV preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited TV and Radio."
+      );
+      return false;
+    }
+
+    const nextPreviewCount =
+      previewPlays + 1;
+
+    previewStartedProgramRef.current =
+      currentProgram.id;
+
+    setPreviewPlays(nextPreviewCount);
+
+    try {
+      window.localStorage.setItem(
+        TV_PREVIEW_STORAGE_KEY,
+        String(nextPreviewCount)
+      );
+    } catch {
+      // The in-memory preview limit still applies.
+    }
+
+    return true;
+  }
 
   async function playCurrentProgram() {
     const audio = audioRef.current;
@@ -1346,9 +1401,10 @@ export default function PremiumTvPage() {
     <main className="min-h-screen px-5 pb-48 pt-52 sm:px-8">
       <audio
         ref={audioRef}
-        onPlay={() =>
-          setIsPlaying(true)
-        }
+        onPlay={() => {
+          setIsPlaying(true);
+          registerTvPreviewStart();
+        }}
         onPause={() =>
           setIsPlaying(false)
         }
