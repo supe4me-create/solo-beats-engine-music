@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -710,13 +710,7 @@ function SavedCardCheckout({
       cardFieldsRef.current = null;
       initializedRef.current = false;
     };
-  }, [
-    isResolved,
-    onError,
-    onSuccess,
-    submission.submissionId,
-    user,
-  ]);
+  }, [isResolved, submission.submissionId, user.uid]);
 
   if (!eligible) {
     return (
@@ -833,4 +827,5 @@ function Info({
     </article>
   );
 }
+
 
