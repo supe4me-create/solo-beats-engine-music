@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -415,20 +415,8 @@ export async function POST(
           );
         }
 
-        orderBody.payment_source = {
-          card: {
-            attributes: {
-              vault: {
-                store_in_vault:
-                  "ON_SUCCESS",
-              },
-              verification: {
-                method:
-                  "SCA_WHEN_REQUIRED",
-              },
-            },
-          },
-        };
+        // PayPal Card Fields supplies the card payment source during fields.submit().
+        // Do not send an empty payment_source.card object when creating the order.
       } else if (savePaymentMethod) {
         orderBody.payment_source = {
           paypal: {
@@ -778,5 +766,6 @@ export async function POST(
     );
   }
 }
+
 
 
