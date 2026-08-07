@@ -820,22 +820,12 @@ export default function PremiumRadioPage() {
     }
 
     if (autoplay) {
-      nextTrack();
-      setTimeout(() => {
-        const audio =
-          audioRef.current;
-
-        if (audio) {
-          void audio
-            .play()
-            .then(() =>
-              setIsPlaying(true)
-            )
-            .catch(() =>
-              setIsPlaying(false)
-            );
-        }
-      }, 0);
+      setIsPlaying(true);
+      setCurrentIndex((index) =>
+        index >= queue.length - 1
+          ? 0
+          : index + 1
+      );
     }
   }
 
@@ -974,6 +964,30 @@ export default function PremiumRadioPage() {
                   className="rounded-2xl bg-white px-6 py-4 font-black text-black"
                 >
                   {isPlaying ? "Pause Radio" : currentTime > 0 ? "Resume Radio" : "Start Radio"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={previousTrack}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+                >
+                  Previous
+                </button>
+
+                <button
+                  type="button"
+                  onClick={nextTrack}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+                >
+                  Next
+                </button>
+
+                <button
+                  type="button"
+                  onClick={stopRadio}
+                  className="rounded-2xl border border-red-300/20 bg-red-300/10 px-6 py-4 font-black text-red-200"
+                >
+                  Stop
                 </button>
 
                 <button
