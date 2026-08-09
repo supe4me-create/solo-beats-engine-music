@@ -1,0 +1,2796 @@
+﻿"use client";
+
+import Link from "next/link";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { useAuth } from "../../auth/AuthContext";
+
+const OWNER_EMAIL = "supe4.me@gmail.com";
+
+type SourceType =
+  | "solo-beats"
+  | "artist"
+  | "advertiser"
+  | "customer";
+
+type VideoItem = {
+  mediaId: string;
+  title: string;
+  description: string;
+  sourceType: SourceType;
+  originalName: string | null;
+  mimeType: string | null;
+  sizeBytes: number;
+  storagePath: string | null;
+  status: string;
+  published: boolean;
+  homepageEnabled: boolean;
+  premiumTvEnabled: boolean;
+  featured: boolean;
+  displayOrder: number;
+  tvScheduleStart: string | null;
+  tvScheduleEnd: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  previewUrl: string | null;
+};
+
+type VideoEdit = {
+  title: string;
+  description: string;
+  sourceType: SourceType;
+  published: boolean;
+  homepageEnabled: boolean;
+  premiumTvEnabled: boolean;
+  featured: boolean;
+  displayOrder: number;
+  tvScheduleStart: string;
+  tvScheduleEnd: string;
+};
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "Unknown size";
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let index = 0;
+
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+
+  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function formatDate(value: string | null) {
+  if (!value) {
+    return "Unknown date";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date";
+  }
+
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function toDateTimeLocal(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const offset = date.getTimezoneOffset();
+  const local = new Date(
+    date.getTime() - offset * 60 * 1000
+  );
+
+  return local.toISOString().slice(0, 16);
+}
+
+function editFromVideo(video: VideoItem): VideoEdit {
+  return {
+    title: video.title || "",
+    description: video.description || "",
+    sourceType: video.sourceType || "solo-beats",
+    published: video.published === true,
+    homepageEnabled: video.homepageEnabled === true,
+    premiumTvEnabled: video.premiumTvEnabled === true,
+    featured: video.featured === true,
+    tvScheduleStart: video.tvScheduleStart || "",
+    tvScheduleEnd: video.tvScheduleEnd || "",
+    displayOrder: Number.isFinite(Number(video.displayOrder))
+      ? Number(video.displayOrder)
+      : 0,
+  };
+}
+
+
+const VIDEO_RESUME_KEY =
+  "solo-beats-video-resume-v1";
+
+const VIDEO_CHUNK_SIZE =
+  8 * 1024 * 1024;
+
+type VideoResumeRecord = {
+  sessionId: string;
+  uploadUrl: string;
+  mediaId: string;
+  storagePath: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+};
+
+function loadResumeRecord():
+  VideoResumeRecord | null {
+  try {
+    const raw =
+      window.localStorage.getItem(
+        VIDEO_RESUME_KEY
+      );
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(
+      raw
+    ) as VideoResumeRecord;
+  } catch {
+    return null;
+  }
+}
+
+function saveResumeRecord(
+  value: VideoResumeRecord
+) {
+  try {
+    window.localStorage.setItem(
+      VIDEO_RESUME_KEY,
+      JSON.stringify(value)
+    );
+  } catch {
+    // Upload still works in memory.
+  }
+}
+
+function clearResumeRecord() {
+  try {
+    window.localStorage.removeItem(
+      VIDEO_RESUME_KEY
+    );
+  } catch {
+    // Ignore storage cleanup failure.
+  }
+}
+
+function resumeMatchesFile(
+  resume: VideoResumeRecord,
+  file: File
+) {
+  return (
+    resume.fileName ===
+      file.name &&
+    resume.fileSize ===
+      file.size
+  );
+}
+
+function offsetFromRange(
+  value: string | null
+) {
+  if (!value) {
+    return 0;
+  }
+
+  const match =
+    value.match(
+      /bytes=0-(\d+)/i
+    );
+
+  if (!match) {
+    return 0;
+  }
+
+  const end =
+    Number(match[1]);
+
+  return Number.isFinite(end)
+    ? end + 1
+    : 0;
+}
+
+function wait(
+  milliseconds: number
+) {
+  return new Promise<void>(
+    (resolve) => {
+      window.setTimeout(
+        resolve,
+        milliseconds
+      );
+    }
+  );
+}
+
+async function queryResumeOffset(
+  token: string,
+  sessionId: string,
+  totalSize: number
+) {
+  const response = await fetch(
+    "/api/owner/video-upload",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type":
+          "application/json",
+        Authorization:
+          `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        action: "status",
+        sessionId,
+      }),
+      cache: "no-store",
+    }
+  );
+
+  const data =
+    await response.json();
+
+  if (
+    !response.ok ||
+    !data.success
+  ) {
+    throw new Error(
+      data.error ||
+        "Could not check resumable upload status."
+    );
+  }
+
+  if (
+    data.expired === true ||
+    data.found === false
+  ) {
+    throw new Error(
+      "UPLOAD_SESSION_EXPIRED"
+    );
+  }
+
+  const offset =
+    Number.isFinite(
+      Number(data.offset)
+    )
+      ? Number(data.offset)
+      : 0;
+
+  return {
+    offset:
+      Math.min(
+        Math.max(0, offset),
+        totalSize
+      ),
+    complete:
+      data.complete === true,
+  };
+}
+
+function sendVideoChunk(
+  uploadUrl: string,
+  file: File,
+  start: number,
+  endExclusive: number,
+  onOverallProgress:
+    (bytesUploaded: number) =>
+      void,
+  onXhrChange:
+    (xhr: XMLHttpRequest | null) =>
+      void
+) {
+  return new Promise<{
+    offset: number;
+    complete: boolean;
+  }>((resolve, reject) => {
+    const xhr =
+      new XMLHttpRequest();
+
+    onXhrChange(xhr);
+
+    const chunk =
+      file.slice(
+        start,
+        endExclusive
+      );
+
+    xhr.open(
+      "PUT",
+      uploadUrl,
+      true
+    );
+
+    xhr.setRequestHeader(
+      "Content-Type",
+      file.type ||
+        "video/mp4"
+    );
+
+    xhr.setRequestHeader(
+      "Content-Range",
+      `bytes ${start}-${
+        endExclusive - 1
+      }/${file.size}`
+    );
+
+    xhr.upload.onprogress = (
+      event
+    ) => {
+      if (
+        event.lengthComputable
+      ) {
+        onOverallProgress(
+          start +
+            event.loaded
+        );
+      }
+    };
+
+    xhr.onload = () => {
+      onXhrChange(null);
+
+      if (
+        xhr.status === 200 ||
+        xhr.status === 201
+      ) {
+        resolve({
+          offset: file.size,
+          complete: true,
+        });
+        return;
+      }
+
+      if (
+        xhr.status === 308
+      ) {
+        const nextOffset =
+          offsetFromRange(
+            xhr.getResponseHeader(
+              "Range"
+            )
+          );
+
+        resolve({
+          offset:
+            nextOffset > start
+              ? nextOffset
+              : start,
+          complete: false,
+        });
+
+        return;
+      }
+
+      reject(
+        new Error(
+          `Video chunk upload failed (${xhr.status}).`
+        )
+      );
+    };
+
+    xhr.onerror = () => {
+      onXhrChange(null);
+      reject(
+        new Error(
+          "Network connection interrupted during video upload."
+        )
+      );
+    };
+
+    xhr.onabort = () => {
+      onXhrChange(null);
+
+      reject(
+        new Error("UPLOAD_ABORTED")
+      );
+    };
+
+    xhr.send(chunk);
+  });
+}
+
+export default function VideoManagerPage() {
+  const { user, loading } = useAuth();
+
+  const isOwner =
+    user?.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+
+  const [videos, setVideos] = useState<VideoItem[]>([]);
+  const [edits, setEdits] = useState<Record<string, VideoEdit>>(
+    {}
+  );
+
+  const [loadingVideos, setLoadingVideos] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [selectedFile, setSelectedFile] =
+    useState<File | null>(null);
+
+  const [replacementTarget, setReplacementTarget] =
+    useState<VideoItem | null>(null);
+
+  const VIDEO_REPLACE_TARGET_KEY =
+    "solo-beats-video-replace-target";
+
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadDescription, setUploadDescription] =
+    useState("");
+
+  const [uploadSourceType, setUploadSourceType] =
+    useState<SourceType>("solo-beats");
+
+  const [uploadPublished, setUploadPublished] =
+    useState(false);
+
+  const [uploadHomepage, setUploadHomepage] =
+    useState(false);
+
+  const [uploadPremiumTv, setUploadPremiumTv] =
+    useState(false);
+
+  const [uploadFeatured, setUploadFeatured] =
+    useState(false);
+
+  const [uploadOrder, setUploadOrder] = useState(0);
+
+  const [uploadState, setUploadState] = useState<
+    | "idle"
+    | "preparing"
+    | "uploading"
+    | "paused"
+    | "finalizing"
+    | "saving"
+    | "done"
+    | "error"
+  >("idle");
+
+  const [uploadPercent, setUploadPercent] = useState(0);
+
+  const activeUploadXhrRef =
+    useRef<XMLHttpRequest | null>(null);
+
+  const uploadPauseRequestedRef =
+    useRef(false);
+
+  const uploadCancelRequestedRef =
+    useRef(false);
+
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  const [savingId, setSavingId] =
+    useState<string | null>(null);
+
+  const [deletingId, setDeletingId] =
+    useState<string | null>(null);
+
+  const [videoFilter, setVideoFilter] = useState<
+    | "all"
+    | "live"
+    | "scheduled"
+    | "ended"
+    | "premium"
+    | "homepage"
+    | "published"
+    | "unpublished"
+  >("all");
+
+  const loadVideos = useCallback(async () => {
+    if (!user || !isOwner) {
+      setLoadingVideos(false);
+      return;
+    }
+
+    setLoadingVideos(true);
+    setLoadError("");
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch("/api/owner/videos", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "Videos could not be loaded."
+        );
+      }
+
+      const nextVideos = Array.isArray(data.videos)
+        ? (data.videos as VideoItem[])
+        : [];
+
+      setVideos(nextVideos);
+
+      const nextEdits: Record<string, VideoEdit> = {};
+
+      for (const video of nextVideos) {
+        nextEdits[video.mediaId] = editFromVideo(video);
+      }
+
+      setEdits(nextEdits);
+    } catch (loadVideoError) {
+      setLoadError(
+        loadVideoError instanceof Error
+          ? loadVideoError.message
+          : "Videos could not be loaded."
+      );
+    } finally {
+      setLoadingVideos(false);
+    }
+  }, [user, isOwner]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    void loadVideos();
+  }, [loading, loadVideos]);
+
+  const counts = useMemo(() => {
+    return {
+      total: videos.length,
+      published: videos.filter(
+        (video) => video.published
+      ).length,
+      homepage: videos.filter(
+        (video) => video.homepageEnabled
+      ).length,
+      premiumTv: videos.filter(
+        (video) => video.premiumTvEnabled
+      ).length,
+      featured: videos.filter(
+        (video) => video.featured
+      ).length,
+    };
+  }, [videos]);
+
+  function handleFileChange(
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      event.target.files?.[0] ||
+      null;
+
+    setSelectedFile(file);
+    setError("");
+    setNotice("");
+
+    uploadPauseRequestedRef.current = false;
+    uploadCancelRequestedRef.current = false;
+    setUploadPercent(0);
+    setUploadState("idle");
+
+    if (
+      file &&
+      !uploadTitle.trim()
+    ) {
+      setUploadTitle(
+        file.name.replace(
+          /\.[^.]+$/,
+          ""
+        )
+      );
+    }
+
+    if (file) {
+      const resume =
+        loadResumeRecord();
+
+      if (
+        resume &&
+        resumeMatchesFile(
+          resume,
+          file
+        )
+      ) {
+        setNotice(
+          "Previous upload session found. Press Upload MP4 Video to resume this file instead of restarting."
+        );
+      }
+    }
+  }
+
+  async function uploadVideo() {
+    if (
+      !user ||
+      !isOwner
+    ) {
+      setError(
+        "Owner sign-in is required."
+      );
+      return;
+    }
+
+    if (!selectedFile) {
+      setError(
+        "Choose an MP4 video first."
+      );
+      return;
+    }
+
+    const file =
+      selectedFile;
+
+    const fileName =
+      file.name.toLowerCase();
+
+    const looksLikeMp4 =
+      file.type ===
+        "video/mp4" ||
+      fileName.endsWith(
+        ".mp4"
+      );
+
+    if (!looksLikeMp4) {
+      setError(
+        "Video Manager currently accepts MP4 files only."
+      );
+      return;
+    }
+
+    if (!uploadTitle.trim()) {
+      setError(
+        "Enter a video title."
+      );
+      return;
+    }
+
+    setError("");
+    setNotice("");
+
+    uploadPauseRequestedRef.current = false;
+    uploadCancelRequestedRef.current = false;
+
+    const fileInfo = {
+      name: file.name,
+      type:
+        file.type ||
+        "video/mp4",
+      size: file.size,
+      lastModified: file.lastModified,
+    };
+
+    try {
+      const token =
+        await user.getIdToken();
+
+      let resume =
+        loadResumeRecord();
+
+      if (
+        resume &&
+        !resumeMatchesFile(
+          resume,
+          file
+        )
+      ) {
+        clearResumeRecord();
+        resume = null;
+      }
+
+      async function startSession() {
+        setUploadState(
+          "preparing"
+        );
+
+        setUploadPercent(0);
+
+        const response =
+          await fetch(
+            "/api/owner/video-upload",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Authorization:
+                  `Bearer ${token}`,
+              },
+              body:
+                JSON.stringify({ action: "start", file: fileInfo }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !data.success
+        ) {
+          throw new Error(
+            data.error ||
+              "Resumable upload session could not be created."
+          );
+        }
+
+        const next: VideoResumeRecord = {
+          sessionId: data.sessionId,
+          uploadUrl:
+            data.uploadUrl,
+          mediaId:
+            data.mediaId,
+          storagePath:
+            data.storagePath,
+          fileName:
+            file.name,
+          fileSize:
+            file.size,
+          fileType:
+            file.type ||
+            "video/mp4",
+        };
+
+        saveResumeRecord(
+          next
+        );
+
+        if (
+          data.reused === true &&
+          Number.isFinite(
+            Number(data.offset)
+          )
+        ) {
+          const resumedPercent =
+            Math.floor(
+              (Number(data.offset) /
+                file.size) *
+                100
+            );
+
+          setNotice(
+            `Previous upload found. Resuming from ${resumedPercent}%.`
+          );
+        }
+
+        return next;
+      }
+
+      if (!resume) {
+        resume =
+          await startSession();
+      } else {
+        setNotice(
+          "Resuming previous MP4 upload..."
+        );
+      }
+
+      let status;
+
+      try {
+        status =
+          await queryResumeOffset(token, resume.sessionId, file.size);
+      } catch (
+        statusError
+      ) {
+        if (
+          statusError instanceof
+            Error &&
+          statusError.message ===
+            "UPLOAD_SESSION_EXPIRED"
+        ) {
+          clearResumeRecord();
+
+          resume =
+            await startSession();
+
+          status = {
+            offset: 0,
+            complete: false,
+          };
+        } else {
+          throw statusError;
+        }
+      }
+
+      let offset =
+        status.offset;
+
+      let complete =
+        status.complete;
+
+      setUploadPercent(
+        Math.min(
+          100,
+          Math.floor(
+            (offset /
+              file.size) *
+              100
+          )
+        )
+      );
+
+      setUploadState(
+        "uploading"
+      );
+
+      while (
+        !complete &&
+        offset < file.size
+      ) {
+        if (
+          uploadCancelRequestedRef.current
+        ) {
+          return;
+        }
+
+        if (
+          uploadPauseRequestedRef.current
+        ) {
+          setUploadState("paused");
+
+          setNotice(
+            `Upload paused at ${uploadPercent}%.`
+          );
+
+          return;
+        }
+
+        const endExclusive =
+          Math.min(
+            offset +
+              VIDEO_CHUNK_SIZE,
+            file.size
+          );
+
+        let result:
+          | {
+              offset: number;
+              complete:
+                boolean;
+            }
+          | null = null;
+
+        let lastError:
+          unknown = null;
+
+        for (
+          let attempt = 1;
+          attempt <= 4;
+          attempt += 1
+        ) {
+          try {
+            result =
+              await sendVideoChunk(
+                resume.uploadUrl,
+                file,
+                offset,
+                endExclusive,
+                (
+                  uploadedBytes
+                ) => {
+                  const percent =
+                    Math.min(
+                      99,
+                      Math.floor(
+                        (uploadedBytes /
+                          file.size) *
+                          100
+                      )
+                    );
+
+                  setUploadPercent(
+                    percent
+                  );
+                },
+                (xhr) => {
+                  activeUploadXhrRef.current =
+                    xhr;
+                }
+              );
+
+            break;
+          } catch (
+            chunkError
+          ) {
+            if (
+              chunkError instanceof Error &&
+              chunkError.message ===
+                "UPLOAD_ABORTED"
+            ) {
+              if (
+                uploadCancelRequestedRef.current
+              ) {
+                return;
+              }
+
+              if (
+                uploadPauseRequestedRef.current
+              ) {
+                setUploadState("paused");
+
+                setNotice(
+                  `Upload paused at ${uploadPercent}%.`
+                );
+
+                return;
+              }
+            }
+
+            lastError =
+              chunkError;
+
+            setNotice(
+              `Connection interrupted. Recovering upload... attempt ${attempt} of 4.`
+            );
+
+            await wait(
+              attempt *
+                1000
+            );
+
+            try {
+              const recovered =
+                await queryResumeOffset(token, resume.sessionId, file.size);
+
+              offset =
+                recovered.offset;
+
+              complete =
+                recovered.complete;
+
+              if (
+                complete
+              ) {
+                result = {
+                  offset:
+                    file.size,
+                  complete:
+                    true,
+                };
+
+                break;
+              }
+
+              if (
+                offset >=
+                endExclusive
+              ) {
+                result = {
+                  offset,
+                  complete:
+                    false,
+                };
+
+                break;
+              }
+            } catch {
+              // Retry same session.
+            }
+          }
+        }
+
+        if (!result) {
+          throw (
+            lastError ||
+            new Error(
+              "Video upload could not recover from the connection interruption."
+            )
+          );
+        }
+
+        offset =
+          result.offset;
+
+        complete =
+          result.complete;
+
+        setUploadPercent(
+          Math.min(
+            complete
+              ? 100
+              : 99,
+            Math.floor(
+              (offset /
+                file.size) *
+                100
+            )
+          )
+        );
+      }
+
+      setUploadPercent(
+        100
+      );
+
+      setUploadState(
+        "finalizing"
+      );
+
+      const finalizeResponse =
+        await fetch(
+          "/api/owner/media",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body:
+              JSON.stringify({
+                action:
+                  "finalize",
+                mediaId:
+                  resume.mediaId,
+                storagePath:
+                  resume.storagePath,
+                title:
+                  uploadTitle.trim(),
+                file:
+                  fileInfo,
+              }),
+          }
+        );
+
+      const finalizeData =
+        await finalizeResponse.json();
+
+      if (
+        !finalizeResponse.ok ||
+        !finalizeData.success
+      ) {
+        throw new Error(
+          finalizeData.error ||
+            "Video upload could not be finalized."
+        );
+      }
+
+      setUploadState(
+        "saving"
+      );
+
+      const settingsResponse =
+        await fetch(
+          "/api/owner/videos",
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body:
+              JSON.stringify({
+                mediaId:
+                  resume.mediaId,
+                title:
+                  uploadTitle.trim(),
+                description:
+                  uploadDescription.trim(),
+                sourceType:
+                  uploadSourceType,
+                published:
+                  uploadPublished,
+                homepageEnabled:
+                  uploadHomepage,
+                premiumTvEnabled:
+                  uploadPremiumTv,
+                featured:
+                  uploadFeatured,
+                displayOrder:
+                  Math.max(
+                    0,
+                    Math.floor(
+                      Number(
+                        uploadOrder
+                      ) || 0
+                    )
+                  ),
+              }),
+          }
+        );
+
+      const settingsData =
+        await settingsResponse.json();
+
+      if (
+        !settingsResponse.ok ||
+        !settingsData.success
+      ) {
+        throw new Error(
+          settingsData.error ||
+            "Video uploaded, but its settings could not be saved."
+        );
+      }
+
+      let replacementMediaId =
+        replacementTarget?.mediaId || "";
+
+      if (!replacementMediaId) {
+        try {
+          replacementMediaId =
+            window.localStorage.getItem(
+              VIDEO_REPLACE_TARGET_KEY
+            ) || "";
+        } catch {}
+      }
+
+      if (replacementMediaId) {
+        const replaceResponse = await fetch(
+          "/api/owner/videos",
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              action: "replace-file",
+              mediaId: replacementMediaId,
+              replacementMediaId: resume.mediaId,
+            }),
+          }
+        );
+
+        const replaceData =
+          await replaceResponse.json();
+
+        if (!replaceResponse.ok || !replaceData.success) {
+          throw new Error(
+            replaceData.error ||
+              "Replacement MP4 could not be saved."
+          );
+        }
+      }
+
+      try {
+        await fetch(
+          "/api/owner/video-upload",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              action: "complete",
+              sessionId:
+                resume.sessionId,
+            }),
+          }
+        );
+      } catch {
+        // The MP4 is already complete.
+      }
+
+      clearResumeRecord();
+
+      if (replacementMediaId) {
+        setReplacementTarget(null);
+
+        try {
+          window.localStorage.removeItem(
+            VIDEO_REPLACE_TARGET_KEY
+          );
+        } catch {}
+      }
+
+      setUploadPercent(
+        100
+      );
+
+      setUploadState(
+        "done"
+      );
+
+      setNotice(
+        `"${uploadTitle.trim()}" was uploaded successfully.`
+      );
+
+      setSelectedFile(
+        null
+      );
+
+      setUploadTitle("");
+      setUploadDescription("");
+      setUploadSourceType(
+        "solo-beats"
+      );
+      setUploadPublished(false);
+      setUploadHomepage(false);
+      setUploadPremiumTv(false);
+      setUploadFeatured(false);
+      setUploadOrder(0);
+
+      const input =
+        document.getElementById(
+          "video-upload-input"
+        ) as
+          | HTMLInputElement
+          | null;
+
+      if (input) {
+        input.value = "";
+      }
+
+      await loadVideos();
+    } catch (
+      uploadError
+    ) {
+      setUploadState(
+        "error"
+      );
+
+      setError(
+        uploadError instanceof
+          Error
+          ? uploadError.message
+          : "Video upload failed."
+      );
+
+      const saved =
+        loadResumeRecord();
+
+      if (
+        saved &&
+        resumeMatchesFile(
+          saved,
+          file
+        )
+      ) {
+        setNotice(
+          "The resumable upload session was saved. Select the same MP4 and press Upload again to continue."
+        );
+      }
+    }
+  }
+
+  function pauseVideoUpload() {
+    if (
+      uploadState !== "uploading"
+    ) {
+      return;
+    }
+
+    uploadPauseRequestedRef.current = true;
+
+    setUploadState("paused");
+
+    setNotice(
+      `Pausing upload at ${uploadPercent}%...`
+    );
+
+    activeUploadXhrRef.current?.abort();
+  }
+
+  async function cancelVideoUpload() {
+    if (
+      !user ||
+      !isOwner
+    ) {
+      setError(
+        "Owner sign-in is required."
+      );
+      return;
+    }
+
+    const resume =
+      loadResumeRecord();
+
+    if (!resume) {
+      uploadPauseRequestedRef.current = false;
+      uploadCancelRequestedRef.current = false;
+      activeUploadXhrRef.current = null;
+
+      setUploadState("idle");
+      setUploadPercent(0);
+      setNotice("");
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        "Cancel this MP4 upload? The saved resumable upload session will be removed."
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    uploadCancelRequestedRef.current = true;
+    uploadPauseRequestedRef.current = false;
+
+    activeUploadXhrRef.current?.abort();
+
+    setNotice(
+      "Cancelling MP4 upload..."
+    );
+
+    try {
+      const token =
+        await user.getIdToken();
+
+      const response =
+        await fetch(
+          "/api/owner/video-upload",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              action: "cancel",
+              sessionId:
+                resume.sessionId,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.error ||
+            "Video upload could not be cancelled."
+        );
+      }
+
+      clearResumeRecord();
+
+      activeUploadXhrRef.current = null;
+      uploadPauseRequestedRef.current = false;
+      uploadCancelRequestedRef.current = false;
+
+      setUploadPercent(0);
+      setUploadState("idle");
+      setError("");
+
+      setNotice(
+        "MP4 upload cancelled."
+      );
+    } catch (cancelError) {
+      uploadCancelRequestedRef.current = false;
+
+      setUploadState("paused");
+
+      setError(
+        cancelError instanceof Error
+          ? cancelError.message
+          : "Video upload could not be cancelled."
+      );
+
+      setNotice(
+        "Upload stopped, but the resumable session was kept so you can try again."
+      );
+    }
+  }
+  function handleReplacementFileChange(
+    video: VideoItem,
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    const file =
+      event.target.files?.[0] ||
+      null;
+
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    clearResumeRecord();
+
+    setReplacementTarget(video);
+
+    try {
+      window.localStorage.setItem(
+        VIDEO_REPLACE_TARGET_KEY,
+        video.mediaId
+      );
+    } catch {
+      // Replacement still works during this page session.
+    }
+
+    setSelectedFile(file);
+    setUploadTitle(video.title);
+    setUploadDescription(video.description);
+    setUploadSourceType(video.sourceType);
+    setUploadPublished(video.published);
+    setUploadHomepage(video.homepageEnabled);
+    setUploadPremiumTv(video.premiumTvEnabled);
+    setUploadFeatured(video.featured);
+    setUploadOrder(video.displayOrder);
+
+    uploadPauseRequestedRef.current = false;
+    uploadCancelRequestedRef.current = false;
+    setUploadPercent(0);
+    setUploadState("idle");
+    setError("");
+    setNotice(
+      `Replacement MP4 selected for "${video.title}". Press Upload MP4 Video to begin.`
+    );
+
+    document.getElementById(
+      "video-upload-input"
+    )?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
+
+  function changeEdit<K extends keyof VideoEdit>(
+    mediaId: string,
+    key: K,
+    value: VideoEdit[K]
+  ) {
+    setEdits((current) => {
+      const existing =
+        current[mediaId];
+
+      if (!existing) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [mediaId]: {
+          ...existing,
+          [key]: value,
+        },
+      };
+    });
+  }
+
+  async function saveVideo(mediaId: string) {
+    if (!user || !isOwner) {
+      return;
+    }
+
+    const edit = edits[mediaId];
+
+    if (!edit) {
+      return;
+    }
+
+    if (!edit.title.trim()) {
+      setError("Video title cannot be empty.");
+      return;
+    }
+
+    setSavingId(mediaId);
+    setError("");
+    setNotice("");
+
+    uploadPauseRequestedRef.current = false;
+    uploadCancelRequestedRef.current = false;
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch(
+        "/api/owner/videos",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            mediaId,
+            title: edit.title.trim(),
+            description:
+              edit.description.trim(),
+            sourceType: edit.sourceType,
+            published: edit.published,
+            homepageEnabled:
+              edit.homepageEnabled,
+            premiumTvEnabled:
+              edit.premiumTvEnabled,
+            featured: edit.featured,
+        tvScheduleStart: edit.tvScheduleStart || null,
+        tvScheduleEnd: edit.tvScheduleEnd || null,
+        displayOrder:
+              Math.max(
+                0,
+                Math.floor(
+                  Number(edit.displayOrder) || 0
+                )
+              ),
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Video settings could not be saved."
+        );
+      }
+
+      setNotice("Video settings saved.");
+
+      await loadVideos();
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Video settings could not be saved."
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function quickToggle(
+    video: VideoItem,
+    field:
+      | "published"
+      | "homepageEnabled"
+      | "premiumTvEnabled"
+      | "featured"
+  ) {
+    if (!user || !isOwner) {
+      return;
+    }
+
+    setSavingId(video.mediaId);
+    setError("");
+    setNotice("");
+
+    uploadPauseRequestedRef.current = false;
+    uploadCancelRequestedRef.current = false;
+
+    try {
+      const token = await user.getIdToken();
+
+      const nextValue =
+        !Boolean(video[field]);
+
+      const response = await fetch(
+        "/api/owner/videos",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            mediaId: video.mediaId,
+            [field]: nextValue,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Video setting could not be changed."
+        );
+      }
+
+      await loadVideos();
+    } catch (toggleError) {
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : "Video setting could not be changed."
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deleteVideo(video: VideoItem) {
+    if (!user || !isOwner) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete "${video.title}" permanently?\n\nThis removes the MP4 from Firebase Storage and the Video Manager record.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(video.mediaId);
+    setError("");
+    setNotice("");
+
+    uploadPauseRequestedRef.current = false;
+    uploadCancelRequestedRef.current = false;
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch(
+        `/api/owner/videos?mediaId=${encodeURIComponent(
+          video.mediaId
+        )}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error ||
+            "Video could not be deleted."
+        );
+      }
+
+      setNotice(`"${video.title}" was deleted.`);
+
+      await loadVideos();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Video could not be deleted."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const filteredVideos = videos.filter((video) => {
+    const now = Date.now();
+
+    const tvStart = video.tvScheduleStart
+      ? Date.parse(video.tvScheduleStart)
+      : null;
+
+    const tvEnd = video.tvScheduleEnd
+      ? Date.parse(video.tvScheduleEnd)
+      : null;
+
+    if (videoFilter === "all") {
+      return true;
+    }
+
+    if (videoFilter === "live") {
+      return (
+        video.premiumTvEnabled === true &&
+        (tvStart === null || tvStart <= now) &&
+        (tvEnd === null || tvEnd > now)
+      );
+    }
+
+    if (videoFilter === "scheduled") {
+      return (
+        video.premiumTvEnabled === true &&
+        tvStart !== null &&
+        tvStart > now
+      );
+    }
+
+    if (videoFilter === "ended") {
+      return (
+        video.premiumTvEnabled === true &&
+        tvEnd !== null &&
+        tvEnd <= now
+      );
+    }
+
+    if (videoFilter === "premium") {
+      return video.premiumTvEnabled === true;
+    }
+
+    if (videoFilter === "homepage") {
+      return video.homepageEnabled === true;
+    }
+
+    if (videoFilter === "published") {
+      return video.published === true;
+    }
+
+    if (videoFilter === "unpublished") {
+      return video.published !== true;
+    }
+
+    return true;
+  });
+
+  if (loading) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#06070a] px-6 text-white">
+        <p className="text-white/60">
+          Loading Video Manager...
+        </p>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#06070a] px-6 text-white">
+        <div className="max-w-xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 text-center">
+          <h1 className="text-3xl font-black">
+            Owner sign-in required
+          </h1>
+          <p className="mt-3 text-white/55">
+            Sign in with the SOLO BEATS owner account to use Video Manager.
+          </p>
+          <Link
+            href="/account"
+            className="mt-6 inline-flex rounded-2xl bg-white px-5 py-3 font-black text-black"
+          >
+            Open Account
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isOwner) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#06070a] px-6 text-white">
+        <div className="max-w-xl rounded-[2rem] border border-red-300/20 bg-red-400/10 p-8 text-center">
+          <h1 className="text-3xl font-black">
+            Owner access only
+          </h1>
+          <p className="mt-3 text-red-100/70">
+            This account does not have permission to open Video Manager.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#06070a] px-4 py-8 text-white sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        <section className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-fuchsia-500/20 via-white/[0.035] to-cyan-400/10 p-6 shadow-2xl sm:p-9">
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-fuchsia-300">
+                SOLO BEATS Owner Control
+              </p>
+
+              <h1 className="mt-2 text-4xl font-black sm:text-5xl">
+                Video Manager
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-white/55">
+                Upload and manage MP4 videos for the SOLO BEATS homepage channel, Premium TV, artist content, advertiser content, and platform promotions.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/developer"
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-black"
+              >
+                Control Center
+              </Link>
+
+              <Link
+                href="/developer/media"
+                className="rounded-2xl bg-white px-5 py-3 font-black text-black"
+              >
+                Media Library
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            ["Videos", counts.total],
+            ["Published", counts.published],
+            ["Homepage", counts.homepage],
+            ["Premium TV", counts.premiumTv],
+            ["Featured", counts.featured],
+          ].map(([label, value]) => (
+            <div
+              key={String(label)}
+              className="rounded-2xl border border-white/10 bg-white/[0.035] p-5"
+            >
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-white/40">
+                {label}
+              </p>
+              <p className="mt-2 text-3xl font-black">
+                {value}
+              </p>
+            </div>
+          ))}
+        </section>
+
+        {(notice || error || loadError) ? (
+          <section className="mt-6 space-y-3">
+            {notice ? (
+              <p className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-5 py-4 font-bold text-emerald-200">
+                {notice}
+              </p>
+            ) : null}
+
+            {error ? (
+              <p className="rounded-2xl border border-red-300/20 bg-red-400/10 px-5 py-4 font-bold text-red-200">
+                {error}
+              </p>
+            ) : null}
+
+            {loadError ? (
+              <p className="rounded-2xl border border-red-300/20 bg-red-400/10 px-5 py-4 font-bold text-red-200">
+                {loadError}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
+        <section className="mt-8 rounded-[2rem] border border-violet-300/15 bg-white/[0.035] p-6 sm:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-300">
+                Direct MP4 Upload
+              </p>
+
+              <h2 className="mt-2 text-3xl font-black">
+                Add Video
+              </h2>
+
+              <p className="mt-2 text-sm text-white/50">
+                MP4 files are uploaded directly to the Central Media Library and automatically become manageable here.
+              </p>
+            </div>
+
+            <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-white/60">
+              Maximum 2 GB
+            </span>
+          </div>
+
+          <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_1fr]">
+            <div>
+              <label className="text-sm font-black text-white/70">
+                MP4 Video
+              </label>
+
+              <input
+                id="video-upload-input"
+                type="file"
+                accept="video/mp4,.mp4"
+                onChange={handleFileChange}
+                disabled={
+                  uploadState !== "idle" &&
+                  uploadState !== "done" &&
+                  uploadState !== "error"
+                }
+                className="mt-2 block w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm"
+              />
+
+              {selectedFile ? (
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
+                  <p className="font-black">
+                    {selectedFile.name}
+                  </p>
+                  <p className="mt-1 text-white/45">
+                    {formatBytes(selectedFile.size)}
+                  </p>
+                </div>
+              ) : null}
+
+              <label className="mt-5 block text-sm font-black text-white/70">
+                Title
+              </label>
+
+              <input
+                value={uploadTitle}
+                onChange={(event) =>
+                  setUploadTitle(event.target.value)
+                }
+                placeholder="SOLO BEATS Video"
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 outline-none focus:border-violet-400"
+              />
+
+              <label className="mt-5 block text-sm font-black text-white/70">
+                Description
+              </label>
+
+              <textarea
+                value={uploadDescription}
+                onChange={(event) =>
+                  setUploadDescription(
+                    event.target.value
+                  )
+                }
+                rows={5}
+                placeholder="Video description..."
+                className="mt-2 w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-4 outline-none focus:border-violet-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-black text-white/70">
+                Source / Ownership
+              </label>
+
+              <select
+                value={uploadSourceType}
+                onChange={(event) =>
+                  setUploadSourceType(
+                    event.target.value as SourceType
+                  )
+                }
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4"
+              >
+                <option value="solo-beats">
+                  SOLO BEATS
+                </option>
+                <option value="artist">
+                  Artist
+                </option>
+                <option value="advertiser">
+                  Advertiser
+                </option>
+                <option value="customer">
+                  Customer
+                </option>
+              </select>
+
+              <label className="mt-5 block text-sm font-black text-white/70">
+                Display Order
+              </label>
+
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={uploadOrder}
+                onChange={(event) =>
+                  setUploadOrder(
+                    Math.max(
+                      0,
+                      Number(event.target.value) || 0
+                    )
+                  )
+                }
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4"
+              />
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {[
+                  {
+                    label: "Published",
+                    checked: uploadPublished,
+                    set: setUploadPublished,
+                  },
+                  {
+                    label: "Homepage Channel",
+                    checked: uploadHomepage,
+                    set: setUploadHomepage,
+                  },
+                  {
+                    label: "Premium TV",
+                    checked: uploadPremiumTv,
+                    set: setUploadPremiumTv,
+                  },
+                  {
+                    label: "Featured",
+                    checked: uploadFeatured,
+                    set: setUploadFeatured,
+                  },
+                ].map((control) => (
+                  <label
+                    key={control.label}
+                    className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 p-4"
+                  >
+                    <span className="font-black">
+                      {control.label}
+                    </span>
+
+                    <input
+                      type="checkbox"
+                      checked={control.checked}
+                      onChange={(event) =>
+                        control.set(
+                          event.target.checked
+                        )
+                      }
+                      className="h-5 w-5"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void uploadVideo()}
+                disabled={
+                  !selectedFile ||
+                  uploadState === "preparing" ||
+                  uploadState === "uploading" ||
+                  uploadState === "paused" ||
+                  uploadState === "finalizing" ||
+                  uploadState === "saving"
+                }
+                className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-6 py-4 text-lg font-black disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {uploadState === "preparing"
+                  ? "Preparing Upload..."
+                  : uploadState === "uploading"
+                    ? "Uploading MP4..."
+                    : uploadState === "paused"
+                      ? "Upload Paused"
+                      : uploadState === "finalizing"
+                        ? "Finalizing..."
+                        : uploadState === "saving"
+                          ? "Saving Video Settings..."
+                          : "Upload MP4 Video"}
+              </button>
+
+              {uploadState === "uploading" ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={pauseVideoUpload}
+                    className="rounded-2xl border border-amber-400/40 bg-amber-400/10 px-5 py-3 text-sm font-black text-amber-200 transition hover:bg-amber-400/20"
+                  >
+                    PAUSE UPLOAD
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void cancelVideoUpload()}
+                    className="rounded-2xl border border-red-400/40 bg-red-500/10 px-5 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20"
+                  >
+                    CANCEL UPLOAD
+                  </button>
+                </div>
+              ) : null}
+
+              {uploadState === "paused" ? (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => void uploadVideo()}
+                    disabled={!selectedFile}
+                    className="rounded-2xl border border-emerald-400/40 bg-emerald-400/10 px-5 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    RESUME UPLOAD
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void cancelVideoUpload()}
+                    className="rounded-2xl border border-red-400/40 bg-red-500/10 px-5 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20"
+                  >
+                    CANCEL UPLOAD
+                  </button>
+                </div>
+              ) : null}
+
+              {uploadPercent > 0 ? (
+                <div className="mt-4">
+                  <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full bg-white transition-all"
+                      style={{
+                        width: `${uploadPercent}%`,
+                      }}
+                    />
+                  </div>
+
+                  <p className="mt-2 text-right text-xs font-black text-white/45">
+                    {uploadPercent}%
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
+                Video Library
+              </p>
+
+              <h2 className="mt-2 text-3xl font-black">
+                Manage Videos
+              </h2>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void loadVideos()}
+              disabled={loadingVideos}
+              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-black disabled:opacity-40"
+            >
+              {loadingVideos
+                ? "Refreshing..."
+                : "Refresh"}
+            </button>
+          </div>
+
+          <div className="mb-5 flex flex-wrap gap-2">
+            {[
+              ["all", "ALL"],
+              ["live", "LIVE NOW"],
+              ["scheduled", "SCHEDULED"],
+              ["ended", "ENDED"],
+              ["premium", "PREMIUM TV"],
+              ["homepage", "HOMEPAGE"],
+              ["published", "PUBLISHED"],
+              ["unpublished", "UNPUBLISHED"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() =>
+                  setVideoFilter(
+                    value as
+                      | "all"
+                      | "live"
+                      | "scheduled"
+                      | "ended"
+                      | "premium"
+                      | "homepage"
+                      | "published"
+                      | "unpublished"
+                  )
+                }
+                className={`rounded-full border px-4 py-2 text-xs font-black transition ${
+                  videoFilter === value
+                    ? "border-white bg-white text-black"
+                    : "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {loadingVideos ? (
+            <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.035] p-8 text-center text-white/50">
+              Loading videos...
+            </div>
+          ) : videos.length === 0 ? (
+            <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.035] p-8 text-center">
+              <h3 className="text-2xl font-black">
+                No videos yet
+              </h3>
+
+              <p className="mt-2 text-white/50">
+                Upload your first SOLO BEATS MP4 above.
+              </p>
+            </div>
+          ) : filteredVideos.length === 0 ? (
+            <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.035] p-8 text-center">
+              <h3 className="text-2xl font-black">
+                No videos match this filter
+              </h3>
+
+              <p className="mt-2 text-white/50">
+                Choose another filter to view available videos.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 grid gap-6">
+              {filteredVideos.map((video) => {
+                const edit =
+                  edits[video.mediaId] ||
+                  editFromVideo(video);
+
+                const busy =
+                  savingId === video.mediaId ||
+                  deletingId === video.mediaId;
+
+                const now = Date.now();
+                const tvStart = video.tvScheduleStart
+                  ? Date.parse(video.tvScheduleStart)
+                  : null;
+                const tvEnd = video.tvScheduleEnd
+                  ? Date.parse(video.tvScheduleEnd)
+                  : null;
+
+                let tvStatusLabel = "TV DISABLED";
+
+                if (!video.published) {
+                  tvStatusLabel = "NOT PUBLISHED";
+                } else if (!video.premiumTvEnabled) {
+                  tvStatusLabel = "TV DISABLED";
+                } else if (
+                  tvStart !== null &&
+                  Number.isFinite(tvStart) &&
+                  now < tvStart
+                ) {
+                  tvStatusLabel = "SCHEDULED";
+                } else if (
+                  tvEnd !== null &&
+                  Number.isFinite(tvEnd) &&
+                  now >= tvEnd
+                ) {
+                  tvStatusLabel = "ENDED";
+                } else if (
+                  tvStart === null &&
+                  tvEnd === null
+                ) {
+                  tvStatusLabel = "ALWAYS AVAILABLE";
+                } else {
+                  tvStatusLabel = "LIVE NOW";
+                }
+
+                return (
+                  <article
+                    key={video.mediaId}
+                    className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035]"
+                  >
+                    <div className="grid gap-0 xl:grid-cols-[420px_1fr]">
+                      <div className="bg-black">
+                        {video.previewUrl ? (
+                          <div>
+                            <video
+                              id={`video-preview-${video.mediaId}`}
+                              src={video.previewUrl}
+                              controls
+                              preload="metadata"
+                              playsInline
+                              className="aspect-video h-full min-h-[250px] w-full bg-black object-contain"
+                            />
+
+                            <div className="flex items-center justify-center gap-2 border-t border-white/10 bg-black px-3 py-3">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const player = document.getElementById(
+                                    `video-preview-${video.mediaId}`
+                                  ) as HTMLVideoElement | null;
+
+                                  if (player) {
+                                    player.currentTime = Math.max(
+                                      0,
+                                      player.currentTime - 10
+                                    );
+                                  }
+                                }}
+                                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-black text-white hover:bg-white/10"
+                              >
+                                -10 SEC
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const player = document.getElementById(
+                                    `video-preview-${video.mediaId}`
+                                  ) as HTMLVideoElement | null;
+
+                                  if (!player) return;
+
+                                  if (player.paused) {
+                                    void player.play();
+                                  } else {
+                                    player.pause();
+                                  }
+                                }}
+                                className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black hover:bg-white/90"
+                              >
+                                PLAY / PAUSE
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const player = document.getElementById(
+                                    `video-preview-${video.mediaId}`
+                                  ) as HTMLVideoElement | null;
+
+                                  if (player) {
+                                    player.currentTime = Math.min(
+                                      Number.isFinite(player.duration)
+                                        ? player.duration
+                                        : player.currentTime + 10,
+                                      player.currentTime + 10
+                                    );
+                                  }
+                                }}
+                                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-black text-white hover:bg-white/10"
+                              >
+                                +10 SEC
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid aspect-video min-h-[250px] place-items-center bg-black text-white/35">
+                            Preview unavailable
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-5 sm:p-7">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap gap-2">
+                              <span
+                                className={`rounded-full border px-3 py-1 text-xs font-black ${
+                                  video.published
+                                    ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-200"
+                                    : "border-amber-300/25 bg-amber-400/10 text-amber-100"
+                                }`}
+                              >
+                                {video.published
+                                  ? "PUBLISHED"
+                                  : "UNPUBLISHED"}
+                              </span>
+
+                              {video.homepageEnabled ? (
+                                <span className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-3 py-1 text-xs font-black text-cyan-200">
+                                  HOMEPAGE
+                                </span>
+                              ) : null}
+
+                              {video.premiumTvEnabled ? (
+                                <span className="rounded-full border border-fuchsia-300/25 bg-fuchsia-400/10 px-3 py-1 text-xs font-black text-fuchsia-200">
+                                  PREMIUM TV
+                                </span>
+                              ) : null}
+
+                              <span
+                            className={`rounded-full border px-3 py-1 text-xs font-black ${
+                              tvStatusLabel === "LIVE NOW"
+                                ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-200"
+                                : tvStatusLabel === "SCHEDULED"
+                                ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-200"
+                                : tvStatusLabel === "ENDED"
+                                ? "border-red-300/25 bg-red-400/10 text-red-200"
+                                : tvStatusLabel === "ALWAYS AVAILABLE"
+                                ? "border-violet-300/25 bg-violet-400/10 text-violet-200"
+                                : tvStatusLabel === "NOT PUBLISHED"
+                                ? "border-amber-300/25 bg-amber-400/10 text-amber-100"
+                                : "border-white/15 bg-white/5 text-white/45"
+                            }`}
+                          >
+                            {tvStatusLabel}
+                          </span>
+
+                          {video.featured ? (
+                                <span className="rounded-full border border-yellow-300/25 bg-yellow-400/10 px-3 py-1 text-xs font-black text-yellow-100">
+                                  FEATURED
+                                </span>
+                              ) : null}
+                            </div>
+
+                            <p className="mt-3 text-xs text-white/35">
+                              {video.originalName ||
+                                "MP4 video"}{" "}
+                              · {formatBytes(video.sizeBytes)}
+                              {" · "}
+                              {formatDate(video.createdAt)}
+                            </p>
+                          </div>
+
+                          <span className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-black uppercase text-white/45">
+                            {video.sourceType}
+                          </span>
+                        </div>
+
+                        <div className="mt-6 grid gap-4 md:grid-cols-2">
+                          <div>
+                            <label className="text-sm font-black text-white/60">
+                              Title
+                            </label>
+
+                            <input
+                              value={edit.title}
+                              onChange={(event) =>
+                                changeEdit(
+                                  video.mediaId,
+                                  "title",
+                                  event.target.value
+                                )
+                              }
+                              className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-sm font-black text-white/60">
+                              Source
+                            </label>
+
+                            <select
+                              value={edit.sourceType}
+                              onChange={(event) =>
+                                changeEdit(
+                                  video.mediaId,
+                                  "sourceType",
+                                  event.target.value as SourceType
+                                )
+                              }
+                              className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                            >
+                              <option value="solo-beats">
+                                SOLO BEATS
+                              </option>
+                              <option value="artist">
+                                Artist
+                              </option>
+                              <option value="advertiser">
+                                Advertiser
+                              </option>
+                              <option value="customer">
+                                Customer
+                              </option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <label className="mt-4 block text-sm font-black text-white/60">
+                          Description
+                        </label>
+
+                        <textarea
+                          value={edit.description}
+                          onChange={(event) =>
+                            changeEdit(
+                              video.mediaId,
+                              "description",
+                              event.target.value
+                            )
+                          }
+                          rows={3}
+                          className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                        />
+
+                        <div className="mt-5 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-400/[0.04] p-4">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-fuchsia-300">
+                            Premium TV Schedule
+                          </p>
+
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <label>
+                              <span className="block text-sm font-black text-white/60">
+                                Start
+                              </span>
+
+                              <input
+                                type="datetime-local"
+                                value={toDateTimeLocal(
+                                  edit.tvScheduleStart
+                                )}
+                                onChange={(event) =>
+                                  changeEdit(
+                                    video.mediaId,
+                                    "tvScheduleStart",
+                                    event.target.value
+                                      ? new Date(
+                                          event.target.value
+                                        ).toISOString()
+                                      : ""
+                                  )
+                                }
+                                className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                              />
+
+                              <p className="mt-2 text-xs text-white/35">
+                                Leave blank to make it available immediately.
+                              </p>
+                            </label>
+
+                            <label>
+                              <span className="block text-sm font-black text-white/60">
+                                End
+                              </span>
+
+                              <input
+                                type="datetime-local"
+                                value={toDateTimeLocal(
+                                  edit.tvScheduleEnd
+                                )}
+                                onChange={(event) =>
+                                  changeEdit(
+                                    video.mediaId,
+                                    "tvScheduleEnd",
+                                    event.target.value
+                                      ? new Date(
+                                          event.target.value
+                                        ).toISOString()
+                                      : ""
+                                  )
+                                }
+                                className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
+                              />
+
+                              <p className="mt-2 text-xs text-white/35">
+                                Leave blank to keep it available indefinitely.
+                              </p>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                          <label className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <span className="block text-xs font-black uppercase text-white/40">
+                              Order
+                            </span>
+
+                            <input
+                              type="number"
+                              min={0}
+                              value={edit.displayOrder}
+                              onChange={(event) =>
+                                changeEdit(
+                                  video.mediaId,
+                                  "displayOrder",
+                                  Math.max(
+                                    0,
+                                    Number(
+                                      event.target.value
+                                    ) || 0
+                                  )
+                                )
+                              }
+                              className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+                            />
+                          </label>
+
+                          {[
+                            {
+                              key:
+                                "published" as const,
+                              label: "Published",
+                              value:
+                                edit.published,
+                            },
+                            {
+                              key:
+                                "homepageEnabled" as const,
+                              label: "Homepage",
+                              value:
+                                edit.homepageEnabled,
+                            },
+                            {
+                              key:
+                                "premiumTvEnabled" as const,
+                              label: "Premium TV",
+                              value:
+                                edit.premiumTvEnabled,
+                            },
+                            {
+                              key:
+                                "featured" as const,
+                              label: "Featured",
+                              value:
+                                edit.featured,
+                            },
+                          ].map((control) => (
+                            <label
+                              key={control.key}
+                              className="flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-black/20 p-3"
+                            >
+                              <span className="text-sm font-black">
+                                {control.label}
+                              </span>
+
+                              <input
+                                type="checkbox"
+                                checked={
+                                  control.value
+                                }
+                                onChange={(
+                                  event
+                                ) =>
+                                  changeEdit(
+                                    video.mediaId,
+                                    control.key,
+                                    event.target
+                                      .checked
+                                  )
+                                }
+                                className="h-5 w-5"
+                              />
+                            </label>
+                          ))}
+                        </div>
+
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void saveVideo(
+                                video.mediaId
+                              )
+                            }
+                            disabled={busy}
+                            className="rounded-xl bg-white px-4 py-3 font-black text-black disabled:opacity-40"
+                          >
+                            {savingId === video.mediaId
+                              ? "Saving..."
+                              : "Save Changes"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void quickToggle(
+                                video,
+                                "published"
+                              )
+                            }
+                            disabled={busy}
+                            className={`rounded-xl px-4 py-3 font-black disabled:opacity-40 ${
+                              video.published
+                                ? "border border-amber-300/20 bg-amber-400/10 text-amber-100"
+                                : "bg-emerald-400 text-black"
+                            }`}
+                          >
+                            {video.published
+                              ? "Unpublish"
+                              : "Publish"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void quickToggle(
+                                video,
+                                "homepageEnabled"
+                              )
+                            }
+                            disabled={busy}
+                            className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 font-black text-cyan-100 disabled:opacity-40"
+                          >
+                            Homepage{" "}
+                            {video.homepageEnabled
+                              ? "OFF"
+                              : "ON"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void quickToggle(
+                                video,
+                                "premiumTvEnabled"
+                              )
+                            }
+                            disabled={busy}
+                            className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/10 px-4 py-3 font-black text-fuchsia-100 disabled:opacity-40"
+                          >
+                            Premium TV{" "}
+                            {video.premiumTvEnabled
+                              ? "OFF"
+                              : "ON"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void quickToggle(
+                                video,
+                                "featured"
+                              )
+                            }
+                            disabled={busy}
+                            className="rounded-xl border border-yellow-300/20 bg-yellow-400/10 px-4 py-3 font-black text-yellow-100 disabled:opacity-40"
+                          >
+                            {video.featured
+                              ? "Remove Featured"
+                              : "Make Featured"}
+                          </button>
+
+                          <label
+                            className={`cursor-pointer rounded-xl border border-blue-300/25 bg-blue-400/10 px-4 py-3 font-black text-blue-200 ${
+                              busy
+                                ? "pointer-events-none opacity-40"
+                                : ""
+                            }`}
+                          >
+                            REPLACE MP4
+
+                            <input
+                              type="file"
+                              accept="video/mp4,.mp4"
+                              className="hidden"
+                              disabled={busy}
+                              onChange={(event) =>
+                                handleReplacementFileChange(
+                                  video,
+                                  event
+                                )
+                              }
+                            />
+                          </label>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void deleteVideo(video)
+                            }
+                            disabled={busy}
+                            className="rounded-xl border border-red-300/25 bg-red-400/10 px-4 py-3 font-black text-red-200 disabled:opacity-40"
+                          >
+                            {deletingId === video.mediaId
+                              ? "Deleting..."
+                              : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -389,6 +389,11 @@ export default function PremiumRadioPage() {
   const [businessCampaigns, setBusinessCampaigns] =
     useState<SponsoredBusinessCampaign[]>([]);
 
+  const [radioOnAir, setRadioOnAir] =
+    useState<boolean | null>(null);
+  const [broadcastError, setBroadcastError] =
+    useState("");
+
   const stationTracks = useMemo(
     () => [
       ...premiumAlbums.flatMap((album) =>
@@ -447,6 +452,90 @@ export default function PremiumRadioPage() {
   const isPublicPreview =
     accessState !== "loading" &&
     !hasPremiumAccess;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRadioBroadcastStatus() {
+      try {
+        const response = await fetch("/api/broadcast/status", {
+          cache: "no-store",
+        });
+
+        const contentType =
+          response.headers.get("content-type") || "";
+
+        if (!contentType.includes("application/json")) {
+          throw new Error(
+            "Radio broadcast status returned an invalid response."
+          );
+        }
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.error || "Radio broadcast status could not be loaded."
+          );
+        }
+
+        if (!cancelled) {
+          setBroadcastError("");
+          setRadioOnAir(
+            typeof data.radioOnAir === "boolean"
+              ? data.radioOnAir
+              : true
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Premium Radio broadcast status error:",
+          error
+        );
+
+        if (!cancelled) {
+          setRadioOnAir(null);
+          setBroadcastError(
+            error instanceof Error
+              ? error.message
+              : "Radio broadcast status could not be loaded."
+          );
+        }
+      }
+    }
+
+    void loadRadioBroadcastStatus();
+
+    const intervalId = window.setInterval(() => {
+      void loadRadioBroadcastStatus();
+    }, 5000);
+
+    const handleFocus = () => {
+      void loadRadioBroadcastStatus();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (radioOnAir !== false) return;
+
+    const audio = audioRef.current;
+
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+
+    setCurrentTime(0);
+    setIsPlaying(false);
+  }, [radioOnAir]);
 
   useEffect(() => {
     try {
@@ -850,6 +939,105 @@ export default function PremiumRadioPage() {
     }
   }
 
+  if (radioOnAir === null && !broadcastError) {
+    return (
+      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+        <section className="mx-auto max-w-5xl rounded-[2rem] border border-cyan-300/15 bg-gradient-to-br from-cyan-500/10 via-white/[0.035] to-violet-500/10 p-10 text-center shadow-2xl">
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-cyan-300">
+            SOLO BEATS PREMIUM RADIO
+          </p>
+          <h1 className="mt-3 text-4xl font-black">
+            Checking station status...
+          </h1>
+          <p className="mt-4 text-white/55">
+            Confirming whether Premium Radio is currently on air.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (broadcastError) {
+    return (
+      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+        <section className="mx-auto max-w-5xl rounded-[2rem] border border-amber-300/20 bg-gradient-to-br from-amber-500/15 via-white/[0.035] to-red-500/10 p-10 text-center shadow-2xl">
+          <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-300">
+            PREMIUM RADIO STATUS
+          </p>
+          <h1 className="mt-3 text-4xl font-black">
+            Station status unavailable
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-white/60">
+            Premium Radio cannot start until the broadcast status can be confirmed.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-red-200/80">
+            {broadcastError}
+          </p>
+          <div className="mt-7 flex flex-wrap justify-center gap-3">
+            <Link
+              href="/premium"
+              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+            >
+              Premium Home
+            </Link>
+            <Link
+              href="/"
+              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+            >
+              Home
+            </Link>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (radioOnAir === false) {
+    return (
+      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+        <section className="mx-auto max-w-5xl overflow-hidden rounded-[2.5rem] border border-red-300/20 bg-gradient-to-br from-red-500/15 via-black/50 to-violet-500/15 p-10 text-center shadow-2xl sm:p-14">
+          <div className="mx-auto inline-flex items-center gap-3 rounded-full border border-red-300/25 bg-red-400/10 px-4 py-2">
+            <span className="h-3 w-3 rounded-full bg-red-400" />
+            <span className="text-xs font-black uppercase tracking-[0.2em] text-red-200">
+              OFF AIR
+            </span>
+          </div>
+
+          <p className="mt-8 text-sm font-black uppercase tracking-[0.22em] text-violet-300">
+            SOLO BEATS ENGINE MUSIC
+          </p>
+
+          <h1 className="mt-3 text-4xl font-black sm:text-6xl">
+            PREMIUM RADIO IS OFF AIR
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/60">
+            Premium Radio is temporarily unavailable. Please check back when the station is back on air.
+          </p>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Link
+              href="/premium"
+              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+            >
+              Premium Home
+            </Link>
+            <Link
+              href="/"
+              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+            >
+              Home
+            </Link>
+          </div>
+
+          <p className="mt-8 text-sm text-white/35">
+            This page automatically checks the station status and will become available again when Radio is placed back ON AIR.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (accessState === "loading") {
     return (
       <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
@@ -1238,6 +1426,7 @@ export default function PremiumRadioPage() {
     </main>
   );
 }
+
 
 
 

@@ -111,6 +111,15 @@ export default function OwnerDashboardPage() {
   const [premiumSummary, setPremiumSummary] = useState<PremiumSummary | null>(null);
   const [loadingPremium, setLoadingPremium] = useState(false);
   const [premiumError, setPremiumError] = useState("");
+  const [broadcastStatus, setBroadcastStatus] = useState<{
+    radioOnAir: boolean;
+    tvOnAir: boolean;
+  } | null>(null);
+  const [loadingBroadcast, setLoadingBroadcast] = useState(false);
+  const [savingBroadcast, setSavingBroadcast] = useState<
+    "radio" | "tv" | null
+  >(null);
+  const [broadcastError, setBroadcastError] = useState("");
 
   const selectedAlbum = useMemo(
     () =>
@@ -243,6 +252,62 @@ export default function OwnerDashboardPage() {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) return;
+
+    const currentUser = user;
+    let cancelled = false;
+
+    async function loadBroadcastStatus() {
+      setLoadingBroadcast(true);
+      setBroadcastError("");
+
+      try {
+        const token = await currentUser.getIdToken();
+
+        const response = await fetch("/api/owner/broadcast", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error || "Broadcast status could not be loaded."
+          );
+        }
+
+        if (!cancelled) {
+          setBroadcastStatus({
+            radioOnAir: Boolean(data.radioOnAir),
+            tvOnAir: Boolean(data.tvOnAir),
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBroadcastError(
+            error instanceof Error
+              ? error.message
+              : "Broadcast status could not be loaded."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingBroadcast(false);
+        }
+      }
+    }
+
+    void loadBroadcastStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const selectedAlbumResults = useMemo(() => {
     if (!selectedAlbum) return [];
 
@@ -364,7 +429,7 @@ export default function OwnerDashboardPage() {
       await testDownload(
         "album",
         selectedAlbum.id,
-        `${selectedAlbum.title} â€” Full Album`
+        `${selectedAlbum.title} — Full Album`
       );
 
       for (const track of selectedAlbum.tracks) {
@@ -389,7 +454,7 @@ export default function OwnerDashboardPage() {
         await testDownload(
           "album",
           album.id,
-          `${album.title} â€” Full Album`
+          `${album.title} — Full Album`
         );
 
         for (const track of album.tracks) {
@@ -402,6 +467,69 @@ export default function OwnerDashboardPage() {
       }
     } finally {
       setTestingCatalog(false);
+    }
+  }
+
+  async function updateBroadcastStatus(
+    service: "radio" | "tv",
+    onAir: boolean
+  ) {
+    if (!user || !broadcastStatus || savingBroadcast) return;
+
+    setSavingBroadcast(service);
+    setBroadcastError("");
+
+    const nextRadioOnAir =
+      service === "radio"
+        ? onAir
+        : broadcastStatus.radioOnAir;
+
+    const nextTvOnAir =
+      service === "tv"
+        ? onAir
+        : broadcastStatus.tvOnAir;
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch("/api/owner/broadcast", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          radioOnAir: nextRadioOnAir,
+          tvOnAir: nextTvOnAir,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.error || "Broadcast status could not be updated."
+        );
+      }
+
+      setBroadcastStatus({
+        radioOnAir:
+          typeof data.radioOnAir === "boolean"
+            ? data.radioOnAir
+            : nextRadioOnAir,
+        tvOnAir:
+          typeof data.tvOnAir === "boolean"
+            ? data.tvOnAir
+            : nextTvOnAir,
+      });
+    } catch (error) {
+      setBroadcastError(
+        error instanceof Error
+          ? error.message
+          : "Broadcast status could not be updated."
+      );
+    } finally {
+      setSavingBroadcast(null);
     }
   }
 
@@ -491,10 +619,10 @@ export default function OwnerDashboardPage() {
                 SOLO BEATS ENGINE MUSIC
               </p>
               <h1 className="mt-3 text-4xl font-black sm:text-6xl">
-                Owner Dashboard
+                Owner Control Center
               </h1>
               <p className="mt-4 max-w-3xl text-white/65">
-                Manage the music catalog, test secure downloads, review platform activity, and open the tools used to run the business.
+                Run SOLO BEATS ENGINE MUSIC from one central control center. Manage albums, media, Store activity, Premium, Radio, TV, customers, sales, promotions, advertising, and platform operations.
               </p>
             </div>
 
@@ -578,7 +706,7 @@ export default function OwnerDashboardPage() {
                 Run the entire platform from one place
               </h2>
               <p className="mt-3 max-w-3xl text-white/55">
-                Open every major customer, catalog, Premium, promotion, advertising, and storefront tool with one click.
+                Music, Store, Premium, Radio, TV, sales, customers, promotions, advertising, and owner operations are grouped below for fast access.
               </p>
             </div>
 
@@ -590,122 +718,345 @@ export default function OwnerDashboardPage() {
             </Link>
           </div>
 
-          <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ManagementLink
-              title="Music Catalog"
-              description="Albums, tracks, prices, covers, release status, and catalog review."
-              href="/developer/catalog"
-              action="Manage Catalog"
-              badge="Catalog"
-            />
-            <ManagementLink
-              title="Orders"
-              description="Completed PayPal purchases, order details, items, and revenue."
-              href="/developer/orders"
-              action="Open Orders"
-              badge="Sales"
-            />
-            <ManagementLink
-              title="Customers"
-              description="Customer accounts, purchases, spending, and My Music ownership."
-              href="/developer/customers"
-              action="Open Customers"
-              badge="Accounts"
-            />
-            <ManagementLink
-              title="Premium Members"
-              description="Subscriptions, billing status, active members, and download usage."
-              href="#premium-members"
-              action="View Members"
-              badge="Premium"
-            />
-            <ManagementLink
-              title="Premium Radio"
-              description="Open and test the live Premium Radio experience."
-              href="/premium/radio"
-              action="Open Radio"
-              badge="Live"
-            />
-            <ManagementLink
-              title="Premium TV"
-              description="Open and test Premium TV, visualizer, queue, and sponsored placements."
-              href="/premium/tv"
-              action="Open TV"
-              badge="Live"
-            />
-            <ManagementLink
-              title="Artist Promotions"
-              description="Review submissions, approve campaigns, and schedule promoted music."
-              href="/developer/artist-promotions"
-              action="Manage Promotions"
-              badge="Promotion"
-            />
-            <ManagementLink
-              title="Business Advertising"
-              description="Review, approve, price, and schedule sponsored business campaigns."
-              href="/developer/business-advertising"
-              action="Manage Advertising"
-              badge="Advertising"
-            />
-            <ManagementLink
-              title="Public Artist Submission"
-              description="Open the public page independent artists use to submit paid promotions."
-              href="/artist-promotion"
-              action="Open Submission Page"
-              badge="Public"
-            />
-            <ManagementLink
-              title="Public Business Submission"
-              description="Open the campaign submission page used by businesses and advertisers."
-              href="/business-advertising"
-              action="Open Submission Page"
-              badge="Public"
-            />
-            <ManagementLink
-              title="Flagship Album"
-              description="Review the live No Tomorrow flagship, previews, and Premium call to action."
-              href="/"
-              action="View No Tomorrow"
-              badge="Featured"
-            />
-            <ManagementLink
-              title="Storefront"
-              description="Review albums, tracks, sponsored campaigns, checkout, and customer shopping."
-              href="/store"
-              action="Open Store"
-              badge="Store"
-            />
-            <ManagementLink
-              title="My Music"
-              description="Test the customer-owned library and secure download experience."
-              href="/my-music"
-              action="Open My Music"
-              badge="Library"
-            />
-            <ManagementLink
-              title="Premium Signup"
-              description="Review the Premium offer, benefits, subscription flow, and early access messaging."
-              href="/premium"
-              action="Open Premium"
-              badge="Subscription"
-            />
-            <ManagementLink
-              title="Owner Account"
-              description="Review the signed-in owner account and access details."
-              href="/account"
-              action="Open Account"
-              badge="Security"
-            />
-            <ManagementLink
-              title="Download Testing"
-              description="Jump directly to the secure Firebase download tester on this dashboard."
-              href="#download-tester"
-              action="Open Tester"
-              badge="Developer"
-            />
+          <div className="mt-8">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-300">
+              Music
+            </p>
+            <h3 className="mt-2 text-2xl font-black">Music & Media Control</h3>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <ManagementLink
+                title="Album Manager"
+                description="Create albums, upload artwork and audio, edit metadata and tracks, control Draft, Upcoming, Released and Premium status, and publish to the Store."
+                href="/developer/albums"
+                action="Open Album Manager"
+                badge="Music Control"
+              />
+              <ManagementLink
+                title="Media Library"
+                description="Manage uploaded audio, artwork, video, promotional media, and reusable platform assets."
+                href="/developer/media"
+                action="Open Media Library"
+                badge="Media"
+              />
+              <ManagementLink
+                title="Video Manager"
+                description="Upload MP4 videos, preview content, control publishing, Homepage Channel, Premium TV, Featured status, source type, ordering, and deletion."
+                href="/developer/videos"
+                action="Open Video Manager"
+                badge="Video Control"
+              />
+              <ManagementLink
+                title="Music Catalog"
+                description="Review albums, tracks, prices, covers, release status, track counts, and catalog information."
+                href="/developer/catalog"
+                action="Manage Catalog"
+                badge="Catalog"
+              />
+            </div>
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-8">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">
+              Store & Sales
+            </p>
+            <h3 className="mt-2 text-2xl font-black">Store, Orders & Customers</h3>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <ManagementLink
+                title="Storefront"
+                description="Review public albums, tracks, pricing, purchase controls, previews, tracklists, checkout, and shopping."
+                href="/store"
+                action="Open Store"
+                badge="Store"
+              />
+              <ManagementLink
+                title="Orders"
+                description="Review completed PayPal purchases, payment details, purchased items, and revenue."
+                href="/developer/orders"
+                action="Open Orders"
+                badge="Sales"
+              />
+              <ManagementLink
+                title="Customers"
+                description="Review customer accounts, purchase history, spending, ownership, and My Music access."
+                href="/developer/customers"
+                action="Open Customers"
+                badge="Accounts"
+              />
+              <ManagementLink
+                title="My Music"
+                description="Test the customer-owned music library and secure download experience."
+                href="/my-music"
+                action="Open My Music"
+                badge="Library"
+              />
+            </div>
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-8">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">
+              Premium
+            </p>
+            <h3 className="mt-2 text-2xl font-black">Premium Membership Control</h3>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <ManagementLink
+                title="Premium Members"
+                description="Review active and inactive subscriptions, billing status, subscription records, and monthly download usage."
+                href="#premium-members"
+                action="View Premium Members"
+                badge="Premium"
+              />
+              <ManagementLink
+                title="Premium Library"
+                description="Open and test the subscriber-only Premium music library and member access."
+                href="/premium/library"
+                action="Open Premium Library"
+                badge="Premium"
+              />
+              <ManagementLink
+                title="Premium Signup"
+                description="Review the Premium offer, benefits, subscription flow, pricing, and customer signup experience."
+                href="/premium"
+                action="Open Premium"
+                badge="Subscription"
+              />
+            </div>
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-8">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-fuchsia-300">
+              Radio & TV
+            </p>
+            <h3 className="mt-2 text-2xl font-black">Broadcast & Programming</h3>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <ManagementLink
+                title="Premium Radio"
+                description="Open Premium Radio, test playback and programming, and access the station experience."
+                href="/premium/radio"
+                action="Open Radio"
+                badge="Radio"
+              />
+              <ManagementLink
+                title="Premium TV"
+                description="Open Premium TV, visual programming, queue, visualizers, and sponsored placements."
+                href="/premium/tv"
+                action="Open TV"
+                badge="TV"
+              />
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="rounded-[1.5rem] border border-emerald-300/15 bg-black/20 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
+                      Premium Radio
+                    </p>
+                    <h4 className="mt-2 text-xl font-black">
+                      Radio Broadcast Control
+                    </h4>
+                  </div>
+
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-black ${
+                      broadcastStatus?.radioOnAir
+                        ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-200"
+                        : "border-red-300/30 bg-red-400/15 text-red-200"
+                    }`}
+                  >
+                    {loadingBroadcast || !broadcastStatus
+                      ? "LOADING"
+                      : broadcastStatus.radioOnAir
+                        ? "ON AIR"
+                        : "OFF AIR"}
+                  </span>
+                </div>
+
+                <p className="mt-3 text-sm text-white/50">
+                  Master owner switch for Premium Radio availability.
+                </p>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateBroadcastStatus("radio", true)
+                    }
+                    disabled={
+                      loadingBroadcast ||
+                      !broadcastStatus ||
+                      savingBroadcast !== null ||
+                      broadcastStatus.radioOnAir
+                    }
+                    className="rounded-xl bg-emerald-400 px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {savingBroadcast === "radio"
+                      ? "Saving..."
+                      : "ON AIR"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateBroadcastStatus("radio", false)
+                    }
+                    disabled={
+                      loadingBroadcast ||
+                      !broadcastStatus ||
+                      savingBroadcast !== null ||
+                      !broadcastStatus.radioOnAir
+                    }
+                    className="rounded-xl border border-red-300/25 bg-red-400/10 px-4 py-3 font-black text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {savingBroadcast === "radio"
+                      ? "Saving..."
+                      : "OFF AIR"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-fuchsia-300/15 bg-black/20 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-fuchsia-300">
+                      Premium TV
+                    </p>
+                    <h4 className="mt-2 text-xl font-black">
+                      TV Broadcast Control
+                    </h4>
+                  </div>
+
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-black ${
+                      broadcastStatus?.tvOnAir
+                        ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-200"
+                        : "border-red-300/30 bg-red-400/15 text-red-200"
+                    }`}
+                  >
+                    {loadingBroadcast || !broadcastStatus
+                      ? "LOADING"
+                      : broadcastStatus.tvOnAir
+                        ? "ON AIR"
+                        : "OFF AIR"}
+                  </span>
+                </div>
+
+                <p className="mt-3 text-sm text-white/50">
+                  Master owner switch for Premium TV availability.
+                </p>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateBroadcastStatus("tv", true)
+                    }
+                    disabled={
+                      loadingBroadcast ||
+                      !broadcastStatus ||
+                      savingBroadcast !== null ||
+                      broadcastStatus.tvOnAir
+                    }
+                    className="rounded-xl bg-emerald-400 px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {savingBroadcast === "tv"
+                      ? "Saving..."
+                      : "ON AIR"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void updateBroadcastStatus("tv", false)
+                    }
+                    disabled={
+                      loadingBroadcast ||
+                      !broadcastStatus ||
+                      savingBroadcast !== null ||
+                      !broadcastStatus.tvOnAir
+                    }
+                    className="rounded-xl border border-red-300/25 bg-red-400/10 px-4 py-3 font-black text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {savingBroadcast === "tv"
+                      ? "Saving..."
+                      : "OFF AIR"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {broadcastError ? (
+              <p className="mt-4 rounded-xl border border-red-300/20 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-200">
+                {broadcastError}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-8">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-300">
+              Promotion & Advertising
+            </p>
+            <h3 className="mt-2 text-2xl font-black">Campaign Management</h3>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <ManagementLink
+                title="Artist Promotions"
+                description="Review artist submissions, approvals, payments, campaign status, and scheduled placements."
+                href="/developer/artist-promotions"
+                action="Manage Promotions"
+                badge="Promotion"
+              />
+              <ManagementLink
+                title="Business & Video Ads"
+                description="Review business and video advertising submissions, approvals, pricing, payments, and schedules."
+                href="/developer/business-advertising"
+                action="Manage Advertising"
+                badge="Advertising"
+              />
+              <ManagementLink
+                title="Artist Submission Page"
+                description="Open the public page artists use to submit paid music promotion campaigns."
+                href="/artist-promotion"
+                action="View Public Page"
+                badge="Public"
+              />
+              <ManagementLink
+                title="Business Submission Page"
+                description="Open the public page businesses and advertisers use to submit campaigns."
+                href="/business-advertising"
+                action="View Public Page"
+                badge="Public"
+              />
+            </div>
+          </div>
+
+          <div className="mt-10 border-t border-white/10 pt-8">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
+              Owner Tools
+            </p>
+            <h3 className="mt-2 text-2xl font-black">Account & System Testing</h3>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <ManagementLink
+                title="Owner Account"
+                description="Review the signed-in owner account, authentication, email, and access information."
+                href="/account"
+                action="Open Account"
+                badge="Security"
+              />
+              <ManagementLink
+                title="Secure Download Testing"
+                description="Jump directly to the Firebase album and track download tester on this Control Center."
+                href="#download-tester"
+                action="Open Tester"
+                badge="Developer"
+              />
+            </div>
           </div>
         </section>
-
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <DashboardStat label="Catalog albums" value={albums.length} />
           <DashboardStat label="Released" value={releasedAlbums.length} />
@@ -1129,7 +1480,7 @@ export default function OwnerDashboardPage() {
               >
                 {albums.map((album) => (
                   <option key={album.id} value={album.id}>
-                    {album.title} â€” {album.tracks.length} tracks
+                    {album.title} — {album.tracks.length} tracks
                   </option>
                 ))}
               </select>
@@ -1171,7 +1522,7 @@ export default function OwnerDashboardPage() {
 
           <div className="mt-8 grid gap-3">
             <ResultRow
-              title={`${selectedAlbum.title} â€” Full Album`}
+              title={`${selectedAlbum.title} — Full Album`}
               result={
                 results[
                   makeResultKey("album", selectedAlbum.id)
@@ -1181,7 +1532,7 @@ export default function OwnerDashboardPage() {
                 testDownload(
                   "album",
                   selectedAlbum.id,
-                  `${selectedAlbum.title} â€” Full Album`
+                  `${selectedAlbum.title} — Full Album`
                 )
               }
               disabled={testingAll || testingCatalog}
@@ -1417,6 +1768,10 @@ function ResultRow({
     </article>
   );
 }
+
+
+
+
 
 
 

@@ -1,4 +1,6 @@
-"use client";
+﻿"use client";
+
+import HomepageVideoChannel from "./components/HomepageVideoChannel";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -606,6 +608,8 @@ export default function AlbumsPage() {
             </article>
           </div>
         </section>
+        <HomepageVideoChannel />
+
         <h1 className="text-center text-4xl font-black md:text-6xl">
           SOLO BEATS ALBUMS
         </h1>
@@ -1252,6 +1256,8 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
 
 
 
