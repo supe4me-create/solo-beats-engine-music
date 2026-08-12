@@ -787,8 +787,8 @@ export default function AlbumsPage() {
               </h2>
 
               <p className="mt-4 text-lg text-white/55">
-                {flagshipStatus} â€¢ {flagshipTrackCount}{" "}
-                {flagshipTrackCount === 1 ? "Track" : "Tracks"} â€¢{" "}
+                {flagshipStatus} {"\u2022"} {flagshipTrackCount}{" "}
+                {flagshipTrackCount === 1 ? "Track" : "Tracks"} {"\u2022"}{" "}
                 {flagshipArtist}
               </p>
 
@@ -1201,11 +1201,11 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album â€¢ Solo Beats
+                          Upcoming Album {"\u2022"} Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} â€¢ {album.tracks}
+                          {album.year} {"\u2022"} {album.tracks}
                         </p>
 
                         <button
@@ -1309,7 +1309,7 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Released Album â€¢ Solo Beats
+                          Released Album {"\u2022"} Solo Beats
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1405,6 +1405,9 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
+
 
 
 
