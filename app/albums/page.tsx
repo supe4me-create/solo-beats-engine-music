@@ -14,10 +14,28 @@ type Album = {
   audio?: string;
   link?: string;
   genre?: string;
+  status?: "released" | "upcoming";
 };
 
 function normalizeAlbumTitle(title: string) {
   return title.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function mergeAlbumLists(
+  fallbackAlbums: Album[],
+  managedAlbums: Album[]
+) {
+  const merged = new Map<string, Album>();
+
+  fallbackAlbums.forEach((album) => {
+    merged.set(normalizeAlbumTitle(album.title), album);
+  });
+
+  managedAlbums.forEach((album) => {
+    merged.set(normalizeAlbumTitle(album.title), album);
+  });
+
+  return Array.from(merged.values());
 }
 
 function getAlbumLink(album: Album) { return "/store"; }
@@ -36,7 +54,7 @@ function getAlbumPreview(album: Album) {
   );
 }
 
-const upcomingAlbums: Album[] = [
+const fallbackUpcomingAlbums: Album[] = [
   {
     title: "Dark Horse",
     year: "2026",
@@ -84,7 +102,7 @@ const upcomingAlbums: Album[] = [
   },
 ];
 
-const releasedAlbums: Album[] = [
+const fallbackReleasedAlbums: Album[] = [
   {
     title: "Neon Lights",
     image: "/covers/neonlights.jpg",
@@ -183,18 +201,6 @@ const releasedAlbums: Album[] = [
 
 const ALBUMS_PER_PAGE = 8;
 
-const genres = [
-  "All Genres",
-  ...Array.from(
-    new Set(
-      [...upcomingAlbums, ...releasedAlbums]
-        .map((album) => album.genre)
-        .filter((genre): genre is string => Boolean(genre))
-    )
-  ).sort((a, b) => a.localeCompare(b)),
-];
-
-
 export default function AlbumsPage() {
   const {
     currentTrack,
@@ -209,6 +215,28 @@ export default function AlbumsPage() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [managedAlbums, setManagedAlbums] = useState<Album[]>([]);
+
+  const upcomingAlbums = mergeAlbumLists(
+    fallbackUpcomingAlbums,
+    managedAlbums.filter((album) => album.status === "upcoming")
+  );
+
+  const releasedAlbums = mergeAlbumLists(
+    fallbackReleasedAlbums,
+    managedAlbums.filter((album) => album.status === "released")
+  );
+
+  const genres = [
+    "All Genres",
+    ...Array.from(
+      new Set(
+        [...upcomingAlbums, ...releasedAlbums]
+          .map((album) => album.genre)
+          .filter((genre): genre is string => Boolean(genre))
+      )
+    ).sort((a, b) => a.localeCompare(b)),
+  ];
 
   function sortAlbums(albums: Album[]) {
     const sortedAlbums = [...albums];
@@ -298,6 +326,94 @@ export default function AlbumsPage() {
     lastAlbumIndex
   );
   const noResults = totalVisibleAlbums === 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadManagedAlbums() {
+      try {
+        const response = await fetch("/api/catalog/albums", {
+          cache: "no-store",
+        });
+
+        const data = (await response.json()) as {
+          success?: boolean;
+          albums?: Array<{
+            id?: string;
+            albumId?: string;
+            title?: string;
+            artist?: string;
+            year?: number;
+            genre?: string;
+            status?: "released" | "upcoming";
+            cover?: string | null;
+            coverUrl?: string | null;
+            albumPreview?: string | null;
+            albumPreviewUrl?: string | null;
+            pageLink?: string;
+            trackCount?: number;
+          }>;
+        };
+
+        if (
+          cancelled ||
+          !response.ok ||
+          !data.success ||
+          !Array.isArray(data.albums)
+        ) {
+          return;
+        }
+
+        const nextAlbums: Album[] = data.albums
+          .filter(
+            (album) =>
+              typeof album.title === "string" &&
+              album.title.trim().length > 0
+          )
+          .map((album) => {
+            const trackCount = Number(album.trackCount || 0);
+
+            return {
+              title: album.title!.trim(),
+              image:
+                album.coverUrl ||
+                album.cover ||
+                "/covers/default-album.png",
+              year: album.year ? String(album.year) : undefined,
+              tracks:
+                trackCount > 0
+                  ? `${trackCount} ${trackCount === 1 ? "Track" : "Tracks"}`
+                  : undefined,
+              audio:
+                album.albumPreviewUrl ||
+                album.albumPreview ||
+                undefined,
+              link:
+                album.pageLink ||
+                `/albums/${album.albumId || album.id || ""}`,
+              genre: album.genre || "Electronic",
+              status:
+                album.status === "released"
+                  ? "released"
+                  : "upcoming",
+            };
+          });
+
+        setManagedAlbums(nextAlbums);
+      } catch (error) {
+        console.error(
+          "Dashboard albums could not be loaded:",
+          error
+        );
+      }
+    }
+
+    void loadManagedAlbums();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -766,6 +882,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 

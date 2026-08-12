@@ -15,7 +15,11 @@ type PremiumTvVideo = {
   sourceType: string;
   featured: boolean;
   displayOrder: number;
-  videoUrl: string;
+  videoSource: "upload" | "youtube";
+  youtubeVideoId: string | null;
+  youtubeUrl: string | null;
+  youtubeEmbedUrl: string | null;
+  videoUrl: string | null;
 };
 
 function text(
@@ -38,6 +42,21 @@ function numberValue(
     : fallback;
 }
 
+function youtubeEmbedUrl(
+  videoId: unknown
+) {
+  if (
+    typeof videoId !== "string" ||
+    !/^[A-Za-z0-9_-]{11}$/.test(
+      videoId
+    )
+  ) {
+    return null;
+  }
+
+  return `https://www.youtube.com/embed/${videoId}`;
+}
+
 export async function GET() {
   try {
     const snapshot =
@@ -45,91 +64,198 @@ export async function GET() {
         .collection("mediaLibrary")
         .get();
 
-    const candidates = snapshot.docs
-      .map((doc) => ({
-        mediaId: doc.id,
-        ...doc.data(),
-      }))
-      .filter((item) => {
-    const data =
-      item as Record<string, unknown>;
+    const candidates =
+      snapshot.docs
+        .map((doc) => ({
+          mediaId: doc.id,
+          ...doc.data(),
+        }))
+        .filter((item) => {
+          const data =
+            item as Record<
+              string,
+              unknown
+            >;
 
-    const now = Date.now();
+          const now =
+            Date.now();
 
-    const scheduleStart =
-      typeof data.tvScheduleStart === "string" &&
-      data.tvScheduleStart.trim()
-        ? Date.parse(data.tvScheduleStart)
-        : null;
+          const scheduleStart =
+            typeof data.tvScheduleStart ===
+              "string" &&
+            data.tvScheduleStart.trim()
+              ? Date.parse(
+                  data.tvScheduleStart
+                )
+              : null;
 
-    const scheduleEnd =
-      typeof data.tvScheduleEnd === "string" &&
-      data.tvScheduleEnd.trim()
-        ? Date.parse(data.tvScheduleEnd)
-        : null;
+          const scheduleEnd =
+            typeof data.tvScheduleEnd ===
+              "string" &&
+            data.tvScheduleEnd.trim()
+              ? Date.parse(
+                  data.tvScheduleEnd
+                )
+              : null;
 
-    const scheduleStarted =
-      scheduleStart === null ||
-      !Number.isFinite(scheduleStart) ||
-      now >= scheduleStart;
+          const scheduleStarted =
+            scheduleStart === null ||
+            !Number.isFinite(
+              scheduleStart
+            ) ||
+            now >= scheduleStart;
 
-    const scheduleNotEnded =
-      scheduleEnd === null ||
-      !Number.isFinite(scheduleEnd) ||
-      now < scheduleEnd;
+          const scheduleNotEnded =
+            scheduleEnd === null ||
+            !Number.isFinite(
+              scheduleEnd
+            ) ||
+            now < scheduleEnd;
 
-    return (
-      data.published === true &&
-      data.premiumTvEnabled === true &&
-      scheduleStarted &&
-      scheduleNotEnded &&
-      (
-        data.kind === "video" ||
-        data.mimeType === "video/mp4" ||
-        text(data.originalName)
-          .toLowerCase()
-          .endsWith(".mp4")
-      ) &&
-      typeof data.storagePath ===
-        "string" &&
-      data.storagePath.length > 0
-    );
-  })
-  .sort((a, b) => {
-        const first =
-          a as Record<string, unknown>;
+          const isYoutube =
+            data.videoSource ===
+              "youtube" &&
+            typeof data.youtubeVideoId ===
+              "string" &&
+            /^[A-Za-z0-9_-]{11}$/.test(
+              data.youtubeVideoId
+            );
 
-        const second =
-          b as Record<string, unknown>;
+          const hasStorage =
+            typeof data.storagePath ===
+              "string" &&
+            data.storagePath.length >
+              0;
 
-        const featuredDifference =
-          Number(
-            second.featured === true
-          ) -
-          Number(
-            first.featured === true
+          return (
+            data.published === true &&
+            data.premiumTvEnabled ===
+              true &&
+            scheduleStarted &&
+            scheduleNotEnded &&
+            data.kind === "video" &&
+            (
+              isYoutube ||
+              hasStorage
+            )
           );
+        })
+        .sort((a, b) => {
+          const first =
+            a as Record<
+              string,
+              unknown
+            >;
 
-        if (featuredDifference !== 0) {
-          return featuredDifference;
-        }
+          const second =
+            b as Record<
+              string,
+              unknown
+            >;
 
-        return (
-          numberValue(
-            first.displayOrder
-          ) -
-          numberValue(
-            second.displayOrder
-          )
-        );
-      });
+          const featuredDifference =
+            Number(
+              second.featured === true
+            ) -
+            Number(
+              first.featured === true
+            );
+
+          if (
+            featuredDifference !== 0
+          ) {
+            return featuredDifference;
+          }
+
+          return (
+            numberValue(
+              first.displayOrder
+            ) -
+            numberValue(
+              second.displayOrder
+            )
+          );
+        });
 
     const videos:
       PremiumTvVideo[] = [];
 
-    for (const item of candidates) {
+    for (
+      const item of candidates
+    ) {
       const data =
-        item as Record<string, unknown>;
+        item as Record<
+          string,
+          unknown
+        >;
+
+      const isYoutube =
+        data.videoSource ===
+          "youtube" &&
+        typeof data.youtubeVideoId ===
+          "string";
+
+      if (isYoutube) {
+        const embed =
+          youtubeEmbedUrl(
+            data.youtubeVideoId
+          );
+
+        if (!embed) {
+          continue;
+        }
+
+        videos.push({
+          mediaId:
+            text(data.mediaId),
+
+          title:
+            text(
+              data.title,
+              "SOLO BEATS Video"
+            ),
+
+          description:
+            text(
+              data.description
+            ),
+
+          sourceType:
+            text(
+              data.sourceType,
+              "solo-beats"
+            ),
+
+          featured:
+            data.featured === true,
+
+          displayOrder:
+            numberValue(
+              data.displayOrder
+            ),
+
+          videoSource:
+            "youtube",
+
+          youtubeVideoId:
+            text(
+              data.youtubeVideoId
+            ),
+
+          youtubeUrl:
+            typeof data.youtubeUrl ===
+              "string"
+              ? data.youtubeUrl
+              : null,
+
+          youtubeEmbedUrl:
+            embed,
+
+          videoUrl: null,
+        });
+
+        continue;
+      }
 
       const storagePath =
         text(data.storagePath);
@@ -148,24 +274,44 @@ export async function GET() {
         videos.push({
           mediaId:
             text(data.mediaId),
+
           title:
             text(
               data.title,
               "SOLO BEATS Video"
             ),
+
           description:
-            text(data.description),
+            text(
+              data.description
+            ),
+
           sourceType:
             text(
               data.sourceType,
               "solo-beats"
             ),
+
           featured:
             data.featured === true,
+
           displayOrder:
             numberValue(
               data.displayOrder
             ),
+
+          videoSource:
+            "upload",
+
+          youtubeVideoId:
+            null,
+
+          youtubeUrl:
+            null,
+
+          youtubeEmbedUrl:
+            null,
+
           videoUrl,
         });
       } catch (error) {
@@ -181,7 +327,8 @@ export async function GET() {
       {
         success: true,
         videos,
-        count: videos.length,
+        count:
+          videos.length,
       },
       {
         headers: {
@@ -209,4 +356,3 @@ export async function GET() {
     );
   }
 }
-

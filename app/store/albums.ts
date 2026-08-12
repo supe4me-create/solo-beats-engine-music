@@ -220,9 +220,9 @@ const albumCatalog: Album[] = [
       { title: "Volt Rush", fileName: "1 Volt Rush.mp3" },
       { title: "No Hero", fileName: "2 No Hero.mp3" },
       { title: "Hot Bullet", fileName: "3 Hot Bullet.mp3" },
-      { title: "Break the Floor", fileName: "4 Break the Floor (1).wav" },
+      { title: "Break the Floor", fileName: "4 Break the Floor.mp3" },
       { title: "Lonely Beat", fileName: "5 Lonely Beat.mp3" },
-      { title: "Reboot", fileName: "6 Reboot .wav" },
+      { title: "Reboot", fileName: "6 Reboot.mp3" },
       { title: "Pure Love", fileName: "7 Pure Love.mp3" },
       { title: "Hook Machine", fileName: "8 Hook Machine.mp3" },
       { title: "No Explanation", fileName: "9 No Explanation.mp3" },
@@ -233,7 +233,7 @@ const albumCatalog: Album[] = [
       { title: "Victory", fileName: "14 Victory.mp3" },
       { title: "Ground Bass", fileName: "15 Ground Bass.mp3" },
       { title: "Mass", fileName: "16 Mass.mp3" },
-      { title: "State Motion", fileName: "17 State Motion.wav" },
+      { title: "State Motion", fileName: "17 State Motion.mp3" },
       { title: "Titan", fileName: "18 Titan.mp3" },
       { title: "Wrath of Giants", fileName: "19 Wrath of Giants.mp3" },
       { title: "First Beast", fileName: "20 First Beast.mp3" },
@@ -650,6 +650,8 @@ export function getTrackById(trackId: string) {
 
   return undefined;
 }
+
+
 
 
 

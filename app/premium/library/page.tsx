@@ -556,7 +556,7 @@ export default function PremiumLibraryPage() {
               </h2>
 
               <p className="mt-2 text-white/50">
-                Download up to 10 Premium tracks during each billing month.
+                {`Download up to ${usage.downloadLimit} Premium tracks during each billing month.`}
               </p>
             </div>
 
@@ -637,7 +637,7 @@ export default function PremiumLibraryPage() {
                       </h3>
 
                       <p className="mt-2 text-sm text-white/45">
-                        {album.genre} • {album.year} • {album.tracks.length} tracks
+                        {album.genre} â€¢ {album.year} â€¢ {album.tracks.length} tracks
                       </p>
 
                       <p className="mt-4 line-clamp-3 leading-7 text-white/55">

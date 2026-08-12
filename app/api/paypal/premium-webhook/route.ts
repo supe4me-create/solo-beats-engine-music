@@ -308,7 +308,99 @@ export async function POST(
       { merge: true }
     );
 
-    return NextResponse.json({
+    
+  // OWNER_NOTIFICATION_PREMIUM_EVENTS
+  let ownerNotification:
+    | {
+        type: string;
+        category: string;
+        title: string;
+        message: string;
+      }
+    | null = null;
+
+  switch (eventType) {
+    case "BILLING.SUBSCRIPTION.ACTIVATED":
+    case "BILLING.SUBSCRIPTION.RE-ACTIVATED":
+      ownerNotification = {
+        type: "premium_activated",
+        category: "premium",
+        title: "Premium Activated",
+        message: "A Premium subscription was activated.",
+      };
+      break;
+
+    case "PAYMENT.SALE.COMPLETED":
+      ownerNotification = {
+        type: "premium_payment_completed",
+        category: "premium",
+        title: "Premium Payment Completed",
+        message: "A Premium subscription payment was completed successfully.",
+      };
+      break;
+
+    case "BILLING.SUBSCRIPTION.CANCELLED":
+      ownerNotification = {
+        type: "premium_cancelled",
+        category: "premium",
+        title: "Premium Cancelled",
+        message: "A Premium subscription was cancelled.",
+      };
+      break;
+
+    case "BILLING.SUBSCRIPTION.SUSPENDED":
+      ownerNotification = {
+        type: "premium_suspended",
+        category: "premium",
+        title: "Premium Suspended",
+        message: "A Premium subscription was suspended.",
+      };
+      break;
+
+    case "BILLING.SUBSCRIPTION.EXPIRED":
+      ownerNotification = {
+        type: "premium_expired",
+        category: "premium",
+        title: "Premium Expired",
+        message: "A Premium subscription expired.",
+      };
+      break;
+
+    case "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+      ownerNotification = {
+        type: "premium_payment_failed",
+        category: "premium",
+        title: "Premium Payment Failed",
+        message: "A Premium subscription payment failed.",
+      };
+      break;
+  }
+
+  if (ownerNotification) {
+    const notificationId =
+      typeof event.id === "string" && event.id.length > 0
+        ? `premium-${event.id}`
+        : `premium-${subscriptionId}-${eventType.replace(
+            /[^A-Za-z0-9._-]/g,
+            "-"
+          )}`;
+
+    await adminDb
+      .collection("ownerNotifications")
+      .doc(notificationId)
+      .set(
+        {
+          ...ownerNotification,
+          targetUrl: "/developer",
+          relatedId: subscriptionId,
+          read: false,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+  }
+return NextResponse.json({
       success: true,
       eventType,
       subscriptionId,

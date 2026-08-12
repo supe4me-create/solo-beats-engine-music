@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 :root {
   --background: #ffffff;
@@ -24,3 +24,24 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* SOLO BEATS GLOBAL VIDEO PLAYER */
+video {
+  display: block;
+  width: 100%;
+  max-width: 1180px;
+  aspect-ratio: 16 / 9;
+  max-height: 70vh;
+  margin: 0 auto;
+  object-fit: contain;
+  background: #000;
+}
+
+@media (max-width: 768px) {
+  video { max-height: 60vh; }
+}
+
+@media (max-width: 480px) {
+  video { max-height: 50vh; }
+}
+

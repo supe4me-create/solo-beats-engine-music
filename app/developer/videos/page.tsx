@@ -24,6 +24,10 @@ type VideoItem = {
   mediaId: string;
   title: string;
   description: string;
+  videoSource: "upload" | "youtube";
+  youtubeVideoId: string | null;
+  youtubeUrl: string | null;
+  youtubeEmbedUrl: string | null;
   sourceType: SourceType;
   originalName: string | null;
   mimeType: string | null;
@@ -422,6 +426,67 @@ function sendVideoChunk(
   });
 }
 
+// YOUTUBE_VIDEO_MANAGER_UI_V1
+function youtubeEmbedFromInput(
+  value: string
+): string | null {
+  const input = value.trim();
+
+  if (!input) {
+    return null;
+  }
+
+  try {
+    const url = new URL(input);
+
+    const host =
+      url.hostname
+        .replace(/^www\./i, "")
+        .toLowerCase();
+
+    let videoId = "";
+
+    if (host === "youtu.be") {
+      videoId =
+        url.pathname
+          .split("/")
+          .filter(Boolean)[0] || "";
+    } else if (
+      host === "youtube.com" ||
+      host === "m.youtube.com"
+    ) {
+      videoId =
+        url.searchParams.get("v") || "";
+
+      if (!videoId) {
+        const parts =
+          url.pathname
+            .split("/")
+            .filter(Boolean);
+
+        if (
+          ["shorts", "embed", "live"].includes(
+            parts[0] || ""
+          )
+        ) {
+          videoId = parts[1] || "";
+        }
+      }
+    }
+
+    if (
+      !/^[A-Za-z0-9_-]{11}$/.test(
+        videoId
+      )
+    ) {
+      return null;
+    }
+
+    return `https://www.youtube.com/embed/${videoId}`;
+  } catch {
+    return null;
+  }
+}
 export default function VideoManagerPage() {
   const { user, loading } = useAuth();
 
@@ -465,6 +530,16 @@ export default function VideoManagerPage() {
     useState(false);
 
   const [uploadOrder, setUploadOrder] = useState(0);
+  const [addVideoMode, setAddVideoMode] =
+    useState<"upload" | "youtube">(
+      "upload"
+    );
+
+  const [youtubeUrl, setYoutubeUrl] =
+    useState("");
+
+  const [youtubeSaving, setYoutubeSaving] =
+    useState(false);
 
   const [uploadState, setUploadState] = useState<
     | "idle"
@@ -631,6 +706,136 @@ export default function VideoManagerPage() {
     }
   }
 
+  async function addYoutubeVideo() {
+    if (
+      !user ||
+      !isOwner ||
+      youtubeSaving
+    ) {
+      return;
+    }
+
+    if (!uploadTitle.trim()) {
+      setError(
+        "Enter a video title."
+      );
+      return;
+    }
+
+    const embedUrl =
+      youtubeEmbedFromInput(
+        youtubeUrl
+      );
+
+    if (!embedUrl) {
+      setError(
+        "Enter a valid YouTube video, Shorts, Live, or youtu.be link."
+      );
+      return;
+    }
+
+    setYoutubeSaving(true);
+    setError("");
+    setNotice("");
+
+    try {
+      const token =
+        await user.getIdToken();
+
+      const response =
+        await fetch(
+          "/api/owner/videos",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization:
+                `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              action:
+                "create-youtube",
+
+              youtubeUrl:
+                youtubeUrl.trim(),
+
+              title:
+                uploadTitle.trim(),
+
+              description:
+                uploadDescription.trim(),
+
+              sourceType:
+                uploadSourceType,
+
+              published:
+                uploadPublished,
+
+              homepageEnabled:
+                uploadHomepage,
+
+              premiumTvEnabled:
+                uploadPremiumTv,
+
+              featured:
+                uploadFeatured,
+
+              displayOrder:
+                Math.max(
+                  0,
+                  Math.floor(
+                    Number(
+                      uploadOrder
+                    ) || 0
+                  )
+                ),
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.error ||
+            "YouTube video could not be added."
+        );
+      }
+
+      setNotice(
+        `"${uploadTitle.trim()}" was added from YouTube successfully.`
+      );
+
+      setYoutubeUrl("");
+      setUploadTitle("");
+      setUploadDescription("");
+
+      setUploadSourceType(
+        "solo-beats"
+      );
+
+      setUploadPublished(false);
+      setUploadHomepage(false);
+      setUploadPremiumTv(false);
+      setUploadFeatured(false);
+      setUploadOrder(0);
+
+      await loadVideos();
+    } catch (youtubeError) {
+      setError(
+        youtubeError instanceof Error
+          ? youtubeError.message
+          : "YouTube video could not be added."
+      );
+    } finally {
+      setYoutubeSaving(false);
+    }
+  }
   async function uploadVideo() {
     if (
       !user ||
@@ -1874,7 +2079,7 @@ export default function VideoManagerPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-300">
-                Direct MP4 Upload
+                MP4 Upload / YouTube Link
               </p>
 
               <h2 className="mt-2 text-3xl font-black">
@@ -1882,45 +2087,145 @@ export default function VideoManagerPage() {
               </h2>
 
               <p className="mt-2 text-sm text-white/50">
-                MP4 files are uploaded directly to the Central Media Library and automatically become manageable here.
+                Upload an MP4 or paste a YouTube link. Both become manageable from the same Central Video Manager.
               </p>
             </div>
 
             <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-white/60">
-              Maximum 2 GB
+              MP4 up to 2 GB or YouTube URL
             </span>
           </div>
 
+          <div className="mt-7 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setAddVideoMode(
+                  "upload"
+                );
+                setError("");
+                setNotice("");
+              }}
+              className={`rounded-2xl border px-5 py-3 text-sm font-black transition ${
+                addVideoMode ===
+                "upload"
+                  ? "border-violet-300/50 bg-violet-400/15 text-violet-100"
+                  : "border-white/10 bg-white/5 text-white/60"
+              }`}
+            >
+              UPLOAD MP4
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setAddVideoMode(
+                  "youtube"
+                );
+                setError("");
+                setNotice("");
+              }}
+              className={`rounded-2xl border px-5 py-3 text-sm font-black transition ${
+                addVideoMode ===
+                "youtube"
+                  ? "border-red-300/50 bg-red-400/15 text-red-100"
+                  : "border-white/10 bg-white/5 text-white/60"
+              }`}
+            >
+              PASTE YOUTUBE LINK
+            </button>
+          </div>
           <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div>
-              <label className="text-sm font-black text-white/70">
-                MP4 Video
-              </label>
+              {addVideoMode ===
+              "upload" ? (
+                <>
+                  <label className="text-sm font-black text-white/70">
+                    MP4 Video
+                  </label>
 
-              <input
-                id="video-upload-input"
-                type="file"
-                accept="video/mp4,.mp4"
-                onChange={handleFileChange}
-                disabled={
-                  uploadState !== "idle" &&
-                  uploadState !== "done" &&
-                  uploadState !== "error"
-                }
-                className="mt-2 block w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm"
-              />
+                  <input
+                    id="video-upload-input"
+                    type="file"
+                    accept="video/mp4,.mp4"
+                    onChange={
+                      handleFileChange
+                    }
+                    disabled={
+                      uploadState !==
+                        "idle" &&
+                      uploadState !==
+                        "done" &&
+                      uploadState !==
+                        "error"
+                    }
+                    className="mt-2 block w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm"
+                  />
 
-              {selectedFile ? (
-                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
-                  <p className="font-black">
-                    {selectedFile.name}
+                  {selectedFile ? (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
+                      <p className="font-black">
+                        {
+                          selectedFile.name
+                        }
+                      </p>
+
+                      <p className="mt-1 text-white/45">
+                        {formatBytes(
+                          selectedFile.size
+                        )}
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <label className="text-sm font-black text-white/70">
+                    YouTube Link
+                  </label>
+
+                  <input
+                    type="url"
+                    value={youtubeUrl}
+                    onChange={(event) =>
+                      setYoutubeUrl(
+                        event.target.value
+                      )
+                    }
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 outline-none focus:border-red-400"
+                  />
+
+                  <p className="mt-2 text-xs leading-5 text-white/40">
+                    Supports YouTube watch,
+                    youtu.be, Shorts, Live,
+                    and embed links.
                   </p>
-                  <p className="mt-1 text-white/45">
-                    {formatBytes(selectedFile.size)}
-                  </p>
-                </div>
-              ) : null}
 
+                  {youtubeEmbedFromInput(
+                    youtubeUrl
+                  ) ? (
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black">
+                      <iframe
+                        src={
+                          youtubeEmbedFromInput(
+                            youtubeUrl
+                          ) || undefined
+                        }
+                        title="YouTube video preview"
+                        className="aspect-video w-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : youtubeUrl.trim() ? (
+                    <p className="mt-3 rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm font-bold text-red-200">
+                      Enter a valid YouTube
+                      video link.
+                    </p>
+                  ) : null}
+                </>
+              )}
               <label className="mt-5 block text-sm font-black text-white/70">
                 Title
               </label>
@@ -2046,31 +2351,62 @@ export default function VideoManagerPage() {
 
               <button
                 type="button"
-                onClick={() => void uploadVideo()}
-                disabled={
-                  !selectedFile ||
-                  uploadState === "preparing" ||
-                  uploadState === "uploading" ||
-                  uploadState === "paused" ||
-                  uploadState === "finalizing" ||
-                  uploadState === "saving"
+                onClick={() =>
+                  addVideoMode ===
+                  "youtube"
+                    ? void addYoutubeVideo()
+                    : void uploadVideo()
                 }
-                className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-6 py-4 text-lg font-black disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={
+                  addVideoMode ===
+                  "youtube"
+                    ? youtubeSaving ||
+                      !youtubeEmbedFromInput(
+                        youtubeUrl
+                      )
+                    : !selectedFile ||
+                      uploadState ===
+                        "preparing" ||
+                      uploadState ===
+                        "uploading" ||
+                      uploadState ===
+                        "paused" ||
+                      uploadState ===
+                        "finalizing" ||
+                      uploadState ===
+                        "saving"
+                }
+                className={`mt-6 w-full rounded-2xl px-6 py-4 text-lg font-black disabled:cursor-not-allowed disabled:opacity-40 ${
+                  addVideoMode ===
+                  "youtube"
+                    ? "bg-gradient-to-r from-red-600 to-red-500"
+                    : "bg-gradient-to-r from-violet-600 to-fuchsia-500"
+                }`}
               >
-                {uploadState === "preparing"
-                  ? "Preparing Upload..."
-                  : uploadState === "uploading"
-                    ? "Uploading MP4..."
-                    : uploadState === "paused"
-                      ? "Upload Paused"
-                      : uploadState === "finalizing"
-                        ? "Finalizing..."
-                        : uploadState === "saving"
-                          ? "Saving Video Settings..."
-                          : "Upload MP4 Video"}
+                {addVideoMode ===
+                "youtube"
+                  ? youtubeSaving
+                    ? "Adding YouTube Video..."
+                    : "Add YouTube Video"
+                  : uploadState ===
+                      "preparing"
+                    ? "Preparing Upload..."
+                    : uploadState ===
+                        "uploading"
+                      ? "Uploading MP4..."
+                      : uploadState ===
+                          "paused"
+                        ? "Upload Paused"
+                        : uploadState ===
+                            "finalizing"
+                          ? "Finalizing..."
+                          : uploadState ===
+                              "saving"
+                            ? "Saving Video Settings..."
+                            : "Upload MP4 Video"}
               </button>
 
-              {uploadState === "uploading" ? (
+              {addVideoMode === "upload" && uploadState === "uploading" ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
@@ -2090,7 +2426,7 @@ export default function VideoManagerPage() {
                 </div>
               ) : null}
 
-              {uploadState === "paused" ? (
+              {addVideoMode === "upload" && uploadState === "paused" ? (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
@@ -2111,7 +2447,7 @@ export default function VideoManagerPage() {
                 </div>
               ) : null}
 
-              {uploadPercent > 0 ? (
+              {addVideoMode === "upload" && uploadPercent > 0 ? (
                 <div className="mt-4">
                   <div className="h-3 overflow-hidden rounded-full bg-white/10">
                     <div
@@ -2270,7 +2606,36 @@ export default function VideoManagerPage() {
                   >
                     <div className="grid gap-0 xl:grid-cols-[420px_1fr]">
                       <div className="bg-black">
-                        {video.previewUrl ? (
+                        {video.videoSource ===
+                          "youtube" &&
+                        video.youtubeEmbedUrl ? (
+                          <div>
+                            <iframe
+                              src={
+                                video.youtubeEmbedUrl
+                              }
+                              title={`${video.title} YouTube preview`}
+                              className="aspect-video h-full min-h-[250px] w-full bg-black"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                            />
+
+                            <div className="flex items-center justify-center border-t border-white/10 bg-black px-3 py-3">
+                              {video.youtubeUrl ? (
+                                <a
+                                  href={
+                                    video.youtubeUrl
+                                  }
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded-xl border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm font-black text-red-100"
+                                >
+                                  Open on YouTube
+                                </a>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : video.previewUrl ? (
                           <div>
                             <video
                               id={`video-preview-${video.mediaId}`}
@@ -2770,6 +3135,8 @@ export default function VideoManagerPage() {
     </main>
   );
 }
+
+
 
 
 

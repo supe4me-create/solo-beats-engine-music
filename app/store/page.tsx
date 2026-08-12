@@ -10,7 +10,7 @@ import {
   PayPalButtons,
   PayPalScriptProvider,
 } from "@paypal/react-paypal-js";
-import { albums } from "./albums";
+import { albums as fallbackAlbums, type Album } from "./albums";
 import { firebaseAuth } from "../../lib/firebaseClient";
 import { useFavorites } from "../favorites/useFavorites";
 import { usePlayer } from "../player/usePlayer";
@@ -376,6 +376,47 @@ async function getAccountAuthorizationHeaders(): Promise<
   };
 }
 
+function normalizeStoreAlbumKey(album: Pick<Album, "id" | "title">) {
+  return album.id?.trim().toLowerCase() ||
+    album.title.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function mergeStoreAlbums(
+  fallback: Album[],
+  managed: Album[]
+): Album[] {
+  const merged = new Map<string, Album>();
+
+  fallback.forEach((album) => {
+    merged.set(normalizeStoreAlbumKey(album), album);
+  });
+
+  managed.forEach((album) => {
+    const idKey = normalizeStoreAlbumKey(album);
+    const titleKey = album.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+
+    for (const [key, existing] of merged.entries()) {
+      const existingTitle = existing.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+
+      if (
+        key === idKey ||
+        existing.id === album.id ||
+        existingTitle === titleKey
+      ) {
+        merged.delete(key);
+      }
+    }
+
+    merged.set(idKey, album);
+  });
+
+  return Array.from(merged.values());
+}
+
 export default function StorePage() {
   const { isFavorite, toggleFavorite } = useFavorites();
   const [search, setSearch] = useState("");
@@ -405,6 +446,12 @@ export default function StorePage() {
     useState<PromotedCampaign[]>([]);
   const [businessCampaigns, setBusinessCampaigns] =
     useState<SponsoredBusinessCampaign[]>([]);
+  const [managedAlbums, setManagedAlbums] = useState<Album[]>([]);
+
+  const albums = useMemo(
+    () => mergeStoreAlbums(fallbackAlbums, managedAlbums),
+    [managedAlbums]
+  );
 
   const {
     currentTrack,
@@ -414,6 +461,138 @@ export default function StorePage() {
     playQueue,
     togglePlay,
   } = usePlayer();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadManagedAlbums() {
+      try {
+        const response = await fetch("/api/catalog/albums", {
+          cache: "no-store",
+        });
+
+        const data = await response.json();
+
+        if (
+          !response.ok ||
+          !data.success ||
+          !Array.isArray(data.albums)
+        ) {
+          throw new Error(
+            data.error || "Managed Store catalog could not be loaded."
+          );
+        }
+
+        const nextAlbums: Album[] = data.albums
+          .filter(
+            (album: Record<string, unknown>) =>
+              typeof album.id === "string" &&
+              typeof album.title === "string"
+          )
+          .map((album: Record<string, unknown>) => {
+            const id = String(album.id);
+            const title = String(album.title);
+            const trackPrice = Number(album.trackPrice || 1);
+
+            const tracks = Array.isArray(album.tracks)
+              ? album.tracks.map(
+                  (
+                    track: Record<string, unknown>,
+                    index: number
+                  ) => ({
+                    id:
+                      typeof track.id === "string" && track.id
+                        ? track.id
+                        : `${id}-${String(index + 1).padStart(2, "0")}`,
+                    number:
+                      typeof track.number === "number"
+                        ? track.number
+                        : index + 1,
+                    title:
+                      typeof track.title === "string" &&
+                      track.title
+                        ? track.title
+                        : `Track ${index + 1}`,
+                    preview:
+                      typeof track.previewUrl === "string"
+                        ? track.previewUrl
+                        : "",
+                    price:
+                      Number(track.price || trackPrice || 1),
+                  })
+                )
+              : [];
+
+            const albumPreview =
+              typeof album.albumPreviewUrl === "string"
+                ? album.albumPreviewUrl
+                : typeof album.albumPreview === "string"
+                  ? album.albumPreview
+                  : tracks.find((track) => track.preview)
+                      ?.preview || "";
+
+            return {
+              id,
+              title,
+              artist:
+                typeof album.artist === "string"
+                  ? album.artist
+                  : "Solo Beats",
+              year: Number(
+                album.year || new Date().getFullYear()
+              ),
+              genre:
+                typeof album.genre === "string"
+                  ? album.genre
+                  : "Electronic",
+              status:
+                album.status === "released"
+                  ? "released"
+                  : "upcoming",
+              cover:
+                typeof album.coverUrl === "string"
+                  ? album.coverUrl
+                  : typeof album.cover === "string"
+                    ? album.cover
+                    : "/covers/default-album.png",
+              albumPreview,
+              albumPrice: Number(
+                album.albumPrice ||
+                  tracks.reduce(
+                    (total, track) => total + track.price,
+                    0
+                  )
+              ),
+              trackPrice,
+              pageLink:
+                typeof album.pageLink === "string"
+                  ? album.pageLink
+                  : `/albums/${id}`,
+              description:
+                typeof album.description === "string"
+                  ? album.description
+                  : "",
+              tracks,
+            };
+          });
+
+        if (!cancelled) {
+          setManagedAlbums(nextAlbums);
+        }
+      } catch (error) {
+        console.error(
+          "Dashboard Store albums could not be loaded:",
+          error
+        );
+      }
+    }
+
+    void loadManagedAlbums();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -588,7 +767,7 @@ export default function StorePage() {
 
       return albumMatches || trackMatches;
     });
-  }, [search]);
+  }, [search, albums]);
 
   const cartTotal = useMemo(
     () =>
@@ -620,11 +799,6 @@ export default function StorePage() {
         cover: album.cover,
         audio: track.preview,
         trackNumber: track.number,
-        previewLimitSeconds:
-          album.status === "released" &&
-          track.number > 3
-            ? 60
-            : undefined,
       }));
   }
 
@@ -2068,7 +2242,7 @@ export default function StorePage() {
 
       <footer>
         <p>
-          Â© 2026 Solo Beats Engine Music. All rights
+          © 2026 Solo Beats Engine Music. All rights
           reserved.
         </p>
 
@@ -3490,6 +3664,9 @@ export default function StorePage() {
     </main>
   );
 }
+
+
+
 
 
 

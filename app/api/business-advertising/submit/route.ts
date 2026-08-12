@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -58,6 +58,9 @@ type BusinessSubmissionPayload = {
   videoFile?: UploadFileInfo | null;
   imageStoragePath?: string | null;
   videoStoragePath?: string | null;
+
+  // AI_VIDEO_ADVERTISING_MEDIA_LIBRARY
+  videoMediaId?: string | null;
 };
 
 function getBearerToken(request: Request): string | null {
@@ -189,6 +192,12 @@ export async function POST(request: Request) {
       youtubeLinkInput
     );
 
+    // AI_VIDEO_ADVERTISING_MEDIA_LIBRARY
+    const videoMediaId =
+      cleanText(
+        payload.videoMediaId
+      );
+
     const placements = Array.from(
       new Set(
         (
@@ -301,6 +310,57 @@ export async function POST(request: Request) {
       );
     }
 
+    // AI_VIDEO_ADVERTISING_MEDIA_VALIDATION
+    let mediaLibraryVideo:
+      Record<string, unknown> | null =
+        null;
+
+    if (videoMediaId) {
+      const mediaRef =
+        adminDb
+          .collection("mediaLibrary")
+          .doc(videoMediaId);
+
+      const mediaSnapshot =
+        await mediaRef.get();
+
+      if (!mediaSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "The selected Video Manager video was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      const mediaData =
+        mediaSnapshot.data() || {};
+
+      if (
+        mediaData.kind !== "video" ||
+        typeof mediaData.storagePath !==
+          "string" ||
+        !mediaData.storagePath
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "The selected Media Library item is not a valid video.",
+          },
+          { status: 400 }
+        );
+      }
+
+      mediaLibraryVideo =
+        mediaData as Record<
+          string,
+          unknown
+        >;
+    }
+
     const imageError = validateOptionalFile(
       payload.imageFile,
       "image",
@@ -327,7 +387,8 @@ export async function POST(request: Request) {
     if (
       !payload.imageFile &&
       !payload.videoFile &&
-      !youtubeLink
+      !youtubeLink &&
+      !videoMediaId
     ) {
       return NextResponse.json(
         {
@@ -499,14 +560,50 @@ export async function POST(request: Request) {
       imageContentType:
         payload.imageFile?.type || null,
       imageSize: payload.imageFile?.size || null,
-      videoStoragePath,
+      videoStoragePath:
+        videoStoragePath ||
+        (
+          typeof mediaLibraryVideo?.storagePath ===
+            "string"
+            ? mediaLibraryVideo.storagePath
+            : null
+        ),
+
+      // Shared central Video Manager asset.
+      videoMediaId:
+        videoMediaId || null,
+
       videoOriginalName:
-        payload.videoFile?.name || null,
+        payload.videoFile?.name ||
+        (
+          typeof mediaLibraryVideo?.originalName ===
+            "string"
+            ? mediaLibraryVideo.originalName
+            : typeof mediaLibraryVideo?.title ===
+                "string"
+              ? mediaLibraryVideo.title
+              : null
+        ),
+
       videoContentType:
-        payload.videoFile?.type || null,
-      videoSize: payload.videoFile?.size || null,
+        payload.videoFile?.type ||
+        (
+          typeof mediaLibraryVideo?.mimeType ===
+            "string"
+            ? mediaLibraryVideo.mimeType
+            : "video/mp4"
+        ),
+
+      videoSize:
+        payload.videoFile?.size ||
+        (
+          typeof mediaLibraryVideo?.size ===
+            "number"
+            ? mediaLibraryVideo.size
+            : null
+        ),
       creativeType:
-        payload.videoFile || youtubeLink
+        payload.videoFile || youtubeLink || videoMediaId
           ? payload.imageFile
             ? "image_and_video"
             : "video"
@@ -522,7 +619,7 @@ export async function POST(request: Request) {
     });
 
     const ownerNotificationType =
-      payload.videoFile || youtubeLink
+      payload.videoFile || youtubeLink || videoMediaId
         ? "video_advertising_submission"
         : "business_advertising_submission";
 
@@ -547,7 +644,7 @@ export async function POST(request: Request) {
         businessName,
         campaignName,
         creativeType:
-          payload.videoFile || youtubeLink
+          payload.videoFile || youtubeLink || videoMediaId
             ? "video"
             : "image",
         read: false,
@@ -580,3 +677,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

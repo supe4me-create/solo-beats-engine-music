@@ -87,10 +87,32 @@ export default function BusinessAdvertisingReviewPage() {
   >({});
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [incomingVideoMediaId, setIncomingVideoMediaId] =
+    useState<string | null>(null);
 
   const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL;
 
   const paymentRedirectHandled = useRef(false);
+
+  useEffect(() => {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const videoMediaId =
+      params.get("videoMediaId");
+
+    if (videoMediaId) {
+      setIncomingVideoMediaId(
+        videoMediaId
+      );
+
+      setMessage(
+        "AI video received from the AI Video Generator and ready for advertising setup."
+      );
+    }
+  }, []);
 
   useEffect(() => {
     if (!user || !isOwner) return;
@@ -199,7 +221,7 @@ export default function BusinessAdvertisingReviewPage() {
     }
   }
 
-  async function review(submissionId: string, action: "approve" | "reject", reasonOverride?: string) {
+  async function review(submissionId: string, action: "approve" | "reject" | "deactivate", reasonOverride?: string) {
     if (!user) return;
     const rejectionReason = reasonOverride?.trim() || rejectionReasons[submissionId]?.trim() || "";
     if (action === "reject" && !rejectionReason) {
@@ -256,7 +278,9 @@ export default function BusinessAdvertisingReviewPage() {
       setMessage(
         action === "approve"
           ? "The business campaign was approved. The payment request is ready below."
-          : "The business campaign was rejected."
+          : action === "deactivate"
+            ? "The business campaign was deactivated. Payment history was preserved."
+            : "The business campaign was rejected."
       );
 
       if (action === "approve") {
@@ -430,6 +454,41 @@ export default function BusinessAdvertisingReviewPage() {
             ))}
           </div>
           {message ? <p className="mt-5 rounded-2xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-emerald-200">{message}</p> : null}
+
+          {incomingVideoMediaId ? (
+            <div className="mt-5 rounded-2xl border border-violet-300/20 bg-violet-300/10 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-200">
+                AI Video Selected
+              </p>
+
+              <p className="mt-2 text-sm text-white/60">
+                This generated video was sent here from the AI Video Generator.
+              </p>
+
+              <p className="mt-3 break-all rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/75">
+                {incomingVideoMediaId}
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link
+                  href="/developer/videos"
+                  className="inline-flex rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white hover:bg-white/10"
+                >
+                  Open Video Manager
+                </Link>
+
+                <Link
+                  href={`/business-advertising?videoMediaId=${encodeURIComponent(
+                    incomingVideoMediaId
+                  )}`}
+                  className="inline-flex rounded-xl bg-violet-400 px-4 py-3 text-sm font-black text-black transition hover:bg-violet-300"
+                >
+                  Create Campaign With This Video
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
           {error ? <p className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-red-200">{error}</p> : null}
         </section>
 
@@ -703,7 +762,7 @@ export default function BusinessAdvertisingReviewPage() {
                         </div>
                       ) : null}
 
-                      {submission.reviewStatus === "approved" ? (<button type="button" disabled={reviewingId === submission.submissionId} onClick={() => review(submission.submissionId, "reject", "Removed after testing.")} className="mt-6 rounded-2xl border border-red-300/20 bg-red-300/10 px-5 py-4 font-black text-red-200 disabled:opacity-50">{reviewingId === submission.submissionId ? "Deactivating..." : "Deactivate Campaign"}</button>) : null}
+                      {submission.reviewStatus === "approved" ? (<button type="button" disabled={reviewingId === submission.submissionId} onClick={() => review(submission.submissionId, "deactivate")} className="mt-6 rounded-2xl border border-red-300/20 bg-red-300/10 px-5 py-4 font-black text-red-200 disabled:opacity-50">{reviewingId === submission.submissionId ? "Deactivating..." : "Deactivate Campaign"}</button>) : null}
 
 {submission.rejectionReason ? (
                         <p className="mt-5 rounded-2xl border border-red-300/20 bg-red-300/10 p-4 text-red-200">
@@ -730,6 +789,9 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+
+
 
 
 

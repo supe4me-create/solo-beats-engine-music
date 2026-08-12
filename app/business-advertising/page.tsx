@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import {
@@ -73,6 +73,10 @@ export default function BusinessAdvertisingPage() {
     useState<File | null>(null);
   const [videoFile, setVideoFile] =
     useState<File | null>(null);
+
+  const [videoMediaId, setVideoMediaId] =
+    useState("");
+
   const [placements, setPlacements] =
     useState<Placement[]>([
       "homepage",
@@ -100,6 +104,22 @@ export default function BusinessAdvertisingPage() {
     useState("");
   const [errorMessage, setErrorMessage] =
     useState("");
+
+  useEffect(() => {
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    const incomingVideoMediaId =
+      params.get("videoMediaId");
+
+    if (incomingVideoMediaId) {
+      setVideoMediaId(
+        incomingVideoMediaId
+      );
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe =
@@ -148,10 +168,11 @@ export default function BusinessAdvertisingPage() {
     if (
       !imageFile &&
       !videoFile &&
-      !youtubeLink.trim()
+      !youtubeLink.trim() &&
+      !videoMediaId.trim()
     ) {
       setErrorMessage(
-        "Add an advertising image, a video file, or a YouTube video link."
+        "Add an advertising image, a video file, a YouTube video link, or attach a Video Manager creative."
       );
       return;
     }
@@ -222,6 +243,9 @@ export default function BusinessAdvertisingPage() {
         preferredStartDate,
         youtubeLink,
         placements,
+
+        videoMediaId:
+          videoMediaId || null,
         imageFile:
           fileInfo(imageFile),
         videoFile:
@@ -543,6 +567,32 @@ export default function BusinessAdvertisingPage() {
                 placeholder="https://"
                 required
               />
+              {videoMediaId ? (
+                <div className="sm:col-span-2 rounded-2xl border border-violet-300/20 bg-violet-300/10 p-5">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-200">
+                    AI Video Attached
+                  </p>
+
+                  <p className="mt-2 text-sm text-white/60">
+                    This campaign will use the AI-generated video selected from Video Manager.
+                  </p>
+
+                  <p className="mt-3 break-all rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white/75">
+                    {videoMediaId}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVideoMediaId("")
+                    }
+                    className="mt-3 rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-black text-white hover:bg-white/10"
+                  >
+                    Remove Selected Video
+                  </button>
+                </div>
+              ) : null}
+
               <Field
                 label="Campaign name"
                 value={campaignName}
@@ -985,3 +1035,6 @@ function InfoCard({
     </article>
   );
 }
+
+
+

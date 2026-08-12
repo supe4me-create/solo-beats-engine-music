@@ -13,7 +13,6 @@ import {
 } from "react";
 
 import { firebaseAuth } from "../../../lib/firebaseClient";
-import { premiumAlbums } from "../../premiumCatalog";
 
 type AccessState =
   | "loading"
@@ -394,29 +393,7 @@ export default function PremiumRadioPage() {
   const [broadcastError, setBroadcastError] =
     useState("");
 
-  const stationTracks = useMemo(
-    () => [
-      ...premiumAlbums.flatMap((album) =>
-        album.tracks.map((track) => ({
-          id: track.id,
-          title: track.title,
-          albumTitle: album.title,
-          artist: album.artist,
-          cover: album.cover,
-          src: track.preview.replace(/\.wav$/i, ".mp3"),
-        }))
-      ),
-      {
-        id: "bullet-carnage-radio-stutter-warfare",
-        title: "Stutter Warfare",
-        albumTitle: "Bullet Carnage",
-        artist: "Solo Beats",
-        cover: "/covers/bullet-carnage.png",
-        src: "/previews/bullet-carnage/10 Stutter Warfare.mp3",
-      },
-    ],
-    []
-  );
+  const [stationTracks, setStationTracks] = useState<RadioTrack[]>([]);
 
   const [queue, setQueue] =
     useState<RadioTrack[]>([]);
@@ -660,8 +637,97 @@ export default function PremiumRadioPage() {
   }, []);
 
   useEffect(() => {
-    setQueue(shuffleTracks(stationTracks));
-  }, [stationTracks]);
+    let cancelled = false;
+    let lastPlaylistKey = "";
+
+    async function loadRadioPlaylist() {
+      try {
+        const response = await fetch(
+          `/api/radio/playlist?t=${Date.now()}`,
+          { cache: "no-store" }
+        );
+
+        const data = (await response.json()) as {
+          success?: boolean;
+          source?: string;
+          playlist?: {
+            playlistId?: string;
+            name?: string;
+            description?: string;
+          } | null;
+          tracks?: RadioTrack[];
+          error?: string;
+        };
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              "Radio playlist could not be loaded."
+          );
+        }
+
+        const nextTracks =
+          Array.isArray(data.tracks)
+            ? data.tracks
+            : [];
+
+        const playlistId =
+          data.playlist?.playlistId || "none";
+
+        const source =
+          data.source || "none";
+
+        const trackIdentity =
+          nextTracks
+            .map((track) => track.id)
+            .join("|");
+
+        const nextPlaylistKey =
+          `${source}:${playlistId}:${trackIdentity}`;
+
+        if (
+          !cancelled &&
+          nextPlaylistKey !== lastPlaylistKey
+        ) {
+          lastPlaylistKey = nextPlaylistKey;
+          setStationTracks(nextTracks);
+        }
+      } catch (error) {
+        console.error(
+          "Premium Radio playlist refresh error:",
+          error
+        );
+      }
+    }
+
+    void loadRadioPlaylist();
+
+    const intervalId = window.setInterval(() => {
+      void loadRadioPlaylist();
+    }, 5000);
+
+    const handleFocus = () => {
+      void loadRadioPlaylist();
+    };
+
+    window.addEventListener(
+      "focus",
+      handleFocus
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener(
+        "focus",
+        handleFocus
+      );
+    };
+  }, []);
+
+useEffect(() => {
+  setQueue(shuffleTracks(stationTracks));
+}, [stationTracks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1137,7 +1203,7 @@ export default function PremiumRadioPage() {
 
               <p className="mt-5 max-w-3xl text-lg leading-8 text-white/60">
                 {hasPremiumAccess
-                  ? `A continuous member station powered by ${premiumAlbums.length} selected albums and ${stationTracks.length} tracks.`
+                  ? `A continuous member station powered by ${stationTracks.length} dashboard-managed tracks.`
                   : "Preview two songs, then subscribe for unlimited Radio and TV."}
               </p>
 
@@ -1205,11 +1271,17 @@ export default function PremiumRadioPage() {
 
               {currentTrack ? (
                 <>
+                  {currentTrack.cover ? (
                   <img
                     src={currentTrack.cover}
                     alt={`${currentTrack.albumTitle} cover`}
                     className="mt-5 aspect-square w-full rounded-2xl object-cover"
                   />
+                ) : (
+                  <div className="mt-5 flex aspect-square w-full items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] p-6 text-center text-sm font-black text-white/35">
+                    SOLO BEATS RADIO
+                  </div>
+                )}
 
                   {currentTrack.albumTitle === "Bullet Carnage" ? (
                     <p className="mt-5 inline-flex rounded-full border border-orange-300/30 bg-orange-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-orange-200">
@@ -1404,7 +1476,7 @@ export default function PremiumRadioPage() {
                     className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-left hover:bg-white/[0.05]"
                   >
                     <img
-                      src={track.cover}
+                      src={track.cover || undefined}
                       alt=""
                       className="h-14 w-14 rounded-xl object-cover"
                     />
@@ -1426,6 +1498,9 @@ export default function PremiumRadioPage() {
     </main>
   );
 }
+
+
+
 
 
 

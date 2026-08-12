@@ -5,7 +5,7 @@ import {
   adminDb,
 } from "../../../../lib/firebaseAdmin";
 
-async function videoUrl(
+async function storageVideoUrl(
   storagePath: unknown
 ) {
   if (
@@ -36,6 +36,21 @@ async function videoUrl(
   return url;
 }
 
+function youtubeEmbedUrl(
+  videoId: unknown
+) {
+  if (
+    typeof videoId !== "string" ||
+    !/^[A-Za-z0-9_-]{11}$/.test(
+      videoId
+    )
+  ) {
+    return null;
+  }
+
+  return `https://www.youtube.com/embed/${videoId}`;
+}
+
 export async function GET() {
   try {
     const snapshot =
@@ -53,32 +68,78 @@ export async function GET() {
 
             if (
               data.published !== true ||
-              data.homepageEnabled !== true
+              data.homepageEnabled !==
+                true
             ) {
               return null;
             }
 
-            const url =
-              await videoUrl(
-                data.storagePath
-              );
+            const isYoutube =
+              data.videoSource ===
+                "youtube" &&
+              typeof data.youtubeVideoId ===
+                "string";
 
-            if (!url) {
+            const youtubeEmbed =
+              isYoutube
+                ? youtubeEmbedUrl(
+                    data.youtubeVideoId
+                  )
+                : null;
+
+            const videoUrl =
+              isYoutube
+                ? null
+                : await storageVideoUrl(
+                    data.storagePath
+                  );
+
+            if (
+              !youtubeEmbed &&
+              !videoUrl
+            ) {
               return null;
             }
 
             return {
               mediaId: doc.id,
+
               title:
                 data.title ||
                 "SOLO BEATS Video",
+
               description:
                 data.description || "",
+
               sourceType:
                 data.sourceType ||
                 "solo-beats",
+
+              videoSource:
+                isYoutube
+                  ? "youtube"
+                  : "upload",
+
+              youtubeVideoId:
+                isYoutube
+                  ? data.youtubeVideoId
+                  : null,
+
+              youtubeUrl:
+                isYoutube &&
+                typeof data.youtubeUrl ===
+                  "string"
+                  ? data.youtubeUrl
+                  : null,
+
+              youtubeEmbedUrl:
+                youtubeEmbed,
+
+              videoUrl,
+
               featured:
                 data.featured === true,
+
               displayOrder:
                 Number.isFinite(
                   Number(
@@ -89,7 +150,6 @@ export async function GET() {
                       data.displayOrder
                     )
                   : 0,
-              videoUrl: url,
             };
           }
         )

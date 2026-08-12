@@ -67,6 +67,26 @@ function authError(error: unknown) {
   return null;
 }
 
+function isExpiredSchedule(
+  endDate: unknown
+) {
+  if (
+    typeof endDate !== "string" ||
+    !endDate
+  ) {
+    return false;
+  }
+
+  const end = new Date(
+    `${endDate}T23:59:59.999Z`
+  );
+
+  return (
+    !Number.isNaN(end.getTime()) &&
+    new Date() > end
+  );
+}
+
 export async function GET(request: Request) {
   try {
     await verifyOwner(request);
@@ -75,6 +95,48 @@ export async function GET(request: Request) {
       .collection("businessAdvertisingSubmissions")
       .orderBy("createdAt", "desc")
       .get();
+
+    const expiredDocuments =
+      snapshot.docs.filter((document) => {
+        const data = document.data();
+
+        return (
+          data.placementStatus === "scheduled" &&
+          data.reviewStatus === "approved" &&
+          data.paymentStatus === "paid" &&
+          isExpiredSchedule(
+            data.scheduleEndDate
+          )
+        );
+      });
+
+    const expiredIds = new Set(
+      expiredDocuments.map(
+        (document) => document.id
+      )
+    );
+
+    if (expiredDocuments.length > 0) {
+      const batch = adminDb.batch();
+
+      expiredDocuments.forEach(
+        (document) => {
+          batch.set(
+            document.ref,
+            {
+              placementStatus: "expired",
+              expiredAt:
+                FieldValue.serverTimestamp(),
+              updatedAt:
+                FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+      );
+
+      await batch.commit();
+    }
 
     const submissions = await Promise.all(
       snapshot.docs.map(async (document) => {
@@ -110,7 +172,11 @@ export async function GET(request: Request) {
           creativeType: data.creativeType || "image",
           reviewStatus: data.reviewStatus || "pending",
           paymentStatus: data.paymentStatus || "not_requested",
-          placementStatus: data.placementStatus || "not_scheduled",
+          placementStatus:
+            expiredIds.has(document.id)
+              ? "expired"
+              : data.placementStatus ||
+                "not_scheduled",
           sponsoredLabel: data.sponsoredLabel || "Sponsored",
           createdAt: toIso(data.createdAt),
           reviewedAt: toIso(data.reviewedAt),
@@ -151,7 +217,8 @@ export async function POST(request: Request) {
     const action =
       body.action === "approve" ||
       body.action === "reject" ||
-      body.action === "schedule"
+      body.action === "schedule" ||
+      body.action === "deactivate"
         ? body.action
         : "";
     const rejectionReason =
@@ -350,6 +417,53 @@ export async function POST(request: Request) {
       });
     }
 
+    if (action === "deactivate") {
+      const submission =
+        snapshot.data() || {};
+
+      if (
+        submission.reviewStatus !==
+          "approved"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Only an approved business campaign can be deactivated.",
+          },
+          { status: 400 }
+        );
+      }
+
+      await ref.set(
+        {
+          placementStatus:
+            "deactivated",
+          deactivatedAt:
+            FieldValue.serverTimestamp(),
+          deactivatedByUid:
+            owner.uid,
+          deactivatedByEmail:
+            owner.email || null,
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        submissionId,
+        reviewStatus:
+          submission.reviewStatus,
+        paymentStatus:
+          submission.paymentStatus ||
+          "not_requested",
+        placementStatus:
+          "deactivated",
+      });
+    }
+
     let automaticPayment:
       | Awaited<
           ReturnType<
@@ -496,6 +610,8 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
 
 
 

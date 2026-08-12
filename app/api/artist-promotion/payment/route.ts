@@ -608,7 +608,26 @@ export async function POST(
       }
     );
 
-    return NextResponse.json({
+    
+  // OWNER_NOTIFICATION_ARTIST_PAYMENT
+  await adminDb
+    .collection("ownerNotifications")
+    .doc(`artist-payment-${orderId}`)
+    .set(
+      {
+        type: "artist_promotion_payment_received",
+        category: "artist_promotion",
+        title: "Artist Promotion Payment Received",
+        message: `Artist Promotion payment of $${price.toFixed(2)} USD was received.`,
+        targetUrl: "/developer",
+        relatedId: submissionId,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+return NextResponse.json({
       success: true,
       paymentStatus: "paid",
       placementStatus:

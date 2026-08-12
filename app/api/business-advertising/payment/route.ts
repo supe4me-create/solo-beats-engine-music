@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -717,7 +717,26 @@ export async function POST(
       }
     );
 
-    return NextResponse.json({
+    
+  // OWNER_NOTIFICATION_BUSINESS_PAYMENT
+  await adminDb
+    .collection("ownerNotifications")
+    .doc(`business-payment-${orderId}`)
+    .set(
+      {
+        type: "business_advertising_payment_received",
+        category: "business_advertising",
+        title: "Business Advertising Payment Received",
+        message: `Business Advertising payment of $${price.toFixed(2)} USD was received.`,
+        targetUrl: "/developer",
+        relatedId: submissionId,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+return NextResponse.json({
       success: true,
       paymentStatus: "paid",
       placementStatus:

@@ -76,7 +76,7 @@ export default function GlobalHeader() {
                   : "border border-violet-400/30 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20 hover:text-white"
               }`}
             >
-              Owner Dashboard
+              Owner Control Center
             </Link>
           ) : null}
         </nav>
@@ -160,5 +160,6 @@ export default function GlobalHeader() {
     </header>
   );
 }
+
 
 

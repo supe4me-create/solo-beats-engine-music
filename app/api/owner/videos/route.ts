@@ -123,6 +123,89 @@ async function previewUrl(
   return url;
 }
 
+function youtubeVideoId(
+  value: unknown
+): string | null {
+  if (
+    typeof value !== "string" ||
+    !value.trim()
+  ) {
+    return null;
+  }
+
+  const input = value.trim();
+
+  try {
+    const url = new URL(input);
+
+    const host =
+      url.hostname
+        .replace(/^www\./i, "")
+        .toLowerCase();
+
+    if (host === "youtu.be") {
+      const id =
+        url.pathname
+          .split("/")
+          .filter(Boolean)[0];
+
+      return id &&
+        /^[A-Za-z0-9_-]{11}$/.test(id)
+        ? id
+        : null;
+    }
+
+    if (
+      host === "youtube.com" ||
+      host === "m.youtube.com"
+    ) {
+      const watchId =
+        url.searchParams.get("v");
+
+      if (
+        watchId &&
+        /^[A-Za-z0-9_-]{11}$/.test(
+          watchId
+        )
+      ) {
+        return watchId;
+      }
+
+      const parts =
+        url.pathname
+          .split("/")
+          .filter(Boolean);
+
+      if (
+        ["shorts", "embed", "live"].includes(
+          parts[0] || ""
+        ) &&
+        parts[1] &&
+        /^[A-Za-z0-9_-]{11}$/.test(
+          parts[1]
+        )
+      ) {
+        return parts[1];
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function youtubeWatchUrl(
+  videoId: string
+) {
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+function youtubeEmbedUrl(
+  videoId: string
+) {
+  return `https://www.youtube.com/embed/${videoId}`;
+}
 export async function GET(
   request: Request
 ) {
@@ -235,6 +318,206 @@ export async function GET(
   }
 }
 
+export async function POST(
+  request: Request
+) {
+  try {
+    const owner =
+      await verifyOwner(request);
+
+    const payload =
+      await request.json();
+
+    if (
+      payload.action !==
+      "create-youtube"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid Video Manager action.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const videoId =
+      youtubeVideoId(
+        payload.youtubeUrl
+      );
+
+    if (!videoId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Enter a valid YouTube video, Shorts, Live, or youtu.be link.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const title =
+      clean(payload.title, 200);
+
+    if (!title) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Video title is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const sourceType =
+      clean(
+        payload.sourceType,
+        50
+      ) || "solo-beats";
+
+    const allowedSources = [
+      "solo-beats",
+      "artist",
+      "advertiser",
+      "customer",
+    ];
+
+    if (
+      !allowedSources.includes(
+        sourceType
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid video source type.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const ref =
+      adminDb
+        .collection("mediaLibrary")
+        .doc();
+
+    const youtubeUrl =
+      youtubeWatchUrl(videoId);
+
+    await ref.set({
+      mediaId: ref.id,
+
+      kind: "video",
+
+      videoSource: "youtube",
+
+      youtubeVideoId:
+        videoId,
+
+      youtubeUrl,
+
+      title,
+
+      description:
+        clean(
+          payload.description,
+          2000
+        ),
+
+      sourceType,
+
+      originalName: null,
+      mimeType:
+        "video/youtube",
+      sizeBytes: 0,
+      storagePath: null,
+
+      status: "active",
+
+      published:
+        payload.published === true,
+
+      homepageEnabled:
+        payload.homepageEnabled ===
+        true,
+
+      premiumTvEnabled:
+        payload.premiumTvEnabled ===
+        true,
+
+      featured:
+        payload.featured === true,
+
+      displayOrder:
+        Number.isFinite(
+          Number(
+            payload.displayOrder
+          )
+        )
+          ? Math.max(
+              0,
+              Math.floor(
+                Number(
+                  payload.displayOrder
+                )
+              )
+            )
+          : 0,
+
+      createdByUid:
+        owner.uid,
+
+      createdByEmail:
+        owner.email || null,
+
+      createdAt:
+        FieldValue.serverTimestamp(),
+
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    });
+
+    return NextResponse.json({
+      success: true,
+      mediaId: ref.id,
+      videoSource: "youtube",
+      youtubeVideoId:
+        videoId,
+      youtubeUrl,
+      youtubeEmbedUrl:
+        youtubeEmbedUrl(
+          videoId
+        ),
+      message:
+        "YouTube video added to Video Manager.",
+    });
+  } catch (error) {
+    const response =
+      authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Owner Video Manager YouTube POST error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "YouTube video could not be added to Video Manager.",
+      },
+      { status: 500 }
+    );
+  }
+}
 export async function PATCH(
   request: Request
 ) {
@@ -727,6 +1010,7 @@ export async function DELETE(
     );
   }
 }
+
 
 
 

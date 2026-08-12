@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -87,6 +87,84 @@ type PremiumSummary = {
   totalDownloadsUsed: number;
 };
 
+type CampaignSubmissionSummary = {
+  submissionId: string;
+  reviewStatus: string;
+  paymentStatus: string;
+  placementStatus: string;
+  scheduleStartDate?: string | null;
+  scheduleEndDate?: string | null;
+};
+
+type CampaignStatusCounts = {
+  total: number;
+  pending: number;
+  awaitingPayment: number;
+  readyToSchedule: number;
+  scheduled: number;
+  activeNow: number;
+};
+
+function campaignIsActiveNow(
+  campaign: CampaignSubmissionSummary
+) {
+  if (
+    campaign.reviewStatus !== "approved" ||
+    campaign.paymentStatus !== "paid" ||
+    campaign.placementStatus !== "scheduled" ||
+    !campaign.scheduleStartDate ||
+    !campaign.scheduleEndDate
+  ) {
+    return false;
+  }
+
+  const now = new Date();
+  const start = new Date(
+    `${campaign.scheduleStartDate}T00:00:00.000Z`
+  );
+  const end = new Date(
+    `${campaign.scheduleEndDate}T23:59:59.999Z`
+  );
+
+  return (
+    !Number.isNaN(start.getTime()) &&
+    !Number.isNaN(end.getTime()) &&
+    now >= start &&
+    now <= end
+  );
+}
+
+function getCampaignStatusCounts(
+  campaigns: CampaignSubmissionSummary[]
+): CampaignStatusCounts {
+  return {
+    total: campaigns.length,
+    pending: campaigns.filter(
+      (campaign) => campaign.reviewStatus === "pending"
+    ).length,
+    awaitingPayment: campaigns.filter(
+      (campaign) =>
+        campaign.reviewStatus === "approved" &&
+        campaign.paymentStatus !== "paid"
+    ).length,
+    readyToSchedule: campaigns.filter(
+      (campaign) =>
+        campaign.reviewStatus === "approved" &&
+        campaign.paymentStatus === "paid" &&
+        campaign.placementStatus !== "scheduled"
+    ).length,
+    scheduled: campaigns.filter(
+      (campaign) =>
+        campaign.reviewStatus === "approved" &&
+        campaign.paymentStatus === "paid" &&
+        campaign.placementStatus === "scheduled"
+    ).length,
+    activeNow: campaigns.filter(
+      campaignIsActiveNow
+    ).length,
+  };
+}
+
 const OWNER_EMAIL = "supe4.me@gmail.com";
 
 function makeResultKey(itemType: "album" | "track", itemId: string) {
@@ -111,6 +189,28 @@ export default function OwnerDashboardPage() {
   const [premiumSummary, setPremiumSummary] = useState<PremiumSummary | null>(null);
   const [loadingPremium, setLoadingPremium] = useState(false);
   const [premiumError, setPremiumError] = useState("");
+
+  const [artistCampaigns, setArtistCampaigns] =
+    useState<CampaignSubmissionSummary[]>([]);
+
+  const [businessCampaigns, setBusinessCampaigns] =
+    useState<CampaignSubmissionSummary[]>([]);
+
+  const [loadingCampaigns, setLoadingCampaigns] =
+    useState(false);
+
+  const [campaignError, setCampaignError] =
+    useState("");
+
+  const artistCampaignCounts = useMemo(
+    () => getCampaignStatusCounts(artistCampaigns),
+    [artistCampaigns]
+  );
+
+  const businessCampaignCounts = useMemo(
+    () => getCampaignStatusCounts(businessCampaigns),
+    [businessCampaigns]
+  );
   const [broadcastStatus, setBroadcastStatus] = useState<{
     radioOnAir: boolean;
     tvOnAir: boolean;
@@ -246,6 +346,86 @@ export default function OwnerDashboardPage() {
     }
 
     void loadPremiumMembers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) return;
+
+    const currentUser = user;
+    let cancelled = false;
+
+    async function loadCampaigns() {
+      setLoadingCampaigns(true);
+      setCampaignError("");
+
+      try {
+        const token = await currentUser.getIdToken();
+
+        const [artistResponse, businessResponse] = await Promise.all([
+          fetch("/api/owner/artist-promotions", {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          }),
+          fetch("/api/owner/business-advertising", {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+          }),
+        ]);
+
+        const [artistData, businessData] = await Promise.all([
+          artistResponse.json(),
+          businessResponse.json(),
+        ]);
+
+        if (!artistResponse.ok || !artistData.success) {
+          throw new Error(
+            artistData.error ||
+              "Artist promotion campaigns could not be loaded."
+          );
+        }
+
+        if (!businessResponse.ok || !businessData.success) {
+          throw new Error(
+            businessData.error ||
+              "Business advertising campaigns could not be loaded."
+          );
+        }
+
+        if (cancelled) return;
+
+        setArtistCampaigns(
+          Array.isArray(artistData.submissions)
+            ? artistData.submissions
+            : []
+        );
+
+        setBusinessCampaigns(
+          Array.isArray(businessData.submissions)
+            ? businessData.submissions
+            : []
+        );
+      } catch (error) {
+        if (cancelled) return;
+
+        setArtistCampaigns([]);
+        setBusinessCampaigns([]);
+        setCampaignError(
+          error instanceof Error
+            ? error.message
+            : "Campaign information could not be loaded."
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingCampaigns(false);
+        }
+      }
+    }
+
+    void loadCampaigns();
 
     return () => {
       cancelled = true;
@@ -682,7 +862,7 @@ export default function OwnerDashboardPage() {
             <ManagementLink
               title="Premium Members"
               description="Review active, cancelled, and billing-related Premium membership activity."
-              href="#premium-members"
+              href="/developer/premium-members"
               action="View Members"
               badge="Premium"
             />
@@ -747,6 +927,13 @@ export default function OwnerDashboardPage() {
                 badge="Video Control"
               />
               <ManagementLink
+                title="AI Video Generator"
+                description="Create AI-powered music videos, social clips, visualizers, album trailers, and promotional video content. Owner controls generation, publishing, usage, and delivery into Video Manager."
+                href="/developer/ai-video"
+                action="Open AI Video Generator"
+                badge="AI Video"
+              />
+              <ManagementLink
                 title="Music Catalog"
                 description="Review albums, tracks, prices, covers, release status, track counts, and catalog information."
                 href="/developer/catalog"
@@ -804,7 +991,7 @@ export default function OwnerDashboardPage() {
               <ManagementLink
                 title="Premium Members"
                 description="Review active and inactive subscriptions, billing status, subscription records, and monthly download usage."
-                href="#premium-members"
+                href="/developer/premium-members"
                 action="View Premium Members"
                 badge="Premium"
               />
@@ -833,18 +1020,18 @@ export default function OwnerDashboardPage() {
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <ManagementLink
-                title="Premium Radio"
-                description="Open Premium Radio, test playback and programming, and access the station experience."
-                href="/premium/radio"
-                action="Open Radio"
-                badge="Radio"
+                title="Radio Manager"
+                description="Program Premium Radio from the Central Media Library. Add MP3/WAV tracks, edit metadata, reorder programming, enable or disable tracks, and remove tracks from Radio."
+                href="/developer/radio"
+                action="Manage Radio"
+                badge="Radio Control"
               />
               <ManagementLink
-                title="Premium TV"
-                description="Open Premium TV, visual programming, queue, visualizers, and sponsored placements."
-                href="/premium/tv"
-                action="Open TV"
-                badge="TV"
+                title="TV Programming"
+                description="Manage Premium TV programming from Video Manager. Assign videos to Premium TV, publish or unpublish content, set Featured status, control ordering, and schedule TV start and end times."
+                href="/developer/videos"
+                action="Manage TV Programming"
+                badge="TV Control"
               />
             </div>
 
@@ -1004,14 +1191,22 @@ export default function OwnerDashboardPage() {
             <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <ManagementLink
                 title="Artist Promotions"
-                description="Review artist submissions, approvals, payments, campaign status, and scheduled placements."
+                description={
+                loadingCampaigns
+                  ? "Loading live Artist Promotion campaign status..."
+                  : `${artistCampaignCounts.total} total · ${artistCampaignCounts.pending} pending · ${artistCampaignCounts.awaitingPayment} awaiting payment · ${artistCampaignCounts.readyToSchedule} ready · ${artistCampaignCounts.scheduled} scheduled · ${artistCampaignCounts.activeNow} active now`
+              }
                 href="/developer/artist-promotions"
                 action="Manage Promotions"
                 badge="Promotion"
               />
               <ManagementLink
                 title="Business & Video Ads"
-                description="Review business and video advertising submissions, approvals, pricing, payments, and schedules."
+                description={
+                loadingCampaigns
+                  ? "Loading live Business Advertising campaign status..."
+                  : `${businessCampaignCounts.total} total · ${businessCampaignCounts.pending} pending · ${businessCampaignCounts.awaitingPayment} awaiting payment · ${businessCampaignCounts.readyToSchedule} ready · ${businessCampaignCounts.scheduled} scheduled · ${businessCampaignCounts.activeNow} active now`
+              }
                 href="/developer/business-advertising"
                 action="Manage Advertising"
                 badge="Advertising"
@@ -1768,6 +1963,18 @@ function ResultRow({
     </article>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

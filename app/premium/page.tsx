@@ -62,7 +62,7 @@ export default function PremiumPage() {
   return (
     <main className="min-h-screen px-5 pb-40 pt-52 sm:px-8">
       <div className="mx-auto max-w-7xl">
-        <section className="overflow-hidden rounded-[2.25rem] border border-white/10 bg-gradient-to-br from-violet-600/30 via-white/[0.05] to-cyan-400/15 p-7 shadow-2xl sm:p-10 lg:p-14">
+        <section className="relative z-0 isolate overflow-hidden rounded-[2.25rem] border border-white/10 bg-gradient-to-br from-violet-600/30 via-white/[0.05] to-cyan-400/15 p-7 shadow-2xl sm:p-10 lg:p-14">
           <div className="grid gap-10 lg:grid-cols-[1fr_360px] lg:items-center">
             <div>
               <p className="text-sm font-black uppercase tracking-[0.24em] text-emerald-300">Now available</p>
@@ -102,10 +102,27 @@ export default function PremiumPage() {
               ) : !paypalClientId || !premiumPlanId ? (
                 <div className="mt-5 rounded-2xl border border-red-300/30 bg-red-300/10 px-5 py-4 text-sm font-bold text-red-200">PayPal Premium configuration is missing.</div>
               ) : (
-                <div className="mt-5 overflow-hidden rounded-2xl bg-white p-3">
-                  <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD", intent: "subscription", vault: true }}>
+                <div className="relative z-0 isolate mt-5 w-full min-w-0 max-w-full overflow-hidden rounded-2xl bg-white p-2 sm:p-3">
+                  <div className="mx-auto w-full min-w-0 max-w-[420px] overflow-hidden">
+                  <PayPalScriptProvider
+                    options={{
+                      clientId: paypalClientId,
+                      currency: "USD",
+                      intent: "subscription",
+                      vault: true,
+                      disableFunding:
+                        "card,credit,paylater",
+                    }}
+                  >
                     <PayPalButtons
-                      style={{ layout: "vertical", shape: "pill", color: "gold", label: "subscribe", height: 48 }}
+                      style={{
+                        layout: "vertical",
+                        shape: "pill",
+                        color: "gold",
+                        label: "subscribe",
+                        height: 44,
+                        tagline: false,
+                      }}
                       createSubscription={async (_data, actions) => {
                         setMessage("Opening secure PayPal subscription checkout...");
                         setError("");
@@ -131,6 +148,7 @@ export default function PremiumPage() {
                       }}
                     />
                   </PayPalScriptProvider>
+                  </div>
                 </div>
               )}
 
@@ -156,6 +174,8 @@ export default function PremiumPage() {
     </main>
   );
 }
+
+
 
 
 

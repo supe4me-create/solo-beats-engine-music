@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
+
 import {
   adminDb,
   firebaseAdminApp,
@@ -152,6 +153,20 @@ export async function GET(
       );
     }
 
+    const premiumDownloadLimit =
+      Number.isFinite(
+        subscription.premiumDownloadLimit
+      ) &&
+      Number(
+        subscription.premiumDownloadLimit
+      ) > 0
+        ? Math.floor(
+            Number(
+              subscription.premiumDownloadLimit
+            )
+          )
+        : PREMIUM_MONTHLY_TRACK_LIMIT;
+
     const cycleKey =
       getPremiumCycleKey(
         typeof subscription.startTime ===
@@ -200,11 +215,11 @@ export async function GET(
       downloadsRemaining:
         Math.max(
           0,
-          PREMIUM_MONTHLY_TRACK_LIMIT -
+          premiumDownloadLimit -
             downloadsUsed
         ),
       downloadLimit:
-        PREMIUM_MONTHLY_TRACK_LIMIT,
+        premiumDownloadLimit,
       selectedTrackIds,
     });
   } catch (error) {

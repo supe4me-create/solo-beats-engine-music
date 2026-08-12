@@ -666,6 +666,19 @@ async function handlePremiumTrackDownload(
     );
   }
 
+  const premiumDownloadLimit =
+    Number.isFinite(
+      subscription.premiumDownloadLimit
+    ) &&
+    Number(
+      subscription.premiumDownloadLimit
+    ) > 0
+      ? Math.floor(
+          Number(
+            subscription.premiumDownloadLimit
+          )
+        )
+      : PREMIUM_MONTHLY_TRACK_LIMIT;
   const albumId = getAlbumIdFromTrackId(itemId);
 
   if (!albumId || !PREMIUM_ALBUM_IDS.has(albumId)) {
@@ -734,7 +747,7 @@ async function handlePremiumTrackDownload(
 
       if (
         !alreadySelected &&
-        used >= PREMIUM_MONTHLY_TRACK_LIMIT
+        used >= premiumDownloadLimit
       ) {
         return {
           allowed: false as const,
@@ -756,7 +769,7 @@ async function handlePremiumTrackDownload(
             subscription.paypalSubscriptionId || null,
           downloadsUsed: nextUsed,
           downloadLimit:
-            PREMIUM_MONTHLY_TRACK_LIMIT,
+            premiumDownloadLimit,
           selectedTrackIds: alreadySelected
             ? selectedTrackIds
             : FieldValue.arrayUnion(itemId),
@@ -787,11 +800,11 @@ async function handlePremiumTrackDownload(
       {
         success: false,
         error:
-          "You have used all 10 Premium track downloads for this billing month.",
+          `You have used all ${premiumDownloadLimit} Premium track downloads for this billing month.`,
         downloadsUsed: result.used,
         downloadsRemaining: 0,
         downloadLimit:
-          PREMIUM_MONTHLY_TRACK_LIMIT,
+            premiumDownloadLimit,
         cycleKey,
       },
       { status: 403 }
@@ -803,7 +816,7 @@ async function handlePremiumTrackDownload(
       premiumDownloadsUsed:
         result.used,
       premiumDownloadLimit:
-        PREMIUM_MONTHLY_TRACK_LIMIT,
+        premiumDownloadLimit,
       premiumDownloadCycleKey:
         cycleKey,
       lastPremiumDownloadAt:
@@ -829,11 +842,11 @@ async function handlePremiumTrackDownload(
     downloadsUsed: result.used,
     downloadsRemaining: Math.max(
       0,
-      PREMIUM_MONTHLY_TRACK_LIMIT -
+      premiumDownloadLimit -
         result.used
     ),
     downloadLimit:
-      PREMIUM_MONTHLY_TRACK_LIMIT,
+            premiumDownloadLimit,
     cycleKey,
     message: result.alreadySelected
       ? "A fresh download link was generated. This track was already selected during the current billing month."
@@ -1184,6 +1197,7 @@ export async function POST(request: Request) {
     );
   }
 }
+
 
 
 

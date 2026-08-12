@@ -19,6 +19,38 @@ type Album = {
 };
 
 
+type PublicFlagshipTrack = {
+  id: string;
+  number: number;
+  title: string;
+  mediaId: string | null;
+  storagePath: string | null;
+  previewUrl: string | null;
+  price: number;
+};
+
+type PublicFlagshipAlbum = {
+  id: string;
+  albumId: string;
+  title: string;
+  artist: string;
+  year: number;
+  genre: string;
+  description: string;
+  status: "released" | "upcoming";
+  publishStatus: "published" | "draft";
+  isFlagship: boolean;
+  flagshipPreviewTrackIds: string[];
+  accessType: "standard" | "premium";
+  cover: string | null;
+  coverUrl: string | null;
+  albumPreview: string | null;
+  albumPreviewUrl: string | null;
+  pageLink: string;
+  trackCount: number;
+  tracks: PublicFlagshipTrack[];
+};
+
 type SponsoredBusinessCampaign = {
   submissionId: string;
   businessName: string;
@@ -48,7 +80,7 @@ type PromotedCampaign = {
 };
 
 
-const flagshipTracks: PlayerTrack[] = [
+const fallbackFlagshipTracks: PlayerTrack[] = [
   {
     id: "bullet-carnage-fantasy",
     title: "Fantasy",
@@ -283,6 +315,73 @@ export default function AlbumsPage() {
   const [businessCampaigns, setBusinessCampaigns] = useState<SponsoredBusinessCampaign[]>([]);
   const [businessCampaignsLoading, setBusinessCampaignsLoading] = useState(true);
 
+  const [dashboardFlagship, setDashboardFlagship] =
+    useState<PublicFlagshipAlbum | null>(null);
+
+  const flagshipTitle =
+    dashboardFlagship?.title || "Bullet Carnage";
+
+  const flagshipArtist =
+    dashboardFlagship?.artist || "Solo Beats";
+
+  const flagshipCover =
+    dashboardFlagship?.coverUrl ||
+    dashboardFlagship?.cover ||
+    "/covers/bullet-carnage.png";
+
+  const flagshipStatus =
+    dashboardFlagship?.status === "released"
+      ? "Released"
+      : "Upcoming";
+
+  const flagshipTrackCount =
+    dashboardFlagship?.trackCount || 20;
+
+  const flagshipDescription =
+    dashboardFlagship?.description ||
+    "A devastating unreleased electronic album built with aggressive bass, dark futuristic energy, speed, and cinematic power. Preview flagship tracks now, with additional exclusive tracks coming to Premium Radio and Premium TV.";
+
+  const flagshipPageLink =
+    dashboardFlagship?.pageLink ||
+    "/albums/bullet-carnage";
+
+  const selectedEarlyAccessTracks =
+    dashboardFlagship
+      ? dashboardFlagship.flagshipPreviewTrackIds
+          .map((mediaId) =>
+            dashboardFlagship.tracks.find(
+              (track) =>
+                track.mediaId === mediaId &&
+                typeof track.previewUrl === "string" &&
+                track.previewUrl.length > 0
+            )
+          )
+          .filter(
+            (
+              track
+            ): track is PublicFlagshipTrack =>
+              Boolean(track)
+          )
+      : [];
+
+  const dashboardPreviewTracks: PlayerTrack[] =
+    dashboardFlagship
+      ? selectedEarlyAccessTracks.map((track) => ({
+          id: `flagship-${dashboardFlagship.albumId}-${track.id}`,
+          title: track.title,
+          artist: dashboardFlagship.artist,
+          albumTitle: dashboardFlagship.title,
+          audio: track.previewUrl as string,
+          cover:
+            dashboardFlagship.coverUrl ||
+            dashboardFlagship.cover ||
+            "/covers/bullet-carnage.png",
+        }))
+      : [];
+
+  const homepageFlagshipTracks =
+    dashboardPreviewTracks;
+
   function sortAlbums(albums: Album[]) {
     const sortedAlbums = [...albums];
 
@@ -377,6 +476,56 @@ export default function AlbumsPage() {
     lastAlbumIndex
   );
   const noResults = totalVisibleAlbums === 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardFlagship() {
+      try {
+        const response = await fetch(
+          "/api/catalog/albums?includeFlagshipDraft=1",
+          { cache: "no-store" }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              "Public catalog could not be loaded."
+          );
+        }
+
+        const albums = Array.isArray(data.albums)
+          ? (data.albums as PublicFlagshipAlbum[])
+          : [];
+
+        const selected =
+          albums.find(
+            (album) => album.isFlagship === true
+          ) || null;
+
+        if (!cancelled) {
+          setDashboardFlagship(selected);
+        }
+      } catch (error) {
+        console.error(
+          "Homepage flagship could not be loaded:",
+          error
+        );
+
+        if (!cancelled) {
+          setDashboardFlagship(null);
+        }
+      }
+    }
+
+    void loadDashboardFlagship();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -619,11 +768,12 @@ export default function AlbumsPage() {
         </p>
 
 
+        {dashboardFlagship ? (
         <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/25 bg-gradient-to-br from-red-950 via-black to-zinc-950 p-6 shadow-2xl md:p-10">
           <div className="grid gap-8 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center">
             <img
-              src="/covers/bullet-carnage.png"
-              alt="Bullet Carnage album cover"
+              src={flagshipCover}
+              alt={`${flagshipTitle} album cover`}
               className="aspect-square w-full rounded-[2rem] object-cover shadow-2xl shadow-red-950/60"
             />
 
@@ -633,21 +783,21 @@ export default function AlbumsPage() {
               </p>
 
               <h2 className="mt-3 text-5xl font-black md:text-7xl">
-                Bullet Carnage
+                {flagshipTitle}
               </h2>
 
               <p className="mt-4 text-lg text-white/55">
-                Upcoming • 20 Tracks • Solo Beats
+                {flagshipStatus} â€¢ {flagshipTrackCount}{" "}
+                {flagshipTrackCount === 1 ? "Track" : "Tracks"} â€¢{" "}
+                {flagshipArtist}
               </p>
 
               <p className="mt-6 max-w-3xl text-lg leading-8 text-white/65">
-                A devastating unreleased electronic album built with aggressive bass,
-                dark futuristic energy, speed, and cinematic power. Preview four flagship tracks
-                now, with additional exclusive tracks coming to Premium Radio and Premium TV.
+                {flagshipDescription}
               </p>
 
               <div className="mt-7 grid gap-3 sm:grid-cols-2">
-                {flagshipTracks.map((track) => {
+                {homepageFlagshipTracks.map((track) => {
                   const active = currentTrack?.id === track.id;
                   const playing = active && isPlaying;
 
@@ -687,17 +837,16 @@ export default function AlbumsPage() {
                 </Link>
 
                 <Link
-                  href="/store"
-                  className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
-                >
-                  Explore the Store
-                </Link>
+                href={flagshipPageLink}
+                className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+              >
+                View Flagship Album
+              </Link>
               </div>
             </div>
           </div>
         </section>
-
-
+        ) : null}
         {(businessCampaignsLoading || businessCampaigns.length > 0) && (
           <section className="mb-14 rounded-[2rem] border border-cyan-300/20 bg-gradient-to-br from-cyan-700/20 via-zinc-950 to-violet-500/10 p-6 md:p-8">
             <div className="flex flex-wrap items-end justify-between gap-4">
@@ -894,7 +1043,7 @@ export default function AlbumsPage() {
                 : "border-zinc-700 bg-zinc-900 text-gray-200 hover:border-pink-500 hover:text-pink-400"
             }`}
           >
-            ♥ Favorites
+            â™¥ Favorites
           </button>
         </div>
 
@@ -1013,7 +1162,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "♥" : "♡"}
+                          {albumIsFavorite ? "â™¥" : "â™¡"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -1052,11 +1201,11 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Upcoming Album • Solo Beats
+                          Upcoming Album â€¢ Solo Beats
                         </p>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          {album.year} • {album.tracks}
+                          {album.year} â€¢ {album.tracks}
                         </p>
 
                         <button
@@ -1124,7 +1273,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "♥" : "♡"}
+                          {albumIsFavorite ? "â™¥" : "â™¡"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -1160,7 +1309,7 @@ export default function AlbumsPage() {
                         </h3>
 
                         <p className="mt-1 text-sm text-gray-400">
-                          Released Album • Solo Beats
+                          Released Album â€¢ Solo Beats
                         </p>
 
                         <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1256,6 +1405,8 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
+
 
 
 
