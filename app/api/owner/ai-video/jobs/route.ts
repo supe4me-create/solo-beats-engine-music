@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -6,6 +6,15 @@ import {
   adminDb,
   firebaseAdminApp,
 } from "../../../../../lib/firebaseAdmin";
+
+import {
+  requirePremiumAccess,
+} from "../../../../../lib/requirePremium";
+
+import {
+  getAiVideoCreditBalance,
+  getAiVideoCreditCost,
+} from "../../../../../lib/aiVideoCredits";
 
 const OWNER_EMAIL = "supe4.me@gmail.com";
 
@@ -29,7 +38,7 @@ function getBearerToken(
   return match?.[1]?.trim() || null;
 }
 
-async function verifyOwner(
+async function verifyAuthenticatedUser(
   request: Request
 ) {
   const idToken =
@@ -39,10 +48,22 @@ async function verifyOwner(
     throw new Error("UNAUTHORIZED");
   }
 
-  const decoded =
-    await getAuth(
+  try {
+    return await getAuth(
       firebaseAdminApp
     ).verifyIdToken(idToken);
+  } catch {
+    throw new Error("UNAUTHORIZED");
+  }
+}
+
+async function verifyOwner(
+  request: Request
+) {
+  const decoded =
+    await verifyAuthenticatedUser(
+      request
+    );
 
   const email =
     typeof decoded.email === "string"
@@ -271,9 +292,52 @@ export async function POST(
 ) {
   try {
     const decoded =
-      await verifyOwner(
+      await verifyAuthenticatedUser(
         request
       );
+
+    const authenticatedEmail =
+      typeof decoded.email === "string"
+        ? decoded.email.toLowerCase()
+        : "";
+
+    const isOwner =
+      authenticatedEmail === OWNER_EMAIL;
+
+    if (!isOwner) {
+      const premiumAccess =
+        await requirePremiumAccess(
+          request
+        );
+
+      if (!premiumAccess.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              premiumAccess.error,
+          },
+          {
+            status:
+              premiumAccess.statusCode,
+          }
+        );
+      }
+
+      if (
+        premiumAccess.uid !==
+        decoded.uid
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Premium account verification failed.",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     const body =
       (await request.json()) as {
@@ -404,6 +468,72 @@ export async function POST(
       );
     }
 
+    const generationCreditCost =
+
+      isOwner
+
+        ? 0
+
+        : getAiVideoCreditCost(
+
+            durationValue
+
+          );
+
+
+    let availableCredits:
+
+      number | null = null;
+
+
+    if (!isOwner) {
+
+      availableCredits =
+
+        await getAiVideoCreditBalance(
+
+          decoded.uid
+
+        );
+
+
+      if (
+
+        availableCredits <
+
+        generationCreditCost
+
+      ) {
+
+        return NextResponse.json(
+
+          {
+
+            success: false,
+
+            error:
+
+              `Not enough AI Video credits. This generation requires ${generationCreditCost} credit${generationCreditCost === 1 ? "" : "s"}.`,
+
+            creditsRequired:
+
+              generationCreditCost,
+
+            creditsAvailable:
+
+              availableCredits,
+
+          },
+
+          { status: 402 }
+
+        );
+
+      }
+
+    }
+
+
     const reference =
       adminDb
         .collection(
@@ -415,10 +545,17 @@ export async function POST(
       ownerUid:
         decoded.uid,
       ownerEmail:
-        typeof decoded.email ===
-        "string"
-          ? decoded.email
-          : OWNER_EMAIL,
+    typeof decoded.email ===
+    "string"
+      ? decoded.email
+      : null,
+  creatorType:
+    isOwner
+      ? "owner"
+      : "subscriber",
+  creditCost:
+    generationCreditCost,
+  creditCharged: false,
       mode,
       prompt,
       aspectRatio,

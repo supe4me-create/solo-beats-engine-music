@@ -30,7 +30,7 @@ export default function GlobalHeader() {
     user?.email?.toLowerCase() === OWNER_EMAIL;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#070711]/90 backdrop-blur-xl">
+    <header className="relative z-50 border-b border-white/10 bg-[#070711]/90 backdrop-blur-xl">
       <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
         <Link href="/" className="min-w-0">
           <p className="truncate text-sm font-black tracking-[0.18em] text-white">
@@ -160,6 +160,7 @@ export default function GlobalHeader() {
     </header>
   );
 }
+
 
 
 

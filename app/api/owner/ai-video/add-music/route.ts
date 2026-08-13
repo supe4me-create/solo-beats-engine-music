@@ -215,6 +215,7 @@ export async function POST(
       (await request.json()) as {
         jobId?: unknown;
         audioMediaId?: unknown;
+        videoMediaId?: unknown;
         volume?: unknown;
         musicStart?: unknown;
         loopMusic?: unknown;
@@ -229,6 +230,12 @@ export async function POST(
     const audioMediaId =
       clean(
         body.audioMediaId,
+        150
+      );
+
+    const videoMediaId =
+      clean(
+        body.videoMediaId,
         150
       );
 
@@ -336,12 +343,15 @@ export async function POST(
         ? job.outputUrl.trim()
         : "";
 
-    if (!outputUrl) {
+    if (
+      !outputUrl &&
+      !videoMediaId
+    ) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "The completed AI video does not have an output URL.",
+            "The completed AI video does not have a usable video source.",
         },
         { status: 400 }
       );
@@ -427,27 +437,90 @@ export async function POST(
       );
     }
 
-    const videoResponse =
-      await fetch(
-        outputUrl,
-        {
-          cache:
-            "no-store",
-        }
-      );
+    let videoBuffer:
+      Buffer | null = null;
 
-    if (
-      !videoResponse.ok
-    ) {
-      throw new Error(
-        `AI video download failed with status ${videoResponse.status}.`
-      );
+    if (videoMediaId) {
+      const savedVideoReference =
+        adminDb
+          .collection(
+            "mediaLibrary"
+          )
+          .doc(
+            videoMediaId
+          );
+
+      const savedVideoSnapshot =
+        await savedVideoReference.get();
+
+      if (savedVideoSnapshot.exists) {
+        const savedVideo =
+          savedVideoSnapshot.data() ||
+          {};
+
+        const savedVideoStoragePath =
+          typeof savedVideo.storagePath ===
+            "string"
+            ? savedVideo.storagePath.trim()
+            : "";
+
+        if (
+          savedVideo.kind === "video" &&
+          savedVideoStoragePath
+        ) {
+          const savedVideoFile =
+            adminBucket.file(
+              savedVideoStoragePath
+            );
+
+          const [savedVideoExists] =
+            await savedVideoFile.exists();
+
+          if (savedVideoExists) {
+            const [
+              savedVideoBuffer,
+            ] =
+              await savedVideoFile.download();
+
+            videoBuffer =
+              savedVideoBuffer;
+          }
+        }
+      }
     }
 
-    const videoBuffer =
-      Buffer.from(
-        await videoResponse.arrayBuffer()
+    if (
+      !videoBuffer &&
+      outputUrl
+    ) {
+      const videoResponse =
+        await fetch(
+          outputUrl,
+          {
+            cache:
+              "no-store",
+          }
+        );
+
+      if (
+        !videoResponse.ok
+      ) {
+        throw new Error(
+          `AI video download failed with status ${videoResponse.status}.`
+        );
+      }
+
+      videoBuffer =
+        Buffer.from(
+          await videoResponse.arrayBuffer()
+        );
+    }
+
+    if (!videoBuffer) {
+      throw new Error(
+        "The AI video could not be loaded from Firebase Storage or the provider."
       );
+    }
 
     const [
       audioBuffer,
@@ -808,3 +881,6 @@ export async function POST(
     }
   }
 }
+
+
+

@@ -972,6 +972,8 @@ export default function AiVideoGeneratorPage() {
               jobId: currentJobId,
               audioMediaId:
                 selectedAudioMediaId,
+              videoMediaId:
+                savedVideoMediaId,
               volume:
                 musicVolume,
               musicStart,
@@ -2506,6 +2508,7 @@ export default function AiVideoGeneratorPage() {
     </main>
   );
 }
+
 
 
 

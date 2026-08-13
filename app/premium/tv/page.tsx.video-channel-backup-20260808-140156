@@ -37,20 +37,6 @@ type TvProgram = {
   src: string;
 };
 
-type PremiumTvVideo = {
-  mediaId: string;
-  title: string;
-  description: string;
-  sourceType: string;
-  featured: boolean;
-  displayOrder: number;
-  videoUrl: string;
-  videoSource: "upload" | "youtube";
-  youtubeVideoId: string | null;
-  youtubeUrl: string | null;
-  youtubeEmbedUrl: string | null;
-};
-
 const TV_PREVIEW_LIMIT = 2;
 const TV_PREVIEW_STORAGE_KEY = "solo-beats-tv-preview-count";
 
@@ -271,32 +257,11 @@ function SponsoredBusinessPlacement({
                 <p className="mt-2 text-white/45">{campaign.campaignName}</p>
                 <p className="mt-4 max-w-3xl leading-7 text-white/60">{campaign.description}</p>
                 {embedUrl ? (
-                  <div className="relative mt-5 aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
-                    <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-full border border-cyan-200/40 bg-black/80 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100 shadow-xl backdrop-blur">
-                      {campaign.sponsoredLabel || "Sponsored"}
-                    </div>
-
-                    <iframe
-                      src={embedUrl}
-                      title={`${campaign.campaignName} sponsored video`}
-                      className="h-full w-full"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                    />
+                  <div className="mt-5 aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
+                    <iframe src={embedUrl} title={`${campaign.campaignName} sponsored video`} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
                   </div>
                 ) : campaign.videoUrl ? (
-                  <div className="relative mt-5 aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
-                    <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-full border border-cyan-200/40 bg-black/80 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100 shadow-xl backdrop-blur">
-                      {campaign.sponsoredLabel || "Sponsored"}
-                    </div>
-
-                    <video
-                      controls
-                      preload="metadata"
-                      src={campaign.videoUrl}
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
+                  <video controls preload="metadata" src={campaign.videoUrl} className="mt-5 aspect-video w-full rounded-2xl bg-black" />
                 ) : null}
                 <div className="mt-5 flex flex-wrap gap-3">
                   {campaign.businessWebsite ? (
@@ -370,18 +335,6 @@ export default function PremiumTvPage() {
   const [businessCampaigns, setBusinessCampaigns] =
     useState<SponsoredBusinessCampaign[]>([]);
 
-  const [premiumTvVideos, setPremiumTvVideos] =
-    useState<PremiumTvVideo[]>([]);
-
-  const [premiumVideoIndex, setPremiumVideoIndex] =
-    useState(0);
-
-  const [premiumVideoLoading, setPremiumVideoLoading] =
-    useState(true);
-
-  const [premiumVideoError, setPremiumVideoError] =
-    useState("");
-
   const allPrograms = useMemo(
     () => [
       ...premiumAlbums.flatMap((album) =>
@@ -437,9 +390,6 @@ export default function PremiumTvPage() {
 
   const audioRef =
     useRef<HTMLAudioElement | null>(null);
-
-  const videoChannelRef =
-    useRef<HTMLVideoElement | null>(null);
   const previewStartedProgramRef =
     useRef<string | null>(null);
   const canvasRef =
@@ -458,34 +408,11 @@ export default function PremiumTvPage() {
   const currentProgram =
     queue[currentIndex] || null;
 
-  const currentPremiumVideo =
-    premiumTvVideos[premiumVideoIndex] ||
-    null;
-
   const hasPremiumAccess =
     accessState === "active";
   const isPublicPreview =
     accessState !== "loading" &&
     !hasPremiumAccess;
- 
-  useEffect(() => {
-    if (!hasPremiumAccess) {
-      return;
-    }
-
-    setPreviewPlays(0);
-    setPreviewLocked(false);
-    setPlaybackMessage("");
-    previewStartedProgramRef.current = null;
-
-    try {
-      window.localStorage.removeItem(
-        TV_PREVIEW_STORAGE_KEY
-      );
-    } catch {
-      // Premium access does not depend on local storage.
-    }
-  }, [hasPremiumAccess]);
 
   useEffect(() => {
     try {
@@ -579,118 +506,6 @@ export default function PremiumTvPage() {
     }
     void loadSponsoredBusinessCampaigns();
     return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let lastPremiumTvKey = "";
-
-    async function loadPremiumTvVideos() {
-      try {
-        const response =
-          await fetch(
-            `/api/videos/premium-tv?t=${Date.now()}`,
-            {
-              cache: "no-store",
-            }
-          );
-
-        const data =
-          await response.json();
-
-        if (
-          !response.ok ||
-          !data.success
-        ) {
-          throw new Error(
-            data.error ||
-              "Premium TV video programming could not be loaded."
-          );
-        }
-
-        if (!cancelled) {
-          const videos =
-            Array.isArray(data.videos)
-              ? data.videos
-              : [];
-
-          const nextPremiumTvKey =
-            videos
-              .map(
-                (video: {
-                  mediaId?: string;
-                }) =>
-                  video.mediaId || ""
-              )
-              .join("|");
-
-          if (
-            nextPremiumTvKey !==
-            lastPremiumTvKey
-          ) {
-            lastPremiumTvKey =
-              nextPremiumTvKey;
-
-            setPremiumTvVideos(
-              videos
-            );
-
-            setPremiumVideoIndex(0);
-          }
-
-          setPremiumVideoError("");
-        }
-      } catch (error) {
-        console.error(
-          "Premium TV video programming error:",
-          error
-        );
-
-        if (!cancelled) {
-          setPremiumVideoError(
-            error instanceof Error
-              ? error.message
-              : "Premium TV videos could not be loaded."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setPremiumVideoLoading(false);
-        }
-      }
-    }
-
-    void loadPremiumTvVideos();
-
-    const intervalId =
-      window.setInterval(
-        () => {
-          void loadPremiumTvVideos();
-        },
-        5000
-      );
-
-    const handleFocus = () => {
-      void loadPremiumTvVideos();
-    };
-
-    window.addEventListener(
-      "focus",
-      handleFocus
-    );
-
-    return () => {
-      cancelled = true;
-
-      window.clearInterval(
-        intervalId
-      );
-
-      window.removeEventListener(
-        "focus",
-        handleFocus
-      );
-    };
   }, []);
 
   useEffect(() => {
@@ -966,130 +781,6 @@ export default function PremiumTvPage() {
         ? 0
         : index + 1
     );
-  }
-
-  function previousPremiumVideo() {
-    if (
-      premiumTvVideos.length === 0
-    ) {
-      return;
-    }
-
-    const video =
-      videoChannelRef.current;
-
-    if (video) {
-      video.pause();
-    }
-
-    setPremiumVideoIndex(
-      (index) =>
-        index <= 0
-          ? premiumTvVideos.length - 1
-          : index - 1
-    );
-  }
-
-  function nextPremiumVideo() {
-    if (
-      premiumTvVideos.length === 0
-    ) {
-      return;
-    }
-
-    const video =
-      videoChannelRef.current;
-
-    if (video) {
-      video.pause();
-    }
-
-    setPremiumVideoIndex(
-      (index) =>
-        index >=
-        premiumTvVideos.length - 1
-          ? 0
-          : index + 1
-    );
-  }
-
-  function registerPremiumVideoPreviewStart() {
-    if (
-      !isPublicPreview ||
-      !currentPremiumVideo
-    ) {
-      return true;
-    }
-
-    const video =
-      videoChannelRef.current;
-
-    if (!video) {
-      return false;
-    }
-
-    if (previewLocked) {
-      video.pause();
-      video.currentTime = 0;
-
-      setPlaybackMessage(
-        "Your two-program TV preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited TV and Radio."
-      );
-
-      return false;
-    }
-
-    const previewId =
-      `video:${currentPremiumVideo.mediaId}`;
-
-    if (
-      previewStartedProgramRef.current ===
-      previewId
-    ) {
-      return true;
-    }
-
-    if (
-      previewPlays >=
-      TV_PREVIEW_LIMIT
-    ) {
-      setPreviewLocked(true);
-
-      video.pause();
-      video.currentTime = 0;
-
-      return false;
-    }
-
-    const nextPreviewCount =
-      previewPlays + 1;
-
-    previewStartedProgramRef.current =
-      previewId;
-
-    setPreviewPlays(
-      nextPreviewCount
-    );
-
-    try {
-      window.localStorage.setItem(
-        TV_PREVIEW_STORAGE_KEY,
-        String(nextPreviewCount)
-      );
-    } catch {
-      // In-memory preview protection still applies.
-    }
-
-    if (
-      nextPreviewCount >=
-      TV_PREVIEW_LIMIT
-    ) {
-      setPlaybackMessage(
-        "This is your final free Premium TV preview program."
-      );
-    }
-
-    return true;
   }
 
   function shuffleChannel() {
@@ -1940,257 +1631,6 @@ export default function PremiumTvPage() {
       />
 
       <div className="mx-auto max-w-7xl">
-        <section className="mb-8 overflow-hidden rounded-[1.4rem] border border-fuchsia-300/20 bg-gradient-to-br from-fuchsia-700/20 via-black/70 to-cyan-500/10 sm:mb-12 sm:rounded-[2rem]">
-          <div className="flex flex-col items-start gap-4 border-b border-white/10 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-fuchsia-300">
-                SOLO BEATS PREMIUM TV
-              </p>
-
-              <h2 className="mt-2 text-xl font-black leading-tight sm:text-3xl">
-                Live Video Channel
-              </h2>
-
-              <p className="mt-2 max-w-xl text-sm leading-6 text-white/50">
-                Continuous video programming selected and managed by SOLO BEATS.
-              </p>
-            </div>
-
-            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-              <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.12em] text-emerald-200 sm:text-xs sm:tracking-[0.15em]">
-                {premiumTvVideos.length} Video{premiumTvVideos.length === 1 ? "" : "s"}
-              </span>
-
-              {currentPremiumVideo?.featured ? (
-                <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.15em] text-amber-200">
-                  Featured
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {premiumVideoLoading ? (
-            <div className="px-5 py-8 text-center text-sm leading-6 text-white/55 sm:p-10">
-              Loading Premium TV video programming...
-            </div>
-          ) : premiumVideoError ? (
-            <div className="px-5 py-8 text-center sm:p-10">
-              <p className="font-black text-red-300">
-                Premium TV video programming could not be loaded.
-              </p>
-
-              <p className="mt-2 text-sm text-white/45">
-                {premiumVideoError}
-              </p>
-            </div>
-          ) : currentPremiumVideo ? (
-            <div className="p-3 sm:p-8">
-              <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black sm:rounded-[1.5rem]">
-                {currentPremiumVideo.videoSource ===
-                  "youtube" &&
-                currentPremiumVideo.youtubeEmbedUrl ? (
-                  <iframe
-                    key={
-                      currentPremiumVideo.mediaId
-                    }
-                    src={
-                      currentPremiumVideo.youtubeEmbedUrl
-                    }
-                    title={`${currentPremiumVideo.title} YouTube video`}
-                    className="aspect-video w-full bg-black"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                    onLoad={() => {
-                      const audio =
-                        audioRef.current;
-
-                      if (audio) {
-                        audio.pause();
-                      }
-                    }}
-                  />
-                ) : currentPremiumVideo.videoUrl ? (
-                  <video
-                    key={
-                      currentPremiumVideo.mediaId
-                    }
-                    ref={videoChannelRef}
-                    src={
-                      currentPremiumVideo.videoUrl
-                    }
-                    controls={!(isPublicPreview && previewLocked)}
-                    preload="metadata"
-                    playsInline
-                    className="aspect-video w-full bg-black object-contain"
-                    onPlay={() => {
-                      const audio =
-                        audioRef.current;
-
-                      if (audio) {
-                        audio.pause();
-                      }
-
-                      registerPremiumVideoPreviewStart();
-                    }}
-                    onEnded={() => {
-                      if (
-                        isPublicPreview &&
-                        previewPlays >=
-                          TV_PREVIEW_LIMIT
-                      ) {
-                        setPreviewLocked(
-                          true
-                        );
-
-                        setPlaybackMessage(
-                          "Your two-program TV preview is complete. Subscribe to SOLO BEATS PREMIUM for unlimited TV and Radio."
-                        );
-
-                        return;
-                      }
-
-                      if (
-                        autoplay &&
-                        premiumTvVideos.length >
-                          1
-                      ) {
-                        nextPremiumVideo();
-
-                        window.setTimeout(
-                          () => {
-                            void videoChannelRef.current
-                              ?.play()
-                              .catch(
-                                () => {}
-                              );
-                          },
-                          100
-                        );
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="grid aspect-video place-items-center bg-black px-6 text-center text-sm text-white/45">
-                    Video source is unavailable.
-                  </div>
-                )}
-
-                {isPublicPreview && previewLocked ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-4 text-center sm:p-8">
-                    <div>
-                      <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-300">
-                        Premium Preview Complete
-                      </p>
-
-                      <h3 className="mt-3 text-xl font-black sm:text-3xl">
-                        Subscribe to continue watching
-                      </h3>
-
-                      <Link
-                        href="/premium"
-                        className="mt-6 inline-flex rounded-2xl bg-white px-6 py-4 font-black text-black"
-                      >
-                        Get SOLO BEATS PREMIUM
-                      </Link>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-5 flex flex-col items-start justify-between gap-4 sm:mt-8 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
-                    Now Showing
-                  </p>
-
-                  <h3 className="mt-2 text-xl font-black leading-tight sm:text-2xl">
-                    {currentPremiumVideo.title}
-                  </h3>
-
-                  {currentPremiumVideo.description ? (
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
-                      {currentPremiumVideo.description}
-                    </p>
-                  ) : null}
-
-                  <p className="mt-2 text-xs uppercase tracking-[0.15em] text-white/35">
-                    Source: {currentPremiumVideo.sourceType}
-                  </p>
-                </div>
-
-                <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={previousPremiumVideo}
-                    disabled={
-                      premiumTvVideos.length <= 1
-                    }
-                    className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-35 sm:flex-none sm:rounded-2xl sm:px-5 sm:text-base"
-                  >
-                    Previous Video
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={nextPremiumVideo}
-                    disabled={
-                      premiumTvVideos.length <= 1
-                    }
-                    className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black disabled:cursor-not-allowed disabled:opacity-35 sm:flex-none sm:rounded-2xl sm:px-5 sm:text-base"
-                  >
-                    Next Video
-                  </button>
-                </div>
-              </div>
-
-              {premiumTvVideos.length > 1 ? (
-                <div className="mt-6 flex gap-2 overflow-x-auto pb-2">
-                  {premiumTvVideos.map(
-                    (video, index) => (
-                      <button
-                        key={video.mediaId}
-                        type="button"
-                        onClick={() => {
-                          videoChannelRef.current?.pause();
-
-                          setPremiumVideoIndex(
-                            index
-                          );
-                        }}
-                        className={`min-w-[190px] rounded-2xl border p-4 text-left transition ${
-                          index ===
-                          premiumVideoIndex
-                            ? "border-fuchsia-300/50 bg-fuchsia-400/10"
-                            : "border-white/10 bg-white/[0.035] hover:bg-white/[0.07]"
-                        }`}
-                      >
-                        <p className="truncate font-black">
-                          {video.title}
-                        </p>
-
-                        <p className="mt-1 text-xs uppercase tracking-[0.12em] text-white/35">
-                          {video.featured
-                            ? "Featured"
-                            : `Program ${index + 1}`}
-                        </p>
-                      </button>
-                    )
-                  )}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="px-5 py-8 text-center sm:p-10">
-              <p className="text-lg font-black">
-                No Premium TV videos are currently scheduled.
-              </p>
-
-              <p className="mt-2 text-sm text-white/45">
-                Turn Published ON and Premium TV ON for a video in Video Manager.
-              </p>
-            </div>
-          )}
-        </section>
         {isPublicPreview ? (
           <section className="mb-6 rounded-[2rem] border border-amber-300/25 bg-gradient-to-r from-amber-500/15 via-white/[0.04] to-fuchsia-500/15 p-6 sm:p-8">
             <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-200">
@@ -2241,17 +1681,17 @@ export default function PremiumTvPage() {
               <p className="text-sm font-black uppercase tracking-[0.22em] text-emerald-300">
                 {hasPremiumAccess ? "Premium Access Confirmed" : "Public Preview Access"}
               </p>
-              <h1 className="mt-3 text-3xl font-black sm:text-5xl">
-                Premium Music Visualizer
+              <h1 className="mt-3 text-4xl font-black sm:text-6xl">
+                SOLO BEATS PREMIUM TV
               </h1>
               <p className="mt-3 max-w-3xl text-white/55">
                 {hasPremiumAccess
-                  ? `Secondary visual music programming powered by ${premiumAlbums.length} selected albums and ${allPrograms.length} tracks.`
+                  ? `Continuous visual music programming powered by ${premiumAlbums.length} selected albums and ${allPrograms.length} tracks.`
                   : "Preview two programs, then subscribe for unlimited Premium TV and Radio."}
               </p>
             </div>
 
-            <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={startTv}
@@ -2338,7 +1778,7 @@ export default function PremiumTvPage() {
                         Live Visualizer
                       </p>
 
-                      <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                      <div className="flex flex-wrap gap-2">
                         {(
                           [
                             "bars",
@@ -2599,7 +2039,7 @@ export default function PremiumTvPage() {
                 </span>
               </div>
 
-              <div className="mt-5 flex flex-col items-start justify-between gap-4 sm:mt-8 sm:flex-row sm:items-center">
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
                 <button
                   type="button"
                   onClick={() =>
@@ -2697,17 +2137,6 @@ export default function PremiumTvPage() {
     </main>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 

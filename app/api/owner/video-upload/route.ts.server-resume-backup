@@ -1,0 +1,325 @@
+﻿import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../lib/firebaseAdmin";
+
+const OWNER_EMAIL = "supe4.me@gmail.com";
+const MAX_VIDEO_SIZE =
+  2 * 1024 * 1024 * 1024;
+
+type UploadFile = {
+  name: string;
+  type: string;
+  size: number;
+};
+
+function bearer(request: Request) {
+  const value =
+    request.headers.get("authorization") || "";
+
+  return (
+    value.match(
+      /^Bearer\s+(.+)$/i
+    )?.[1]?.trim() || null
+  );
+}
+
+async function verifyOwner(
+  request: Request
+) {
+  const token = bearer(request);
+
+  if (!token) {
+    throw new Error(
+      "OWNER_AUTH_REQUIRED"
+    );
+  }
+
+  const decoded =
+    await getAuth(
+      firebaseAdminApp
+    ).verifyIdToken(token);
+
+  if (
+    decoded.email?.toLowerCase() !==
+    OWNER_EMAIL.toLowerCase()
+  ) {
+    throw new Error(
+      "OWNER_ACCESS_ONLY"
+    );
+  }
+
+  return decoded;
+}
+
+function authError(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : "";
+
+  if (
+    message ===
+    "OWNER_AUTH_REQUIRED"
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Owner sign-in is required.",
+      },
+      { status: 401 }
+    );
+  }
+
+  if (
+    message ===
+    "OWNER_ACCESS_ONLY"
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Owner access only.",
+      },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}
+
+function safeFileName(
+  value: string
+) {
+  return (
+    value
+      .normalize("NFKD")
+      .replace(
+        /[^\w.\-() ]+/g,
+        ""
+      )
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^\.+/, "")
+      .slice(0, 180) ||
+    `video-${Date.now()}.mp4`
+  );
+}
+
+function validVideo(
+  file: UploadFile | undefined
+) {
+  if (
+    !file ||
+    typeof file.name !== "string" ||
+    typeof file.type !== "string" ||
+    !Number.isFinite(file.size) ||
+    file.size <= 0
+  ) {
+    return (
+      "Invalid video file information."
+    );
+  }
+
+  const lower =
+    file.name.toLowerCase();
+
+  if (
+    file.type !== "video/mp4" &&
+    !lower.endsWith(".mp4")
+  ) {
+    return (
+      "Video Manager currently accepts MP4 files only."
+    );
+  }
+
+  if (
+    file.size > MAX_VIDEO_SIZE
+  ) {
+    return (
+      "Video files must be 2 GB or smaller."
+    );
+  }
+
+  return null;
+}
+
+async function ensureUploadCors() {
+  const [metadata] =
+    await adminBucket.getMetadata();
+
+  const current =
+    Array.isArray(
+      (
+        metadata as {
+          cors?: unknown;
+        }
+      ).cors
+    )
+      ? (
+          metadata as {
+            cors: Array<{
+              origin?: string[];
+              method?: string[];
+              responseHeader?: string[];
+              maxAgeSeconds?: number;
+            }>;
+          }
+        ).cors
+      : [];
+
+  const alreadyInstalled =
+    current.some((item) => {
+      const origins =
+        Array.isArray(item.origin)
+          ? item.origin
+          : [];
+
+      const methods =
+        Array.isArray(item.method)
+          ? item.method
+          : [];
+
+      return (
+        origins.includes("*") &&
+        methods.includes("PUT")
+      );
+    });
+
+  if (alreadyInstalled) {
+    return;
+  }
+
+  await adminBucket.setCorsConfiguration(
+    [
+      ...current,
+      {
+        origin: ["*"],
+        method: [
+          "GET",
+          "HEAD",
+          "PUT",
+        ],
+        responseHeader: [
+          "Content-Type",
+          "Content-Range",
+          "Range",
+        ],
+        maxAgeSeconds: 3600,
+      },
+    ]
+  );
+}
+
+export async function POST(
+  request: Request
+) {
+  try {
+    const owner =
+      await verifyOwner(request);
+
+    const payload =
+      await request.json();
+
+    const file =
+      payload.file as
+        | UploadFile
+        | undefined;
+
+    const validationError =
+      validVideo(file);
+
+    if (
+      validationError ||
+      !file
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            validationError ||
+            "Invalid video.",
+        },
+        { status: 400 }
+      );
+    }
+
+    await ensureUploadCors();
+
+    const mediaRef =
+      adminDb
+        .collection(
+          "mediaLibrary"
+        )
+        .doc();
+
+    const mediaId =
+      mediaRef.id;
+
+    const storagePath =
+      `media/video/${mediaId}/` +
+      safeFileName(file.name);
+
+    const storageFile =
+      adminBucket.file(
+        storagePath
+      );
+
+    const origin =
+      request.headers.get(
+        "origin"
+      ) || undefined;
+
+    const uploadUrl =
+      await storageFile.createResumableUpload({
+        metadata: {
+          contentType:
+            file.type ||
+            "video/mp4",
+          metadata: {
+            mediaId,
+            uploadedBy:
+              owner.email ||
+              OWNER_EMAIL,
+          },
+        },
+        origin,
+      });
+
+    return NextResponse.json({
+      success: true,
+      kind: "video",
+      mediaId,
+      storagePath,
+      uploadUrl,
+      expiresIn:
+        "Approximately 7 days",
+    });
+  } catch (error) {
+    const response =
+      authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Resumable video upload error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Resumable video upload could not be started.",
+      },
+      { status: 500 }
+    );
+  }
+}
+

@@ -104,7 +104,7 @@ export default function HomepageVideoChannel() {
   }
 
   return (
-    <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-violet-400/20 bg-gradient-to-br from-violet-950/70 via-zinc-950 to-cyan-950/40 p-5 shadow-2xl md:p-7">
+    <section className="mt-8 mb-14 overflow-hidden rounded-[2.5rem] border border-violet-400/20 bg-gradient-to-br from-violet-950/70 via-zinc-950 to-cyan-950/40 p-5 shadow-2xl md:p-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.24em] text-fuchsia-300">
@@ -202,4 +202,5 @@ export default function HomepageVideoChannel() {
     </section>
   );
 }
+
 

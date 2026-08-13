@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import RunwayML from "@runwayml/sdk";
@@ -7,6 +7,14 @@ import {
   adminDb,
   firebaseAdminApp,
 } from "../../../../../lib/firebaseAdmin";
+
+import {
+  requirePremiumAccess,
+} from "../../../../../lib/requirePremium";
+
+import {
+  getAiVideoCreditCost,
+} from "../../../../../lib/aiVideoCredits";
 
 const OWNER_EMAIL = "supe4.me@gmail.com";
 
@@ -26,7 +34,7 @@ function getBearerToken(
   return match?.[1]?.trim() || null;
 }
 
-async function verifyOwner(
+async function verifyAuthenticatedUser(
   request: Request
 ) {
   const idToken =
@@ -36,10 +44,22 @@ async function verifyOwner(
     throw new Error("UNAUTHORIZED");
   }
 
-  const decoded =
-    await getAuth(
+  try {
+    return await getAuth(
       firebaseAdminApp
     ).verifyIdToken(idToken);
+  } catch {
+    throw new Error("UNAUTHORIZED");
+  }
+}
+
+async function verifyOwner(
+  request: Request
+) {
+  const decoded =
+    await verifyAuthenticatedUser(
+      request
+    );
 
   const email =
     typeof decoded.email === "string"
@@ -122,7 +142,53 @@ export async function POST(
   request: Request
 ) {
   try {
-    await verifyOwner(request);
+    const decoded =
+      await verifyAuthenticatedUser(
+        request
+      );
+
+    const authenticatedEmail =
+      typeof decoded.email === "string"
+        ? decoded.email.toLowerCase()
+        : "";
+
+    const isOwner =
+      authenticatedEmail === OWNER_EMAIL;
+
+    if (!isOwner) {
+      const premiumAccess =
+        await requirePremiumAccess(
+          request
+        );
+
+      if (!premiumAccess.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              premiumAccess.error,
+          },
+          {
+            status:
+              premiumAccess.statusCode,
+          }
+        );
+      }
+
+      if (
+        premiumAccess.uid !==
+        decoded.uid
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Premium account verification failed.",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     if (!process.env.RUNWAYML_API_SECRET) {
       return NextResponse.json(
@@ -238,67 +304,762 @@ export async function POST(
       );
     }
 
-    const client =
-      new RunwayML({
-        apiKey:
-          process.env
-            .RUNWAYML_API_SECRET,
-      });
+    
+let creditCost = 0;
+let creditBalance:
+  number | null = null;
 
-    await jobReference.set(
-      {
-        provider: "runway",
-        status:
-          "submitting_to_provider",
-        progress: 5,
-        error: null,
-        updatedAt:
-          FieldValue.serverTimestamp(),
-      },
-      { merge: true }
+if (!isOwner) {
+  creditCost =
+    getAiVideoCreditCost(
+      duration
     );
 
-    const runwayResponse =
-      await fetch(
-        "https://api.dev.runwayml.com/v1/text_to_video",
-        {
-          method: "POST",
-          headers: {
-            Authorization:
-              `Bearer ${process.env.RUNWAYML_API_SECRET}`,
-            "Content-Type":
-              "application/json",
-            "X-Runway-Version":
-              "2024-11-06",
-          },
-          body: JSON.stringify({
-            model: "gen4.5",
-            promptText: prompt,
-            ratio,
-            duration,
-          }),
-        }
+  const creditAccountReference =
+    adminDb
+      .collection(
+        "aiVideoCredits"
+      )
+      .doc(decoded.uid);
+
+  const creditLedgerReference =
+    creditAccountReference
+      .collection("ledger")
+      .doc(
+        `runway_${jobId}`
       );
 
-    const runwayData =
-      (await runwayResponse.json()) as {
-        id?: string;
-        error?: string;
-        message?: string;
-      };
+  const chargeResult =
+    await adminDb.runTransaction(
+      async (transaction) => {
+        const creditSnapshot =
+          await transaction.get(
+            creditAccountReference
+          );
 
+        const latestJobSnapshot =
+          await transaction.get(
+            jobReference
+          );
+
+        if (
+          !latestJobSnapshot.exists
+        ) {
+          return {
+            success: false as const,
+            reason:
+              "JOB_NOT_FOUND" as const,
+            balance: 0,
+          };
+        }
+
+        const latestJob =
+          latestJobSnapshot.data() || {};
+
+        const creditData =
+          creditSnapshot.exists
+            ? creditSnapshot.data() || {}
+            : {};
+
+        const currentBalance =
+          typeof creditData.balance ===
+            "number" &&
+          Number.isFinite(
+            creditData.balance
+          )
+            ? Math.max(
+                0,
+                Math.floor(
+                  creditData.balance
+                )
+              )
+            : 0;
+
+        if (
+          latestJob.ownerUid !==
+          decoded.uid
+        ) {
+          return {
+            success: false as const,
+            reason:
+              "JOB_FORBIDDEN" as const,
+            balance:
+              currentBalance,
+          };
+        }
+
+        if (
+          latestJob.creditCharged ===
+          true
+        ) {
+          return {
+            success: true as const,
+            alreadyCharged: true,
+            balance:
+              currentBalance,
+          };
+        }
+
+        if (
+          currentBalance <
+          creditCost
+        ) {
+          return {
+            success: false as const,
+            reason:
+              "INSUFFICIENT_CREDITS" as const,
+            balance:
+              currentBalance,
+          };
+        }
+
+        const newBalance =
+          currentBalance -
+          creditCost;
+
+        transaction.set(
+          creditAccountReference,
+          {
+            balance:
+              newBalance,
+            updatedAt:
+              FieldValue.serverTimestamp(),
+          },
+          {
+            merge: true,
+          }
+        );
+
+        transaction.set(
+          jobReference,
+          {
+            creditCharged: true,
+            creditCost,
+            creditChargedUid:
+              decoded.uid,
+            creditBalanceAfter:
+              newBalance,
+            creditChargedAt:
+              FieldValue.serverTimestamp(),
+            updatedAt:
+              FieldValue.serverTimestamp(),
+          },
+          {
+            merge: true,
+          }
+        );
+
+        transaction.set(
+          creditLedgerReference,
+          {
+            type: "debit",
+            amount:
+              creditCost,
+            reason:
+              "ai_video_generation",
+            jobId,
+            provider:
+              "runway",
+            duration,
+            balanceBefore:
+              currentBalance,
+            balanceAfter:
+              newBalance,
+            createdAt:
+              FieldValue.serverTimestamp(),
+          }
+        );
+
+        return {
+          success: true as const,
+          alreadyCharged: false,
+          balance:
+            newBalance,
+        };
+      }
+    );
+
+  if (!chargeResult.success) {
     if (
-      !runwayResponse.ok ||
-      !runwayData.id
+      chargeResult.reason ===
+      "INSUFFICIENT_CREDITS"
     ) {
-      throw new Error(
-        runwayData.error ||
-        runwayData.message ||
-        `Runway text-to-video request failed with status ${runwayResponse.status}.`
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            `Not enough AI Video credits. This generation requires ${creditCost} credit${creditCost === 1 ? "" : "s"}.`,
+          creditsRequired:
+            creditCost,
+          creditsAvailable:
+            chargeResult.balance,
+        },
+        { status: 402 }
       );
     }
 
-    const createdTask = {
+    if (
+      chargeResult.reason ===
+      "JOB_FORBIDDEN"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "You do not have access to this AI video job.",
+        },
+        { status: 403 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "AI video job was not found.",
+      },
+      { status: 404 }
+    );
+  }
+
+  creditBalance =
+    chargeResult.balance;
+}
+    /*
+     * AI_VIDEO_PROVIDER_SUBMISSION_LOCK
+     *
+     * Atomically reserve this SOLO BEATS job before calling Runway.
+     * This prevents two simultaneous POST requests from starting
+     * two provider tasks for the same job.
+     */
+    const submissionGuard =
+      await adminDb.runTransaction(
+        async (transaction) => {
+          const submissionSnapshot =
+            await transaction.get(
+              jobReference
+            );
+
+          if (
+            !submissionSnapshot.exists
+          ) {
+            return {
+              action:
+                "missing" as const,
+            };
+          }
+
+          const submissionJob =
+            submissionSnapshot.data() ||
+            {};
+
+          const existingProviderJobId =
+            typeof submissionJob
+              .providerJobId ===
+              "string"
+              ? submissionJob
+                  .providerJobId
+                  .trim()
+              : "";
+
+          if (
+            existingProviderJobId
+          ) {
+            return {
+              action:
+                "existing" as const,
+              providerJobId:
+                existingProviderJobId,
+              status:
+                typeof submissionJob
+                  .status ===
+                  "string"
+                  ? submissionJob.status
+                  : "submitted",
+              progress:
+                typeof submissionJob
+                  .progress ===
+                  "number"
+                  ? submissionJob.progress
+                  : 10,
+            };
+          }
+
+          if (
+            submissionJob
+              .providerSubmissionLocked ===
+              true ||
+            submissionJob.status ===
+              "submitting_to_provider"
+          ) {
+            return {
+              action:
+                "locked" as const,
+            };
+          }
+
+          transaction.set(
+            jobReference,
+            {
+              provider:
+                "runway",
+              providerSubmissionLocked:
+                true,
+              providerSubmissionState:
+                "reserved",
+              providerSubmissionLockedAt:
+                FieldValue.serverTimestamp(),
+              status:
+                "submitting_to_provider",
+              progress: 5,
+              error: null,
+              updatedAt:
+                FieldValue.serverTimestamp(),
+            },
+            {
+              merge: true,
+            }
+          );
+
+          return {
+            action:
+              "reserved" as const,
+          };
+        }
+      );
+
+    if (
+      submissionGuard.action ===
+      "missing"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "AI video job was not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (
+      submissionGuard.action ===
+      "existing"
+    ) {
+      return NextResponse.json({
+        success: true,
+        jobId,
+        provider:
+          "runway",
+        providerJobId:
+          submissionGuard
+            .providerJobId,
+        status:
+          submissionGuard.status,
+        progress:
+          submissionGuard.progress,
+        duplicateSubmissionPrevented:
+          true,
+        message:
+          "This AI video job was already submitted to Runway.",
+      });
+    }
+
+    if (
+      submissionGuard.action ===
+      "locked"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          jobId,
+          provider:
+            "runway",
+          status:
+            "submitting_to_provider",
+          duplicateSubmissionPrevented:
+            true,
+          error:
+            "This AI video job is already being submitted to Runway.",
+        },
+        { status: 409 }
+      );
+    }
+    async function rejectProviderSubmission(
+      failureMessage: string
+    ) {
+      await adminDb.runTransaction(
+        async (transaction) => {
+          const latestSnapshot =
+            await transaction.get(
+              jobReference
+            );
+
+          if (!latestSnapshot.exists) {
+            return;
+          }
+
+          const latestJob =
+            latestSnapshot.data() ||
+            {};
+
+          let refundAmount = 0;
+          let refundUid = "";
+          let newBalance:
+            number | null = null;
+
+          const chargedCredits =
+            typeof latestJob.creditCost ===
+              "number" &&
+            Number.isFinite(
+              latestJob.creditCost
+            )
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    latestJob.creditCost
+                  )
+                )
+              : 0;
+
+          const chargedUid =
+            typeof latestJob
+              .creditChargedUid ===
+              "string"
+              ? latestJob
+                  .creditChargedUid
+                  .trim()
+              : "";
+
+          if (
+            latestJob.creditCharged ===
+              true &&
+            latestJob.creditRefunded !==
+              true &&
+            chargedUid &&
+            chargedCredits > 0
+          ) {
+            const creditReference =
+              adminDb
+                .collection(
+                  "aiVideoCredits"
+                )
+                .doc(
+                  chargedUid
+                );
+
+            const creditSnapshot =
+              await transaction.get(
+                creditReference
+              );
+
+            const creditData =
+              creditSnapshot.exists
+                ? creditSnapshot.data() ||
+                  {}
+                : {};
+
+            const currentBalance =
+              typeof creditData.balance ===
+                "number" &&
+              Number.isFinite(
+                creditData.balance
+              )
+                ? Math.max(
+                    0,
+                    Math.floor(
+                      creditData.balance
+                    )
+                  )
+                : 0;
+
+            newBalance =
+              currentBalance +
+              chargedCredits;
+
+            const refundLedgerReference =
+              creditReference
+                .collection(
+                  "ledger"
+                )
+                .doc(
+                  `runway_refund_${jobId}`
+                );
+
+            transaction.set(
+              creditReference,
+              {
+                balance:
+                  newBalance,
+                updatedAt:
+                  FieldValue.serverTimestamp(),
+              },
+              {
+                merge: true,
+              }
+            );
+
+            transaction.set(
+              refundLedgerReference,
+              {
+                type:
+                  "credit",
+                amount:
+                  chargedCredits,
+                reason:
+                  "ai_video_generation_refund",
+                refundStage:
+                  "provider_submission",
+                jobId,
+                provider:
+                  "runway",
+                providerStatus:
+                  "rejected",
+                balanceBefore:
+                  currentBalance,
+                balanceAfter:
+                  newBalance,
+                createdAt:
+                  FieldValue.serverTimestamp(),
+              },
+              {
+                merge: true,
+              }
+            );
+
+            refundAmount =
+              chargedCredits;
+
+            refundUid =
+              chargedUid;
+          }
+
+          transaction.set(
+            jobReference,
+            {
+              providerSubmissionLocked:
+                false,
+              providerSubmissionState:
+                "rejected",
+              providerSubmissionFailedAt:
+                FieldValue.serverTimestamp(),
+              status:
+                "failed",
+              progress: 0,
+              error:
+                failureMessage,
+
+              ...(refundAmount > 0
+                ? {
+                    creditRefunded:
+                      true,
+                    creditRefundAmount:
+                      refundAmount,
+                    creditRefundUid:
+                      refundUid,
+                    creditBalanceAfterRefund:
+                      newBalance,
+                    creditRefundReason:
+                      "provider_submission_rejected",
+                    creditRefundedAt:
+                      FieldValue.serverTimestamp(),
+                  }
+                : {}),
+
+              updatedAt:
+                FieldValue.serverTimestamp(),
+            },
+            {
+              merge: true,
+            }
+          );
+        }
+      );
+    }
+
+    let runwayResponse:
+      Response;
+
+    try {
+      runwayResponse =
+        await fetch(
+          "https://api.dev.runwayml.com/v1/text_to_video",
+          {
+            method: "POST",
+            headers: {
+              Authorization:
+                `Bearer ${process.env.RUNWAYML_API_SECRET}`,
+              "Content-Type":
+                "application/json",
+              "X-Runway-Version":
+                "2024-11-06",
+            },
+            body:
+              JSON.stringify({
+                model:
+                  "gen4.5",
+                promptText:
+                  prompt,
+                ratio,
+                duration,
+              }),
+          }
+        );
+    } catch (providerNetworkError) {
+      const networkMessage =
+        providerNetworkError instanceof
+          Error
+          ? providerNetworkError.message
+          : "Runway submission network failure.";
+
+      /*
+       * IMPORTANT:
+       * We do NOT unlock/refund here.
+       * The request may have reached Runway even though
+       * we did not receive the response.
+       */
+      await jobReference.set(
+        {
+          providerSubmissionLocked:
+            true,
+          providerSubmissionState:
+            "unknown",
+          status:
+            "submission_unknown",
+          error:
+            `Runway submission result is unknown: ${networkMessage}`,
+          providerSubmissionUnknownAt:
+            FieldValue.serverTimestamp(),
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          jobId,
+          provider:
+            "runway",
+          status:
+            "submission_unknown",
+          duplicateSubmissionPrevented:
+            true,
+          error:
+            "The Runway submission result could not be confirmed. This job has been locked to prevent duplicate provider charges.",
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+
+    let runwayData: {
+      id?: string;
+      error?: string;
+      message?: string;
+    } = {};
+
+    try {
+      runwayData =
+        (await runwayResponse.json()) as {
+          id?: string;
+          error?: string;
+          message?: string;
+        };
+    } catch {
+      runwayData = {};
+    }
+
+    if (!runwayResponse.ok) {
+      const providerMessage =
+        runwayData.error ||
+        runwayData.message ||
+        `Runway text-to-video request failed with status ${runwayResponse.status}.`;
+
+      await rejectProviderSubmission(
+        providerMessage
+      );
+
+      const rejectedJobSnapshot =
+        await jobReference.get();
+
+      const rejectedJob =
+        rejectedJobSnapshot.exists
+          ? rejectedJobSnapshot.data() || {}
+          : {};
+
+      const providerRejectionCreditsRefunded =
+        rejectedJob.creditRefunded === true &&
+        rejectedJob.creditRefundReason ===
+          "provider_submission_rejected";
+
+      return NextResponse.json(
+        {
+          success: false,
+          jobId,
+          provider:
+            "runway",
+          status:
+            "failed",
+          creditsRefunded:
+            providerRejectionCreditsRefunded,
+          error:
+            providerMessage,
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+
+    if (!runwayData.id) {
+      /*
+       * A successful HTTP response without a task ID is ambiguous.
+       * Do not unlock and do not submit again automatically.
+       */
+      await jobReference.set(
+        {
+          providerSubmissionLocked:
+            true,
+          providerSubmissionState:
+            "unknown",
+          status:
+            "submission_unknown",
+          error:
+            "Runway accepted the request but did not return a task ID.",
+          providerSubmissionUnknownAt:
+            FieldValue.serverTimestamp(),
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          jobId,
+          provider:
+            "runway",
+          status:
+            "submission_unknown",
+          duplicateSubmissionPrevented:
+            true,
+          error:
+            "Runway did not return a task ID. The job has been locked to prevent a duplicate provider charge.",
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+const createdTask = {
       id: runwayData.id,
     };
 
@@ -307,6 +1068,12 @@ export async function POST(
         provider: "runway",
         providerJobId:
           createdTask.id,
+        providerSubmissionLocked:
+          false,
+        providerSubmissionState:
+          "submitted",
+        providerSubmittedAt:
+          FieldValue.serverTimestamp(),
         status: "submitted",
         progress: 10,
         error: null,
@@ -336,7 +1103,53 @@ export async function GET(
   request: Request
 ) {
   try {
-    await verifyOwner(request);
+    const decoded =
+      await verifyAuthenticatedUser(
+        request
+      );
+
+    const authenticatedEmail =
+      typeof decoded.email === "string"
+        ? decoded.email.toLowerCase()
+        : "";
+
+    const isOwner =
+      authenticatedEmail === OWNER_EMAIL;
+
+    if (!isOwner) {
+      const premiumAccess =
+        await requirePremiumAccess(
+          request
+        );
+
+      if (!premiumAccess.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              premiumAccess.error,
+          },
+          {
+            status:
+              premiumAccess.statusCode,
+          }
+        );
+      }
+
+      if (
+        premiumAccess.uid !==
+        decoded.uid
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Premium account verification failed.",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
     if (!process.env.RUNWAYML_API_SECRET) {
       return NextResponse.json(
@@ -389,6 +1202,20 @@ export async function GET(
 
     const job =
       snapshot.data() || {};
+
+    if (
+      !isOwner &&
+      job.ownerUid !== decoded.uid
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "You do not have access to this AI video job.",
+        },
+        { status: 403 }
+      );
+    }
 
     const providerJobId =
       typeof job.providerJobId ===
@@ -454,7 +1281,6 @@ export async function GET(
           "Runway video generation completed.",
       });
     }
-
     if (
       status === "FAILED" ||
       status === "CANCELLED"
@@ -463,6 +1289,183 @@ export async function GET(
         status === "FAILED"
           ? "Runway video generation failed."
           : "Runway video generation was cancelled.";
+
+      let creditsRefunded = 0;
+
+      let creditBalanceAfterRefund:
+        number | null = null;
+
+      await adminDb.runTransaction(
+        async (transaction) => {
+          const latestJobSnapshot =
+            await transaction.get(
+              jobReference
+            );
+
+          if (
+            !latestJobSnapshot.exists
+          ) {
+            return;
+          }
+
+          const latestJob =
+            latestJobSnapshot.data() ||
+            {};
+
+          if (
+            latestJob.creditCharged !==
+              true ||
+            latestJob.creditRefunded ===
+              true
+          ) {
+            return;
+          }
+
+          const chargedUid =
+            typeof latestJob
+              .creditChargedUid ===
+              "string"
+              ? latestJob
+                  .creditChargedUid
+                  .trim()
+              : "";
+
+          const chargedCredits =
+            typeof latestJob
+              .creditCost ===
+              "number" &&
+            Number.isFinite(
+              latestJob.creditCost
+            )
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    latestJob.creditCost
+                  )
+                )
+              : 0;
+
+          if (
+            !chargedUid ||
+            chargedCredits <= 0
+          ) {
+            return;
+          }
+
+          const creditReference =
+            adminDb
+              .collection(
+                "aiVideoCredits"
+              )
+              .doc(
+                chargedUid
+              );
+
+          const creditSnapshot =
+            await transaction.get(
+              creditReference
+            );
+
+          const creditData =
+            creditSnapshot.exists
+              ? creditSnapshot.data() ||
+                {}
+              : {};
+
+          const currentBalance =
+            typeof creditData.balance ===
+              "number" &&
+            Number.isFinite(
+              creditData.balance
+            )
+              ? Math.max(
+                  0,
+                  Math.floor(
+                    creditData.balance
+                  )
+                )
+              : 0;
+
+          const newBalance =
+            currentBalance +
+            chargedCredits;
+
+          const refundLedgerReference =
+            creditReference
+              .collection(
+                "ledger"
+              )
+              .doc(
+                `runway_refund_${jobId}`
+              );
+
+          transaction.set(
+            creditReference,
+            {
+              balance:
+                newBalance,
+              updatedAt:
+                FieldValue.serverTimestamp(),
+            },
+            {
+              merge: true,
+            }
+          );
+
+          transaction.set(
+            refundLedgerReference,
+            {
+              type:
+                "credit",
+              amount:
+                chargedCredits,
+              reason:
+                "ai_video_generation_refund",
+              jobId,
+              provider:
+                "runway",
+              providerJobId,
+              providerStatus:
+                status,
+              balanceBefore:
+                currentBalance,
+              balanceAfter:
+                newBalance,
+              createdAt:
+                FieldValue.serverTimestamp(),
+            }
+          );
+
+          transaction.set(
+            jobReference,
+            {
+              creditRefunded:
+                true,
+              creditRefundAmount:
+                chargedCredits,
+              creditRefundUid:
+                chargedUid,
+              creditBalanceAfterRefund:
+                newBalance,
+              creditRefundReason:
+                status === "FAILED"
+                  ? "provider_failed"
+                  : "provider_cancelled",
+              creditRefundedAt:
+                FieldValue.serverTimestamp(),
+            },
+            {
+              merge: true,
+            }
+          );
+
+          creditsRefunded =
+            chargedCredits;
+
+          creditBalanceAfterRefund =
+            newBalance;
+        }
+      );
 
       await jobReference.set(
         {
@@ -486,7 +1489,16 @@ export async function GET(
           status === "FAILED"
             ? "failed"
             : "canceled",
-        error: message,
+        error:
+          creditsRefunded > 0
+            ? `${message} ${creditsRefunded} AI Video credit${
+                creditsRefunded === 1
+                  ? ""
+                  : "s"
+              } refunded automatically.`
+            : message,
+        creditsRefunded,
+        creditBalanceAfterRefund,
       });
     }
 
@@ -515,3 +1527,10 @@ export async function GET(
     return errorResponse(error);
   }
 }
+
+
+
+
+
+
+

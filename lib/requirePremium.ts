@@ -1,4 +1,4 @@
-import { getAuth } from "firebase-admin/auth";
+﻿import { getAuth } from "firebase-admin/auth";
 import {
   adminDb,
   firebaseAdminApp,
@@ -62,6 +62,21 @@ export async function requirePremiumAccess(
     };
   }
 
+  const ownerEmail = "supe4.me@gmail.com";
+
+  if (
+    typeof decodedToken.email === "string" &&
+    decodedToken.email.toLowerCase() === ownerEmail
+  ) {
+    return {
+      allowed: true,
+      uid: decodedToken.uid,
+      status: "ACTIVE",
+      subscriptionId: null,
+      nextBillingTime: null,
+    };
+  }
+
   const snapshot = await adminDb
     .collection("premiumSubscriptions")
     .doc(decodedToken.uid)
@@ -111,3 +126,4 @@ export async function requirePremiumAccess(
         : null,
   };
 }
+

@@ -1,0 +1,598 @@
+﻿import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../lib/firebaseAdmin";
+
+const OWNER_EMAIL = "supe4.me@gmail.com";
+
+function bearer(request: Request) {
+  const value = request.headers.get("authorization") || "";
+  return value.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || null;
+}
+
+async function verifyOwner(request: Request) {
+  const token = bearer(request);
+
+  if (!token) {
+    throw new Error("OWNER_AUTH_REQUIRED");
+  }
+
+  const decoded =
+    await getAuth(firebaseAdminApp).verifyIdToken(token);
+
+  if (decoded.email?.toLowerCase() !== OWNER_EMAIL) {
+    throw new Error("OWNER_ACCESS_ONLY");
+  }
+
+  return decoded;
+}
+
+function authError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "";
+
+  if (message === "OWNER_AUTH_REQUIRED") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Owner sign-in is required.",
+      },
+      { status: 401 }
+    );
+  }
+
+  if (message === "OWNER_ACCESS_ONLY") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Owner access only.",
+      },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}
+
+function clean(value: unknown, max = 250) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .replace(/\0/g, "")
+    .trim()
+    .slice(0, max);
+}
+
+function toIso(value: unknown) {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (value as { toDate?: unknown }).toDate ===
+      "function"
+  ) {
+    return (
+      value as { toDate: () => Date }
+    ).toDate().toISOString();
+  }
+
+  return null;
+}
+
+async function signedReadUrl(storagePath: unknown) {
+  if (
+    typeof storagePath !== "string" ||
+    !storagePath
+  ) {
+    return null;
+  }
+
+  const file = adminBucket.file(storagePath);
+  const [exists] = await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [url] = await file.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 60 * 60 * 1000,
+  });
+
+  return url;
+}
+
+export async function GET(request: Request) {
+  try {
+    await verifyOwner(request);
+
+    const [mediaSnapshot, radioSnapshot] =
+      await Promise.all([
+        adminDb
+          .collection("mediaLibrary")
+          .orderBy("createdAt", "desc")
+          .get(),
+        adminDb
+          .collection("radioPlaylist")
+          .get(),
+      ]);
+
+    const radioMap = new Map(
+      radioSnapshot.docs.map((doc) => [
+        doc.id,
+        doc.data(),
+      ])
+    );
+
+    const audioMedia = await Promise.all(
+      mediaSnapshot.docs
+        .filter((doc) => {
+          const data = doc.data();
+
+          return (
+            data.kind === "audio" &&
+            data.status !== "deleted"
+          );
+        })
+        .map(async (doc) => {
+          const data = doc.data();
+          const radio = radioMap.get(doc.id);
+
+          return {
+            mediaId: doc.id,
+            title:
+              data.title ||
+              data.originalName ||
+              "Untitled Track",
+            originalName:
+              data.originalName || null,
+            storagePath:
+              data.storagePath || null,
+            previewUrl:
+              await signedReadUrl(
+                data.storagePath
+              ),
+            createdAt:
+              toIso(data.createdAt),
+
+            assignedToRadio: Boolean(radio),
+
+            radio: radio
+              ? {
+                  enabled:
+                    radio.enabled !== false,
+                  order:
+                    Number(radio.order) || 0,
+                  title:
+                    radio.title ||
+                    data.title ||
+                    data.originalName ||
+                    "Untitled Track",
+                  artist:
+                    radio.artist ||
+                    "Solo Beats",
+                  albumTitle:
+                    radio.albumTitle ||
+                    "SOLO BEATS RADIO",
+                  cover:
+                    radio.cover || "",
+                  createdAt:
+                    toIso(radio.createdAt),
+                  updatedAt:
+                    toIso(radio.updatedAt),
+                }
+              : null,
+          };
+        })
+    );
+
+    audioMedia.sort((a, b) => {
+      if (
+        a.assignedToRadio &&
+        !b.assignedToRadio
+      ) {
+        return -1;
+      }
+
+      if (
+        !a.assignedToRadio &&
+        b.assignedToRadio
+      ) {
+        return 1;
+      }
+
+      const aOrder =
+        a.radio?.order ??
+        Number.MAX_SAFE_INTEGER;
+
+      const bOrder =
+        b.radio?.order ??
+        Number.MAX_SAFE_INTEGER;
+
+      return aOrder - bOrder;
+    });
+
+    return NextResponse.json({
+      success: true,
+      audioMedia,
+    });
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Owner Radio GET error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Radio programming could not be loaded.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const owner =
+      await verifyOwner(request);
+
+    const payload = await request.json();
+
+    const action =
+      clean(payload.action, 50);
+
+    if (action === "add") {
+      const mediaId =
+        clean(payload.mediaId, 120);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const mediaRef = adminDb
+        .collection("mediaLibrary")
+        .doc(mediaId);
+
+      const mediaSnapshot =
+        await mediaRef.get();
+
+      if (!mediaSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Media Library item was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      const media = mediaSnapshot.data()!;
+
+      if (
+        media.kind !== "audio" ||
+        media.status === "deleted"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Only active MP3/WAV Media Library items can be added to Radio.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const radioSnapshot =
+        await adminDb
+          .collection("radioPlaylist")
+          .get();
+
+      const existingOrders =
+        radioSnapshot.docs.map((doc) => {
+          const value =
+            Number(doc.data().order);
+
+          return Number.isFinite(value)
+            ? value
+            : 0;
+        });
+
+      const nextOrder =
+        existingOrders.length > 0
+          ? Math.max(...existingOrders) + 1
+          : 1;
+
+      const radioRef = adminDb
+        .collection("radioPlaylist")
+        .doc(mediaId);
+
+      await radioRef.set(
+        {
+          mediaId,
+          enabled: true,
+          order: nextOrder,
+          title:
+            clean(payload.title, 200) ||
+            media.title ||
+            media.originalName ||
+            "Untitled Track",
+          artist:
+            clean(payload.artist, 200) ||
+            "Solo Beats",
+          albumTitle:
+            clean(
+              payload.albumTitle,
+              200
+            ) || "SOLO BEATS RADIO",
+          cover:
+            clean(payload.cover, 500),
+          storagePath:
+            media.storagePath || null,
+          addedBy:
+            owner.email ||
+            OWNER_EMAIL,
+          createdAt:
+            FieldValue.serverTimestamp(),
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Track added to Radio.",
+      });
+    }
+
+    if (action === "update") {
+      const mediaId =
+        clean(payload.mediaId, 120);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const radioRef = adminDb
+        .collection("radioPlaylist")
+        .doc(mediaId);
+
+      const radioSnapshot =
+        await radioRef.get();
+
+      if (!radioSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Radio track was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      const update: Record<
+        string,
+        unknown
+      > = {
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      };
+
+      if (
+        typeof payload.enabled ===
+        "boolean"
+      ) {
+        update.enabled =
+          payload.enabled;
+      }
+
+      if (
+        Number.isFinite(
+          Number(payload.order)
+        )
+      ) {
+        update.order =
+          Number(payload.order);
+      }
+
+      if (
+        typeof payload.title ===
+        "string"
+      ) {
+        update.title =
+          clean(payload.title, 200);
+      }
+
+      if (
+        typeof payload.artist ===
+        "string"
+      ) {
+        update.artist =
+          clean(payload.artist, 200);
+      }
+
+      if (
+        typeof payload.albumTitle ===
+        "string"
+      ) {
+        update.albumTitle =
+          clean(
+            payload.albumTitle,
+            200
+          );
+      }
+
+      if (
+        typeof payload.cover ===
+        "string"
+      ) {
+        update.cover =
+          clean(payload.cover, 500);
+      }
+
+      await radioRef.set(
+        update,
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Radio track updated.",
+      });
+    }
+
+    if (action === "remove") {
+      const mediaId =
+        clean(payload.mediaId, 120);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      await adminDb
+        .collection("radioPlaylist")
+        .doc(mediaId)
+        .delete();
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Track removed from Radio.",
+      });
+    }
+
+    if (action === "reorder") {
+      const items = Array.isArray(
+        payload.items
+      )
+        ? payload.items
+        : [];
+
+      if (items.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Radio order items are required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const batch =
+        adminDb.batch();
+
+      items.forEach(
+        (
+          item: {
+            mediaId?: unknown;
+            order?: unknown;
+          },
+          index: number
+        ) => {
+          const mediaId =
+            clean(item.mediaId, 120);
+
+          if (!mediaId) {
+            return;
+          }
+
+          const order =
+            Number.isFinite(
+              Number(item.order)
+            )
+              ? Number(item.order)
+              : index + 1;
+
+          const ref = adminDb
+            .collection("radioPlaylist")
+            .doc(mediaId);
+
+          batch.set(
+            ref,
+            {
+              order,
+              updatedAt:
+                FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          );
+        }
+      );
+
+      await batch.commit();
+
+      return NextResponse.json({
+        success: true,
+        message:
+          "Radio order updated.",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          'Use action "add", "update", "remove", or "reorder".',
+      },
+      { status: 400 }
+    );
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Owner Radio POST error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Radio programming could not be updated.",
+      },
+      { status: 500 }
+    );
+  }
+}

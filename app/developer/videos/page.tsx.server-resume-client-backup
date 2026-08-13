@@ -6,7 +6,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 
@@ -24,10 +23,6 @@ type VideoItem = {
   mediaId: string;
   title: string;
   description: string;
-  videoSource: "upload" | "youtube";
-  youtubeVideoId: string | null;
-  youtubeUrl: string | null;
-  youtubeEmbedUrl: string | null;
   sourceType: SourceType;
   originalName: string | null;
   mimeType: string | null;
@@ -39,8 +34,6 @@ type VideoItem = {
   premiumTvEnabled: boolean;
   featured: boolean;
   displayOrder: number;
-  tvScheduleStart: string | null;
-  tvScheduleEnd: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   previewUrl: string | null;
@@ -55,8 +48,6 @@ type VideoEdit = {
   premiumTvEnabled: boolean;
   featured: boolean;
   displayOrder: number;
-  tvScheduleStart: string;
-  tvScheduleEnd: string;
 };
 
 function formatBytes(bytes: number) {
@@ -96,25 +87,6 @@ function formatDate(value: string | null) {
   });
 }
 
-function toDateTimeLocal(value: string | null) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const offset = date.getTimezoneOffset();
-  const local = new Date(
-    date.getTime() - offset * 60 * 1000
-  );
-
-  return local.toISOString().slice(0, 16);
-}
-
 function editFromVideo(video: VideoItem): VideoEdit {
   return {
     title: video.title || "",
@@ -124,8 +96,6 @@ function editFromVideo(video: VideoItem): VideoEdit {
     homepageEnabled: video.homepageEnabled === true,
     premiumTvEnabled: video.premiumTvEnabled === true,
     featured: video.featured === true,
-    tvScheduleStart: video.tvScheduleStart || "",
-    tvScheduleEnd: video.tvScheduleEnd || "",
     displayOrder: Number.isFinite(Number(video.displayOrder))
       ? Number(video.displayOrder)
       : 0,
@@ -140,7 +110,6 @@ const VIDEO_CHUNK_SIZE =
   8 * 1024 * 1024;
 
 type VideoResumeRecord = {
-  sessionId: string;
   uploadUrl: string;
   mediaId: string;
   storagePath: string;
@@ -241,67 +210,84 @@ function wait(
   );
 }
 
-async function queryResumeOffset(
-  token: string,
-  sessionId: string,
+function queryResumeOffset(
+  uploadUrl: string,
   totalSize: number
 ) {
-  const response = await fetch(
-    "/api/owner/video-upload",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type":
-          "application/json",
-        Authorization:
-          `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        action: "status",
-        sessionId,
-      }),
-      cache: "no-store",
-    }
-  );
+  return new Promise<{
+    offset: number;
+    complete: boolean;
+  }>((resolve, reject) => {
+    const xhr =
+      new XMLHttpRequest();
 
-  const data =
-    await response.json();
-
-  if (
-    !response.ok ||
-    !data.success
-  ) {
-    throw new Error(
-      data.error ||
-        "Could not check resumable upload status."
+    xhr.open(
+      "PUT",
+      uploadUrl,
+      true
     );
-  }
 
-  if (
-    data.expired === true ||
-    data.found === false
-  ) {
-    throw new Error(
-      "UPLOAD_SESSION_EXPIRED"
+    xhr.setRequestHeader(
+      "Content-Range",
+      `bytes */${totalSize}`
     );
-  }
 
-  const offset =
-    Number.isFinite(
-      Number(data.offset)
-    )
-      ? Number(data.offset)
-      : 0;
+    xhr.onload = () => {
+      if (
+        xhr.status === 200 ||
+        xhr.status === 201
+      ) {
+        resolve({
+          offset: totalSize,
+          complete: true,
+        });
+        return;
+      }
 
-  return {
-    offset:
-      Math.min(
-        Math.max(0, offset),
-        totalSize
-      ),
-    complete:
-      data.complete === true,
-  };
+      if (
+        xhr.status === 308
+      ) {
+        resolve({
+          offset:
+            offsetFromRange(
+              xhr.getResponseHeader(
+                "Range"
+              )
+            ),
+          complete: false,
+        });
+        return;
+      }
+
+      if (
+        xhr.status === 404 ||
+        xhr.status === 410
+      ) {
+        reject(
+          new Error(
+            "UPLOAD_SESSION_EXPIRED"
+          )
+        );
+        return;
+      }
+
+      reject(
+        new Error(
+          `Upload status check failed (${xhr.status}).`
+        )
+      );
+    };
+
+    xhr.onerror = () => {
+      reject(
+        new Error(
+          "Could not check the resumable upload status."
+        )
+      );
+    };
+
+    xhr.send();
+  });
 }
 
 function sendVideoChunk(
@@ -311,9 +297,6 @@ function sendVideoChunk(
   endExclusive: number,
   onOverallProgress:
     (bytesUploaded: number) =>
-      void,
-  onXhrChange:
-    (xhr: XMLHttpRequest | null) =>
       void
 ) {
   return new Promise<{
@@ -322,8 +305,6 @@ function sendVideoChunk(
   }>((resolve, reject) => {
     const xhr =
       new XMLHttpRequest();
-
-    onXhrChange(xhr);
 
     const chunk =
       file.slice(
@@ -364,8 +345,6 @@ function sendVideoChunk(
     };
 
     xhr.onload = () => {
-      onXhrChange(null);
-
       if (
         xhr.status === 200 ||
         xhr.status === 201
@@ -406,7 +385,6 @@ function sendVideoChunk(
     };
 
     xhr.onerror = () => {
-      onXhrChange(null);
       reject(
         new Error(
           "Network connection interrupted during video upload."
@@ -414,79 +392,10 @@ function sendVideoChunk(
       );
     };
 
-    xhr.onabort = () => {
-      onXhrChange(null);
-
-      reject(
-        new Error("UPLOAD_ABORTED")
-      );
-    };
-
     xhr.send(chunk);
   });
 }
 
-// YOUTUBE_VIDEO_MANAGER_UI_V1
-function youtubeEmbedFromInput(
-  value: string
-): string | null {
-  const input = value.trim();
-
-  if (!input) {
-    return null;
-  }
-
-  try {
-    const url = new URL(input);
-
-    const host =
-      url.hostname
-        .replace(/^www\./i, "")
-        .toLowerCase();
-
-    let videoId = "";
-
-    if (host === "youtu.be") {
-      videoId =
-        url.pathname
-          .split("/")
-          .filter(Boolean)[0] || "";
-    } else if (
-      host === "youtube.com" ||
-      host === "m.youtube.com"
-    ) {
-      videoId =
-        url.searchParams.get("v") || "";
-
-      if (!videoId) {
-        const parts =
-          url.pathname
-            .split("/")
-            .filter(Boolean);
-
-        if (
-          ["shorts", "embed", "live"].includes(
-            parts[0] || ""
-          )
-        ) {
-          videoId = parts[1] || "";
-        }
-      }
-    }
-
-    if (
-      !/^[A-Za-z0-9_-]{11}$/.test(
-        videoId
-      )
-    ) {
-      return null;
-    }
-
-    return `https://www.youtube.com/embed/${videoId}`;
-  } catch {
-    return null;
-  }
-}
 export default function VideoManagerPage() {
   const { user, loading } = useAuth();
 
@@ -503,12 +412,6 @@ export default function VideoManagerPage() {
 
   const [selectedFile, setSelectedFile] =
     useState<File | null>(null);
-
-  const [replacementTarget, setReplacementTarget] =
-    useState<VideoItem | null>(null);
-
-  const VIDEO_REPLACE_TARGET_KEY =
-    "solo-beats-video-replace-target";
 
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadDescription, setUploadDescription] =
@@ -530,22 +433,11 @@ export default function VideoManagerPage() {
     useState(false);
 
   const [uploadOrder, setUploadOrder] = useState(0);
-  const [addVideoMode, setAddVideoMode] =
-    useState<"upload" | "youtube">(
-      "upload"
-    );
-
-  const [youtubeUrl, setYoutubeUrl] =
-    useState("");
-
-  const [youtubeSaving, setYoutubeSaving] =
-    useState(false);
 
   const [uploadState, setUploadState] = useState<
     | "idle"
     | "preparing"
     | "uploading"
-    | "paused"
     | "finalizing"
     | "saving"
     | "done"
@@ -553,15 +445,6 @@ export default function VideoManagerPage() {
   >("idle");
 
   const [uploadPercent, setUploadPercent] = useState(0);
-
-  const activeUploadXhrRef =
-    useRef<XMLHttpRequest | null>(null);
-
-  const uploadPauseRequestedRef =
-    useRef(false);
-
-  const uploadCancelRequestedRef =
-    useRef(false);
 
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -571,17 +454,6 @@ export default function VideoManagerPage() {
 
   const [deletingId, setDeletingId] =
     useState<string | null>(null);
-
-  const [videoFilter, setVideoFilter] = useState<
-    | "all"
-    | "live"
-    | "scheduled"
-    | "ended"
-    | "premium"
-    | "homepage"
-    | "published"
-    | "unpublished"
-  >("all");
 
   const loadVideos = useCallback(async () => {
     if (!user || !isOwner) {
@@ -670,9 +542,6 @@ export default function VideoManagerPage() {
     setSelectedFile(file);
     setError("");
     setNotice("");
-
-    uploadPauseRequestedRef.current = false;
-    uploadCancelRequestedRef.current = false;
     setUploadPercent(0);
     setUploadState("idle");
 
@@ -706,136 +575,6 @@ export default function VideoManagerPage() {
     }
   }
 
-  async function addYoutubeVideo() {
-    if (
-      !user ||
-      !isOwner ||
-      youtubeSaving
-    ) {
-      return;
-    }
-
-    if (!uploadTitle.trim()) {
-      setError(
-        "Enter a video title."
-      );
-      return;
-    }
-
-    const embedUrl =
-      youtubeEmbedFromInput(
-        youtubeUrl
-      );
-
-    if (!embedUrl) {
-      setError(
-        "Enter a valid YouTube video, Shorts, Live, or youtu.be link."
-      );
-      return;
-    }
-
-    setYoutubeSaving(true);
-    setError("");
-    setNotice("");
-
-    try {
-      const token =
-        await user.getIdToken();
-
-      const response =
-        await fetch(
-          "/api/owner/videos",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              action:
-                "create-youtube",
-
-              youtubeUrl:
-                youtubeUrl.trim(),
-
-              title:
-                uploadTitle.trim(),
-
-              description:
-                uploadDescription.trim(),
-
-              sourceType:
-                uploadSourceType,
-
-              published:
-                uploadPublished,
-
-              homepageEnabled:
-                uploadHomepage,
-
-              premiumTvEnabled:
-                uploadPremiumTv,
-
-              featured:
-                uploadFeatured,
-
-              displayOrder:
-                Math.max(
-                  0,
-                  Math.floor(
-                    Number(
-                      uploadOrder
-                    ) || 0
-                  )
-                ),
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.error ||
-            "YouTube video could not be added."
-        );
-      }
-
-      setNotice(
-        `"${uploadTitle.trim()}" was added from YouTube successfully.`
-      );
-
-      setYoutubeUrl("");
-      setUploadTitle("");
-      setUploadDescription("");
-
-      setUploadSourceType(
-        "solo-beats"
-      );
-
-      setUploadPublished(false);
-      setUploadHomepage(false);
-      setUploadPremiumTv(false);
-      setUploadFeatured(false);
-      setUploadOrder(0);
-
-      await loadVideos();
-    } catch (youtubeError) {
-      setError(
-        youtubeError instanceof Error
-          ? youtubeError.message
-          : "YouTube video could not be added."
-      );
-    } finally {
-      setYoutubeSaving(false);
-    }
-  }
   async function uploadVideo() {
     if (
       !user ||
@@ -884,16 +623,12 @@ export default function VideoManagerPage() {
     setError("");
     setNotice("");
 
-    uploadPauseRequestedRef.current = false;
-    uploadCancelRequestedRef.current = false;
-
     const fileInfo = {
       name: file.name,
       type:
         file.type ||
         "video/mp4",
       size: file.size,
-      lastModified: file.lastModified,
     };
 
     try {
@@ -933,7 +668,10 @@ export default function VideoManagerPage() {
                   `Bearer ${token}`,
               },
               body:
-                JSON.stringify({ action: "start", file: fileInfo }),
+                JSON.stringify({
+                  file:
+                    fileInfo,
+                }),
             }
           );
 
@@ -950,8 +688,8 @@ export default function VideoManagerPage() {
           );
         }
 
-        const next: VideoResumeRecord = {
-          sessionId: data.sessionId,
+        const next:
+          VideoResumeRecord = {
           uploadUrl:
             data.uploadUrl,
           mediaId:
@@ -971,24 +709,6 @@ export default function VideoManagerPage() {
           next
         );
 
-        if (
-          data.reused === true &&
-          Number.isFinite(
-            Number(data.offset)
-          )
-        ) {
-          const resumedPercent =
-            Math.floor(
-              (Number(data.offset) /
-                file.size) *
-                100
-            );
-
-          setNotice(
-            `Previous upload found. Resuming from ${resumedPercent}%.`
-          );
-        }
-
         return next;
       }
 
@@ -1005,7 +725,10 @@ export default function VideoManagerPage() {
 
       try {
         status =
-          await queryResumeOffset(token, resume.sessionId, file.size);
+          await queryResumeOffset(
+            resume.uploadUrl,
+            file.size
+          );
       } catch (
         statusError
       ) {
@@ -1054,24 +777,6 @@ export default function VideoManagerPage() {
         !complete &&
         offset < file.size
       ) {
-        if (
-          uploadCancelRequestedRef.current
-        ) {
-          return;
-        }
-
-        if (
-          uploadPauseRequestedRef.current
-        ) {
-          setUploadState("paused");
-
-          setNotice(
-            `Upload paused at ${uploadPercent}%.`
-          );
-
-          return;
-        }
-
         const endExclusive =
           Math.min(
             offset +
@@ -1118,10 +823,6 @@ export default function VideoManagerPage() {
                   setUploadPercent(
                     percent
                   );
-                },
-                (xhr) => {
-                  activeUploadXhrRef.current =
-                    xhr;
                 }
               );
 
@@ -1129,30 +830,6 @@ export default function VideoManagerPage() {
           } catch (
             chunkError
           ) {
-            if (
-              chunkError instanceof Error &&
-              chunkError.message ===
-                "UPLOAD_ABORTED"
-            ) {
-              if (
-                uploadCancelRequestedRef.current
-              ) {
-                return;
-              }
-
-              if (
-                uploadPauseRequestedRef.current
-              ) {
-                setUploadState("paused");
-
-                setNotice(
-                  `Upload paused at ${uploadPercent}%.`
-                );
-
-                return;
-              }
-            }
-
             lastError =
               chunkError;
 
@@ -1167,7 +844,10 @@ export default function VideoManagerPage() {
 
             try {
               const recovered =
-                await queryResumeOffset(token, resume.sessionId, file.size);
+                await queryResumeOffset(
+                  resume.uploadUrl,
+                  file.size
+                );
 
               offset =
                 recovered.offset;
@@ -1342,79 +1022,7 @@ export default function VideoManagerPage() {
         );
       }
 
-      let replacementMediaId =
-        replacementTarget?.mediaId || "";
-
-      if (!replacementMediaId) {
-        try {
-          replacementMediaId =
-            window.localStorage.getItem(
-              VIDEO_REPLACE_TARGET_KEY
-            ) || "";
-        } catch {}
-      }
-
-      if (replacementMediaId) {
-        const replaceResponse = await fetch(
-          "/api/owner/videos",
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              action: "replace-file",
-              mediaId: replacementMediaId,
-              replacementMediaId: resume.mediaId,
-            }),
-          }
-        );
-
-        const replaceData =
-          await replaceResponse.json();
-
-        if (!replaceResponse.ok || !replaceData.success) {
-          throw new Error(
-            replaceData.error ||
-              "Replacement MP4 could not be saved."
-          );
-        }
-      }
-
-      try {
-        await fetch(
-          "/api/owner/video-upload",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              action: "complete",
-              sessionId:
-                resume.sessionId,
-            }),
-          }
-        );
-      } catch {
-        // The MP4 is already complete.
-      }
-
       clearResumeRecord();
-
-      if (replacementMediaId) {
-        setReplacementTarget(null);
-
-        try {
-          window.localStorage.removeItem(
-            VIDEO_REPLACE_TARGET_KEY
-          );
-        } catch {}
-      }
 
       setUploadPercent(
         100
@@ -1486,186 +1094,6 @@ export default function VideoManagerPage() {
     }
   }
 
-  function pauseVideoUpload() {
-    if (
-      uploadState !== "uploading"
-    ) {
-      return;
-    }
-
-    uploadPauseRequestedRef.current = true;
-
-    setUploadState("paused");
-
-    setNotice(
-      `Pausing upload at ${uploadPercent}%...`
-    );
-
-    activeUploadXhrRef.current?.abort();
-  }
-
-  async function cancelVideoUpload() {
-    if (
-      !user ||
-      !isOwner
-    ) {
-      setError(
-        "Owner sign-in is required."
-      );
-      return;
-    }
-
-    const resume =
-      loadResumeRecord();
-
-    if (!resume) {
-      uploadPauseRequestedRef.current = false;
-      uploadCancelRequestedRef.current = false;
-      activeUploadXhrRef.current = null;
-
-      setUploadState("idle");
-      setUploadPercent(0);
-      setNotice("");
-      return;
-    }
-
-    const confirmed =
-      window.confirm(
-        "Cancel this MP4 upload? The saved resumable upload session will be removed."
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    uploadCancelRequestedRef.current = true;
-    uploadPauseRequestedRef.current = false;
-
-    activeUploadXhrRef.current?.abort();
-
-    setNotice(
-      "Cancelling MP4 upload..."
-    );
-
-    try {
-      const token =
-        await user.getIdToken();
-
-      const response =
-        await fetch(
-          "/api/owner/video-upload",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              action: "cancel",
-              sessionId:
-                resume.sessionId,
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.error ||
-            "Video upload could not be cancelled."
-        );
-      }
-
-      clearResumeRecord();
-
-      activeUploadXhrRef.current = null;
-      uploadPauseRequestedRef.current = false;
-      uploadCancelRequestedRef.current = false;
-
-      setUploadPercent(0);
-      setUploadState("idle");
-      setError("");
-
-      setNotice(
-        "MP4 upload cancelled."
-      );
-    } catch (cancelError) {
-      uploadCancelRequestedRef.current = false;
-
-      setUploadState("paused");
-
-      setError(
-        cancelError instanceof Error
-          ? cancelError.message
-          : "Video upload could not be cancelled."
-      );
-
-      setNotice(
-        "Upload stopped, but the resumable session was kept so you can try again."
-      );
-    }
-  }
-  function handleReplacementFileChange(
-    video: VideoItem,
-    event: ChangeEvent<HTMLInputElement>
-  ) {
-    const file =
-      event.target.files?.[0] ||
-      null;
-
-    event.target.value = "";
-
-    if (!file) {
-      return;
-    }
-
-    clearResumeRecord();
-
-    setReplacementTarget(video);
-
-    try {
-      window.localStorage.setItem(
-        VIDEO_REPLACE_TARGET_KEY,
-        video.mediaId
-      );
-    } catch {
-      // Replacement still works during this page session.
-    }
-
-    setSelectedFile(file);
-    setUploadTitle(video.title);
-    setUploadDescription(video.description);
-    setUploadSourceType(video.sourceType);
-    setUploadPublished(video.published);
-    setUploadHomepage(video.homepageEnabled);
-    setUploadPremiumTv(video.premiumTvEnabled);
-    setUploadFeatured(video.featured);
-    setUploadOrder(video.displayOrder);
-
-    uploadPauseRequestedRef.current = false;
-    uploadCancelRequestedRef.current = false;
-    setUploadPercent(0);
-    setUploadState("idle");
-    setError("");
-    setNotice(
-      `Replacement MP4 selected for "${video.title}". Press Upload MP4 Video to begin.`
-    );
-
-    document.getElementById(
-      "video-upload-input"
-    )?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }
-
   function changeEdit<K extends keyof VideoEdit>(
     mediaId: string,
     key: K,
@@ -1689,197 +1117,6 @@ export default function VideoManagerPage() {
     });
   }
 
-  async function moveHomepageVideo(
-    video: VideoItem,
-    direction: -1 | 1
-  ) {
-    if (!user || !isOwner) {
-      return;
-    }
-
-    const currentEdit =
-      edits[video.mediaId] ||
-      editFromVideo(video);
-
-    if (
-      !currentEdit.published ||
-      !currentEdit.homepageEnabled
-    ) {
-      setError(
-        "Publish the video and enable Homepage before changing its homepage position."
-      );
-      return;
-    }
-
-    const homepageGroup = videos
-      .filter((item) => {
-        const itemEdit =
-          edits[item.mediaId] ||
-          editFromVideo(item);
-
-        return (
-          itemEdit.published === true &&
-          itemEdit.homepageEnabled === true &&
-          itemEdit.featured ===
-            currentEdit.featured
-        );
-      })
-      .sort((a, b) => {
-        const aEdit =
-          edits[a.mediaId] ||
-          editFromVideo(a);
-
-        const bEdit =
-          edits[b.mediaId] ||
-          editFromVideo(b);
-
-        const orderDifference =
-          aEdit.displayOrder -
-          bEdit.displayOrder;
-
-        if (orderDifference !== 0) {
-          return orderDifference;
-        }
-
-        return (
-          videos.findIndex(
-            (item) =>
-              item.mediaId === a.mediaId
-          ) -
-          videos.findIndex(
-            (item) =>
-              item.mediaId === b.mediaId
-          )
-        );
-      });
-
-    const currentIndex =
-      homepageGroup.findIndex(
-        (item) =>
-          item.mediaId === video.mediaId
-      );
-
-    if (currentIndex < 0) {
-      return;
-    }
-
-    const targetIndex =
-      currentIndex + direction;
-
-    if (
-      targetIndex < 0 ||
-      targetIndex >= homepageGroup.length
-    ) {
-      setNotice(
-        direction < 0
-          ? "This video is already first in its homepage group."
-          : "This video is already last in its homepage group."
-      );
-      return;
-    }
-
-    const reordered = [
-      ...homepageGroup,
-    ];
-
-    const currentItem =
-      reordered[currentIndex];
-
-    reordered[currentIndex] =
-      reordered[targetIndex];
-
-    reordered[targetIndex] =
-      currentItem;
-
-    setSavingId(video.mediaId);
-    setError("");
-    setNotice("");
-
-    try {
-      const token =
-        await user.getIdToken();
-
-      for (
-        let index = 0;
-        index < reordered.length;
-        index++
-      ) {
-        const item =
-          reordered[index];
-
-        const itemEdit =
-          edits[item.mediaId] ||
-          editFromVideo(item);
-
-        const response = await fetch(
-          "/api/owner/videos",
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              mediaId:
-                item.mediaId,
-              title:
-                itemEdit.title.trim(),
-              description:
-                itemEdit.description.trim(),
-              sourceType:
-                itemEdit.sourceType,
-              published:
-                itemEdit.published,
-              homepageEnabled:
-                itemEdit.homepageEnabled,
-              premiumTvEnabled:
-                itemEdit.premiumTvEnabled,
-              featured:
-                itemEdit.featured,
-              tvScheduleStart:
-                itemEdit.tvScheduleStart ||
-                null,
-              tvScheduleEnd:
-                itemEdit.tvScheduleEnd ||
-                null,
-              displayOrder: index,
-            }),
-          }
-        );
-
-        const data =
-          await response.json();
-
-        if (
-          !response.ok ||
-          !data.success
-        ) {
-          throw new Error(
-            data.error ||
-              "Homepage video order could not be updated."
-          );
-        }
-      }
-
-      setNotice(
-        direction < 0
-          ? "Video moved up on the Homepage Video Channel."
-          : "Video moved down on the Homepage Video Channel."
-      );
-
-      await loadVideos();
-    } catch (moveError) {
-      setError(
-        moveError instanceof Error
-          ? moveError.message
-          : "Homepage video order could not be updated."
-      );
-    } finally {
-      setSavingId(null);
-    }
-  }
   async function saveVideo(mediaId: string) {
     if (!user || !isOwner) {
       return;
@@ -1899,9 +1136,6 @@ export default function VideoManagerPage() {
     setSavingId(mediaId);
     setError("");
     setNotice("");
-
-    uploadPauseRequestedRef.current = false;
-    uploadCancelRequestedRef.current = false;
 
     try {
       const token = await user.getIdToken();
@@ -1926,9 +1160,7 @@ export default function VideoManagerPage() {
             premiumTvEnabled:
               edit.premiumTvEnabled,
             featured: edit.featured,
-        tvScheduleStart: edit.tvScheduleStart || null,
-        tvScheduleEnd: edit.tvScheduleEnd || null,
-        displayOrder:
+            displayOrder:
               Math.max(
                 0,
                 Math.floor(
@@ -1977,9 +1209,6 @@ export default function VideoManagerPage() {
     setSavingId(video.mediaId);
     setError("");
     setNotice("");
-
-    uploadPauseRequestedRef.current = false;
-    uploadCancelRequestedRef.current = false;
 
     try {
       const token = await user.getIdToken();
@@ -2040,9 +1269,6 @@ export default function VideoManagerPage() {
     setError("");
     setNotice("");
 
-    uploadPauseRequestedRef.current = false;
-    uploadCancelRequestedRef.current = false;
-
     try {
       const token = await user.getIdToken();
 
@@ -2080,64 +1306,6 @@ export default function VideoManagerPage() {
       setDeletingId(null);
     }
   }
-
-  const filteredVideos = videos.filter((video) => {
-    const now = Date.now();
-
-    const tvStart = video.tvScheduleStart
-      ? Date.parse(video.tvScheduleStart)
-      : null;
-
-    const tvEnd = video.tvScheduleEnd
-      ? Date.parse(video.tvScheduleEnd)
-      : null;
-
-    if (videoFilter === "all") {
-      return true;
-    }
-
-    if (videoFilter === "live") {
-      return (
-        video.premiumTvEnabled === true &&
-        (tvStart === null || tvStart <= now) &&
-        (tvEnd === null || tvEnd > now)
-      );
-    }
-
-    if (videoFilter === "scheduled") {
-      return (
-        video.premiumTvEnabled === true &&
-        tvStart !== null &&
-        tvStart > now
-      );
-    }
-
-    if (videoFilter === "ended") {
-      return (
-        video.premiumTvEnabled === true &&
-        tvEnd !== null &&
-        tvEnd <= now
-      );
-    }
-
-    if (videoFilter === "premium") {
-      return video.premiumTvEnabled === true;
-    }
-
-    if (videoFilter === "homepage") {
-      return video.homepageEnabled === true;
-    }
-
-    if (videoFilter === "published") {
-      return video.published === true;
-    }
-
-    if (videoFilter === "unpublished") {
-      return video.published !== true;
-    }
-
-    return true;
-  });
 
   if (loading) {
     return (
@@ -2270,7 +1438,7 @@ export default function VideoManagerPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-300">
-                MP4 Upload / YouTube Link
+                Direct MP4 Upload
               </p>
 
               <h2 className="mt-2 text-3xl font-black">
@@ -2278,145 +1446,45 @@ export default function VideoManagerPage() {
               </h2>
 
               <p className="mt-2 text-sm text-white/50">
-                Upload an MP4 or paste a YouTube link. Both become manageable from the same Central Video Manager.
+                MP4 files are uploaded directly to the Central Media Library and automatically become manageable here.
               </p>
             </div>
 
             <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-white/60">
-              MP4 up to 2 GB or YouTube URL
+              Maximum 2 GB
             </span>
           </div>
 
-          <div className="mt-7 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                setAddVideoMode(
-                  "upload"
-                );
-                setError("");
-                setNotice("");
-              }}
-              className={`rounded-2xl border px-5 py-3 text-sm font-black transition ${
-                addVideoMode ===
-                "upload"
-                  ? "border-violet-300/50 bg-violet-400/15 text-violet-100"
-                  : "border-white/10 bg-white/5 text-white/60"
-              }`}
-            >
-              UPLOAD MP4
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setAddVideoMode(
-                  "youtube"
-                );
-                setError("");
-                setNotice("");
-              }}
-              className={`rounded-2xl border px-5 py-3 text-sm font-black transition ${
-                addVideoMode ===
-                "youtube"
-                  ? "border-red-300/50 bg-red-400/15 text-red-100"
-                  : "border-white/10 bg-white/5 text-white/60"
-              }`}
-            >
-              PASTE YOUTUBE LINK
-            </button>
-          </div>
           <div className="mt-7 grid gap-6 lg:grid-cols-[1fr_1fr]">
             <div>
-              {addVideoMode ===
-              "upload" ? (
-                <>
-                  <label className="text-sm font-black text-white/70">
-                    MP4 Video
-                  </label>
+              <label className="text-sm font-black text-white/70">
+                MP4 Video
+              </label>
 
-                  <input
-                    id="video-upload-input"
-                    type="file"
-                    accept="video/mp4,.mp4"
-                    onChange={
-                      handleFileChange
-                    }
-                    disabled={
-                      uploadState !==
-                        "idle" &&
-                      uploadState !==
-                        "done" &&
-                      uploadState !==
-                        "error"
-                    }
-                    className="mt-2 block w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm"
-                  />
+              <input
+                id="video-upload-input"
+                type="file"
+                accept="video/mp4,.mp4"
+                onChange={handleFileChange}
+                disabled={
+                  uploadState !== "idle" &&
+                  uploadState !== "done" &&
+                  uploadState !== "error"
+                }
+                className="mt-2 block w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm"
+              />
 
-                  {selectedFile ? (
-                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
-                      <p className="font-black">
-                        {
-                          selectedFile.name
-                        }
-                      </p>
-
-                      <p className="mt-1 text-white/45">
-                        {formatBytes(
-                          selectedFile.size
-                        )}
-                      </p>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <label className="text-sm font-black text-white/70">
-                    YouTube Link
-                  </label>
-
-                  <input
-                    type="url"
-                    value={youtubeUrl}
-                    onChange={(event) =>
-                      setYoutubeUrl(
-                        event.target.value
-                      )
-                    }
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="mt-2 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 outline-none focus:border-red-400"
-                  />
-
-                  <p className="mt-2 text-xs leading-5 text-white/40">
-                    Supports YouTube watch,
-                    youtu.be, Shorts, Live,
-                    and embed links.
+              {selectedFile ? (
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
+                  <p className="font-black">
+                    {selectedFile.name}
                   </p>
+                  <p className="mt-1 text-white/45">
+                    {formatBytes(selectedFile.size)}
+                  </p>
+                </div>
+              ) : null}
 
-                  {youtubeEmbedFromInput(
-                    youtubeUrl
-                  ) ? (
-                    <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black">
-                      <iframe
-                        src={
-                          youtubeEmbedFromInput(
-                            youtubeUrl
-                          ) || undefined
-                        }
-                        title="YouTube video preview"
-                        className="aspect-video w-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                      />
-                    </div>
-                  ) : youtubeUrl.trim() ? (
-                    <p className="mt-3 rounded-xl border border-red-300/20 bg-red-400/10 p-3 text-sm font-bold text-red-200">
-                      Enter a valid YouTube
-                      video link.
-                    </p>
-                  ) : null}
-                </>
-              )}
               <label className="mt-5 block text-sm font-black text-white/70">
                 Title
               </label>
@@ -2542,103 +1610,28 @@ export default function VideoManagerPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  addVideoMode ===
-                  "youtube"
-                    ? void addYoutubeVideo()
-                    : void uploadVideo()
-                }
+                onClick={() => void uploadVideo()}
                 disabled={
-                  addVideoMode ===
-                  "youtube"
-                    ? youtubeSaving ||
-                      !youtubeEmbedFromInput(
-                        youtubeUrl
-                      )
-                    : !selectedFile ||
-                      uploadState ===
-                        "preparing" ||
-                      uploadState ===
-                        "uploading" ||
-                      uploadState ===
-                        "paused" ||
-                      uploadState ===
-                        "finalizing" ||
-                      uploadState ===
-                        "saving"
+                  !selectedFile ||
+                  uploadState === "preparing" ||
+                  uploadState === "uploading" ||
+                  uploadState === "finalizing" ||
+                  uploadState === "saving"
                 }
-                className={`mt-6 w-full rounded-2xl px-6 py-4 text-lg font-black disabled:cursor-not-allowed disabled:opacity-40 ${
-                  addVideoMode ===
-                  "youtube"
-                    ? "bg-gradient-to-r from-red-600 to-red-500"
-                    : "bg-gradient-to-r from-violet-600 to-fuchsia-500"
-                }`}
+                className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-500 px-6 py-4 text-lg font-black disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {addVideoMode ===
-                "youtube"
-                  ? youtubeSaving
-                    ? "Adding YouTube Video..."
-                    : "Add YouTube Video"
-                  : uploadState ===
-                      "preparing"
-                    ? "Preparing Upload..."
-                    : uploadState ===
-                        "uploading"
-                      ? "Uploading MP4..."
-                      : uploadState ===
-                          "paused"
-                        ? "Upload Paused"
-                        : uploadState ===
-                            "finalizing"
-                          ? "Finalizing..."
-                          : uploadState ===
-                              "saving"
-                            ? "Saving Video Settings..."
-                            : "Upload MP4 Video"}
+                {uploadState === "preparing"
+                  ? "Preparing Upload..."
+                  : uploadState === "uploading"
+                    ? "Uploading MP4..."
+                    : uploadState === "finalizing"
+                      ? "Finalizing..."
+                      : uploadState === "saving"
+                        ? "Saving Video Settings..."
+                        : "Upload MP4 Video"}
               </button>
 
-              {addVideoMode === "upload" && uploadState === "uploading" ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={pauseVideoUpload}
-                    className="rounded-2xl border border-amber-400/40 bg-amber-400/10 px-5 py-3 text-sm font-black text-amber-200 transition hover:bg-amber-400/20"
-                  >
-                    PAUSE UPLOAD
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void cancelVideoUpload()}
-                    className="rounded-2xl border border-red-400/40 bg-red-500/10 px-5 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20"
-                  >
-                    CANCEL UPLOAD
-                  </button>
-                </div>
-              ) : null}
-
-              {addVideoMode === "upload" && uploadState === "paused" ? (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => void uploadVideo()}
-                    disabled={!selectedFile}
-                    className="rounded-2xl border border-emerald-400/40 bg-emerald-400/10 px-5 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    RESUME UPLOAD
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void cancelVideoUpload()}
-                    className="rounded-2xl border border-red-400/40 bg-red-500/10 px-5 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20"
-                  >
-                    CANCEL UPLOAD
-                  </button>
-                </div>
-              ) : null}
-
-              {addVideoMode === "upload" && uploadPercent > 0 ? (
+              {uploadPercent > 0 ? (
                 <div className="mt-4">
                   <div className="h-3 overflow-hidden rounded-full bg-white/10">
                     <div
@@ -2682,44 +1675,6 @@ export default function VideoManagerPage() {
             </button>
           </div>
 
-          <div className="mb-5 flex flex-wrap gap-2">
-            {[
-              ["all", "ALL"],
-              ["live", "LIVE NOW"],
-              ["scheduled", "SCHEDULED"],
-              ["ended", "ENDED"],
-              ["premium", "PREMIUM TV"],
-              ["homepage", "HOMEPAGE"],
-              ["published", "PUBLISHED"],
-              ["unpublished", "UNPUBLISHED"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() =>
-                  setVideoFilter(
-                    value as
-                      | "all"
-                      | "live"
-                      | "scheduled"
-                      | "ended"
-                      | "premium"
-                      | "homepage"
-                      | "published"
-                      | "unpublished"
-                  )
-                }
-                className={`rounded-full border px-4 py-2 text-xs font-black transition ${
-                  videoFilter === value
-                    ? "border-white bg-white text-black"
-                    : "border-white/15 bg-white/5 text-white hover:bg-white/10"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
           {loadingVideos ? (
             <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.035] p-8 text-center text-white/50">
               Loading videos...
@@ -2734,19 +1689,9 @@ export default function VideoManagerPage() {
                 Upload your first SOLO BEATS MP4 above.
               </p>
             </div>
-          ) : filteredVideos.length === 0 ? (
-            <div className="mt-6 rounded-[2rem] border border-white/10 bg-white/[0.035] p-8 text-center">
-              <h3 className="text-2xl font-black">
-                No videos match this filter
-              </h3>
-
-              <p className="mt-2 text-white/50">
-                Choose another filter to view available videos.
-              </p>
-            </div>
           ) : (
             <div className="mt-6 grid gap-6">
-              {filteredVideos.map((video) => {
+              {videos.map((video) => {
                 const edit =
                   edits[video.mediaId] ||
                   editFromVideo(video);
@@ -2755,41 +1700,6 @@ export default function VideoManagerPage() {
                   savingId === video.mediaId ||
                   deletingId === video.mediaId;
 
-                const now = Date.now();
-                const tvStart = video.tvScheduleStart
-                  ? Date.parse(video.tvScheduleStart)
-                  : null;
-                const tvEnd = video.tvScheduleEnd
-                  ? Date.parse(video.tvScheduleEnd)
-                  : null;
-
-                let tvStatusLabel = "TV DISABLED";
-
-                if (!video.published) {
-                  tvStatusLabel = "NOT PUBLISHED";
-                } else if (!video.premiumTvEnabled) {
-                  tvStatusLabel = "TV DISABLED";
-                } else if (
-                  tvStart !== null &&
-                  Number.isFinite(tvStart) &&
-                  now < tvStart
-                ) {
-                  tvStatusLabel = "SCHEDULED";
-                } else if (
-                  tvEnd !== null &&
-                  Number.isFinite(tvEnd) &&
-                  now >= tvEnd
-                ) {
-                  tvStatusLabel = "ENDED";
-                } else if (
-                  tvStart === null &&
-                  tvEnd === null
-                ) {
-                  tvStatusLabel = "ALWAYS AVAILABLE";
-                } else {
-                  tvStatusLabel = "LIVE NOW";
-                }
-
                 return (
                   <article
                     key={video.mediaId}
@@ -2797,108 +1707,14 @@ export default function VideoManagerPage() {
                   >
                     <div className="grid gap-0 xl:grid-cols-[420px_1fr]">
                       <div className="bg-black">
-                        {video.videoSource ===
-                          "youtube" &&
-                        video.youtubeEmbedUrl ? (
-                          <div>
-                            <iframe
-                              src={
-                                video.youtubeEmbedUrl
-                              }
-                              title={`${video.title} YouTube preview`}
-                              className="aspect-video h-full min-h-[250px] w-full bg-black"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                              allowFullScreen
-                            />
-
-                            <div className="flex items-center justify-center border-t border-white/10 bg-black px-3 py-3">
-                              {video.youtubeUrl ? (
-                                <a
-                                  href={
-                                    video.youtubeUrl
-                                  }
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="rounded-xl border border-red-300/30 bg-red-400/10 px-4 py-2 text-sm font-black text-red-100"
-                                >
-                                  Open on YouTube
-                                </a>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : video.previewUrl ? (
-                          <div>
-                            <video
-                              id={`video-preview-${video.mediaId}`}
-                              src={video.previewUrl}
-                              controls
-                              preload="metadata"
-                              playsInline
-                              className="aspect-video h-full min-h-[250px] w-full bg-black object-contain"
-                            />
-
-                            <div className="flex items-center justify-center gap-2 border-t border-white/10 bg-black px-3 py-3">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const player = document.getElementById(
-                                    `video-preview-${video.mediaId}`
-                                  ) as HTMLVideoElement | null;
-
-                                  if (player) {
-                                    player.currentTime = Math.max(
-                                      0,
-                                      player.currentTime - 10
-                                    );
-                                  }
-                                }}
-                                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-black text-white hover:bg-white/10"
-                              >
-                                -10 SEC
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const player = document.getElementById(
-                                    `video-preview-${video.mediaId}`
-                                  ) as HTMLVideoElement | null;
-
-                                  if (!player) return;
-
-                                  if (player.paused) {
-                                    void player.play();
-                                  } else {
-                                    player.pause();
-                                  }
-                                }}
-                                className="rounded-xl bg-white px-4 py-2 text-xs font-black text-black hover:bg-white/90"
-                              >
-                                PLAY / PAUSE
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const player = document.getElementById(
-                                    `video-preview-${video.mediaId}`
-                                  ) as HTMLVideoElement | null;
-
-                                  if (player) {
-                                    player.currentTime = Math.min(
-                                      Number.isFinite(player.duration)
-                                        ? player.duration
-                                        : player.currentTime + 10,
-                                      player.currentTime + 10
-                                    );
-                                  }
-                                }}
-                                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-black text-white hover:bg-white/10"
-                              >
-                                +10 SEC
-                              </button>
-                            </div>
-                          </div>
+                        {video.previewUrl ? (
+                          <video
+                            src={video.previewUrl}
+                            controls
+                            preload="metadata"
+                            playsInline
+                            className="aspect-video h-full min-h-[250px] w-full bg-black object-contain"
+                          />
                         ) : (
                           <div className="grid aspect-video min-h-[250px] place-items-center bg-black text-white/35">
                             Preview unavailable
@@ -2934,25 +1750,7 @@ export default function VideoManagerPage() {
                                 </span>
                               ) : null}
 
-                              <span
-                            className={`rounded-full border px-3 py-1 text-xs font-black ${
-                              tvStatusLabel === "LIVE NOW"
-                                ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-200"
-                                : tvStatusLabel === "SCHEDULED"
-                                ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-200"
-                                : tvStatusLabel === "ENDED"
-                                ? "border-red-300/25 bg-red-400/10 text-red-200"
-                                : tvStatusLabel === "ALWAYS AVAILABLE"
-                                ? "border-violet-300/25 bg-violet-400/10 text-violet-200"
-                                : tvStatusLabel === "NOT PUBLISHED"
-                                ? "border-amber-300/25 bg-amber-400/10 text-amber-100"
-                                : "border-white/15 bg-white/5 text-white/45"
-                            }`}
-                          >
-                            {tvStatusLabel}
-                          </span>
-
-                          {video.featured ? (
+                              {video.featured ? (
                                 <span className="rounded-full border border-yellow-300/25 bg-yellow-400/10 px-3 py-1 text-xs font-black text-yellow-100">
                                   FEATURED
                                 </span>
@@ -3041,72 +1839,6 @@ export default function VideoManagerPage() {
                           className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
                         />
 
-                        <div className="mt-5 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-400/[0.04] p-4">
-                          <p className="text-xs font-black uppercase tracking-[0.16em] text-fuchsia-300">
-                            Premium TV Schedule
-                          </p>
-
-                          <div className="mt-4 grid gap-4 md:grid-cols-2">
-                            <label>
-                              <span className="block text-sm font-black text-white/60">
-                                Start
-                              </span>
-
-                              <input
-                                type="datetime-local"
-                                value={toDateTimeLocal(
-                                  edit.tvScheduleStart
-                                )}
-                                onChange={(event) =>
-                                  changeEdit(
-                                    video.mediaId,
-                                    "tvScheduleStart",
-                                    event.target.value
-                                      ? new Date(
-                                          event.target.value
-                                        ).toISOString()
-                                      : ""
-                                  )
-                                }
-                                className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
-                              />
-
-                              <p className="mt-2 text-xs text-white/35">
-                                Leave blank to make it available immediately.
-                              </p>
-                            </label>
-
-                            <label>
-                              <span className="block text-sm font-black text-white/60">
-                                End
-                              </span>
-
-                              <input
-                                type="datetime-local"
-                                value={toDateTimeLocal(
-                                  edit.tvScheduleEnd
-                                )}
-                                onChange={(event) =>
-                                  changeEdit(
-                                    video.mediaId,
-                                    "tvScheduleEnd",
-                                    event.target.value
-                                      ? new Date(
-                                          event.target.value
-                                        ).toISOString()
-                                      : ""
-                                  )
-                                }
-                                className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3"
-                              />
-
-                              <p className="mt-2 text-xs text-white/35">
-                                Leave blank to keep it available indefinitely.
-                              </p>
-                            </label>
-                          </div>
-                        </div>
-
                         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                           <label className="rounded-xl border border-white/10 bg-black/20 p-3">
                             <span className="block text-xs font-black uppercase text-white/40">
@@ -3131,23 +1863,6 @@ export default function VideoManagerPage() {
                               }
                               className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2"
                             />
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              <button
-                                type="button"
-                                onClick={() => void moveHomepageVideo(video, -1)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[10px] font-black uppercase tracking-wide text-white/70 transition hover:bg-white/10 hover:text-white"
-                              >
-                                Move Up
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => void moveHomepageVideo(video, 1)}
-                                className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-[10px] font-black uppercase tracking-wide text-white/70 transition hover:bg-white/10 hover:text-white"
-                              >
-                                Move Down
-                              </button>
-                            </div>
                           </label>
 
                           {[
@@ -3295,29 +2010,6 @@ export default function VideoManagerPage() {
                               : "Make Featured"}
                           </button>
 
-                          <label
-                            className={`cursor-pointer rounded-xl border border-blue-300/25 bg-blue-400/10 px-4 py-3 font-black text-blue-200 ${
-                              busy
-                                ? "pointer-events-none opacity-40"
-                                : ""
-                            }`}
-                          >
-                            REPLACE MP4
-
-                            <input
-                              type="file"
-                              accept="video/mp4,.mp4"
-                              className="hidden"
-                              disabled={busy}
-                              onChange={(event) =>
-                                handleReplacementFileChange(
-                                  video,
-                                  event
-                                )
-                              }
-                            />
-                          </label>
-
                           <button
                             type="button"
                             onClick={() =>
@@ -3343,32 +2035,4 @@ export default function VideoManagerPage() {
     </main>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

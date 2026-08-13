@@ -1,0 +1,507 @@
+﻿import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../lib/firebaseAdmin";
+
+const OWNER_EMAIL = "supe4.me@gmail.com";
+
+function bearer(request: Request) {
+  const value = request.headers.get("authorization") || "";
+  return value.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || null;
+}
+
+async function verifyOwner(request: Request) {
+  const token = bearer(request);
+
+  if (!token) {
+    throw new Error("OWNER_AUTH_REQUIRED");
+  }
+
+  const decoded = await getAuth(
+    firebaseAdminApp
+  ).verifyIdToken(token);
+
+  if (
+    decoded.email?.toLowerCase() !==
+    OWNER_EMAIL.toLowerCase()
+  ) {
+    throw new Error("OWNER_ACCESS_ONLY");
+  }
+
+  return decoded;
+}
+
+function authError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "";
+
+  if (message === "OWNER_AUTH_REQUIRED") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Owner sign-in is required.",
+      },
+      { status: 401 }
+    );
+  }
+
+  if (message === "OWNER_ACCESS_ONLY") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Owner access only.",
+      },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}
+
+function clean(
+  value: unknown,
+  max = 500
+) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .replace(/\0/g, "")
+    .trim()
+    .slice(0, max);
+}
+
+function toIso(value: unknown) {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof (
+      value as {
+        toDate?: unknown;
+      }
+    ).toDate === "function"
+  ) {
+    return (
+      value as {
+        toDate: () => Date;
+      }
+    ).toDate().toISOString();
+  }
+
+  return null;
+}
+
+async function previewUrl(
+  storagePath: unknown
+) {
+  if (
+    typeof storagePath !== "string" ||
+    !storagePath
+  ) {
+    return null;
+  }
+
+  const file = adminBucket.file(storagePath);
+  const [exists] = await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [url] = await file.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 60 * 60 * 1000,
+  });
+
+  return url;
+}
+
+export async function GET(
+  request: Request
+) {
+  try {
+    await verifyOwner(request);
+
+    const snapshot = await adminDb
+      .collection("mediaLibrary")
+      .where("kind", "==", "video")
+      .get();
+
+    const videos = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+
+        return {
+          mediaId: doc.id,
+          title:
+            data.title ||
+            data.originalName ||
+            "Untitled Video",
+          description:
+            data.description || "",
+          sourceType:
+            data.sourceType || "solo-beats",
+          originalName:
+            data.originalName || null,
+          mimeType:
+            data.mimeType || null,
+          sizeBytes:
+            data.sizeBytes || 0,
+          storagePath:
+            data.storagePath || null,
+          status:
+            data.status || "active",
+
+          published:
+            data.published === true,
+
+          homepageEnabled:
+            data.homepageEnabled === true,
+
+          premiumTvEnabled:
+            data.premiumTvEnabled === true,
+
+          featured:
+            data.featured === true,
+
+          displayOrder:
+            Number.isFinite(
+              Number(data.displayOrder)
+            )
+              ? Number(data.displayOrder)
+              : 0,
+
+          createdAt:
+            toIso(data.createdAt),
+
+          updatedAt:
+            toIso(data.updatedAt),
+
+          previewUrl:
+            await previewUrl(
+              data.storagePath
+            ),
+        };
+      })
+    );
+
+    videos.sort((a, b) =>
+      String(b.createdAt || "").localeCompare(
+        String(a.createdAt || "")
+      )
+    );
+
+    return NextResponse.json({
+      success: true,
+      videos,
+    });
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Owner Video Manager GET error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Videos could not be loaded.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: Request
+) {
+  try {
+    await verifyOwner(request);
+
+    const payload = await request.json();
+
+    const mediaId =
+      clean(payload.mediaId, 120);
+
+    if (!mediaId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Video ID is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const ref = adminDb
+      .collection("mediaLibrary")
+      .doc(mediaId);
+
+    const snapshot = await ref.get();
+
+    if (!snapshot.exists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Video was not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const current = snapshot.data() || {};
+
+    if (current.kind !== "video") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This Media Library item is not a video.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const update: Record<
+      string,
+      unknown
+    > = {
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    };
+
+    if ("title" in payload) {
+      const title =
+        clean(payload.title, 200);
+
+      if (!title) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Video title cannot be empty.",
+          },
+          { status: 400 }
+        );
+      }
+
+      update.title = title;
+    }
+
+    if ("description" in payload) {
+      update.description =
+        clean(payload.description, 2000);
+    }
+
+    if ("sourceType" in payload) {
+      const sourceType =
+        clean(payload.sourceType, 50);
+
+      const allowed = [
+        "solo-beats",
+        "artist",
+        "advertiser",
+        "customer",
+      ];
+
+      if (!allowed.includes(sourceType)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid video source type.",
+          },
+          { status: 400 }
+        );
+      }
+
+      update.sourceType =
+        sourceType;
+    }
+
+    if ("published" in payload) {
+      update.published =
+        payload.published === true;
+    }
+
+    if (
+      "homepageEnabled" in payload
+    ) {
+      update.homepageEnabled =
+        payload.homepageEnabled === true;
+    }
+
+    if (
+      "premiumTvEnabled" in payload
+    ) {
+      update.premiumTvEnabled =
+        payload.premiumTvEnabled === true;
+    }
+
+    if ("featured" in payload) {
+      update.featured =
+        payload.featured === true;
+    }
+
+    if ("displayOrder" in payload) {
+      const value =
+        Number(payload.displayOrder);
+
+      update.displayOrder =
+        Number.isFinite(value)
+          ? Math.max(
+              0,
+              Math.floor(value)
+            )
+          : 0;
+    }
+
+    await ref.set(
+      update,
+      { merge: true }
+    );
+
+    return NextResponse.json({
+      success: true,
+      mediaId,
+      message:
+        "Video settings updated.",
+    });
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Owner Video Manager PATCH error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Video settings could not be updated.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request
+) {
+  try {
+    await verifyOwner(request);
+
+    const url =
+      new URL(request.url);
+
+    const mediaId =
+      clean(
+        url.searchParams.get("mediaId"),
+        120
+      );
+
+    if (!mediaId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Video ID is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const ref = adminDb
+      .collection("mediaLibrary")
+      .doc(mediaId);
+
+    const snapshot = await ref.get();
+
+    if (!snapshot.exists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Video was not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const data = snapshot.data() || {};
+
+    if (data.kind !== "video") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This Media Library item is not a video.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      typeof data.storagePath ===
+        "string" &&
+      data.storagePath
+    ) {
+      try {
+        await adminBucket
+          .file(data.storagePath)
+          .delete({
+            ignoreNotFound: true,
+          });
+      } catch (storageError) {
+        console.error(
+          "Video storage delete warning:",
+          storageError
+        );
+      }
+    }
+
+    await ref.delete();
+
+    return NextResponse.json({
+      success: true,
+      mediaId,
+      message: "Video deleted.",
+    });
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Owner Video Manager DELETE error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Video could not be deleted.",
+      },
+      { status: 500 }
+    );
+  }
+}
