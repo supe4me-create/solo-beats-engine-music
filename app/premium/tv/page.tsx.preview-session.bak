@@ -479,7 +479,7 @@ export default function PremiumTvPage() {
     previewStartedProgramRef.current = null;
 
     try {
-      window.sessionStorage.removeItem(
+      window.localStorage.removeItem(
         TV_PREVIEW_STORAGE_KEY
       );
     } catch {
@@ -490,7 +490,7 @@ export default function PremiumTvPage() {
   useEffect(() => {
     try {
       const savedCount = Number(
-        window.sessionStorage.getItem(
+        window.localStorage.getItem(
           TV_PREVIEW_STORAGE_KEY
         ) || "0"
       );
@@ -868,7 +868,7 @@ export default function PremiumTvPage() {
     setPreviewPlays(nextPreviewCount);
 
     try {
-      window.sessionStorage.setItem(
+      window.localStorage.setItem(
         TV_PREVIEW_STORAGE_KEY,
         String(nextPreviewCount)
       );
@@ -1072,7 +1072,7 @@ export default function PremiumTvPage() {
     );
 
     try {
-      window.sessionStorage.setItem(
+      window.localStorage.setItem(
         TV_PREVIEW_STORAGE_KEY,
         String(nextPreviewCount)
       );
@@ -1111,7 +1111,7 @@ export default function PremiumTvPage() {
       setPreviewPlays(nextPreviewCount);
 
       try {
-        window.sessionStorage.setItem(
+        window.localStorage.setItem(
           TV_PREVIEW_STORAGE_KEY,
           String(nextPreviewCount)
         );
@@ -2697,7 +2697,6 @@ export default function PremiumTvPage() {
     </main>
   );
 }
-
 
 
 

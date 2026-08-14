@@ -238,97 +238,6 @@ export async function GET() {
             (Number(b.order) || 0)
         );
 
-    const albumSnapshot =
-      await adminDb
-        .collection("albums")
-        .get();
-
-    const albumByMediaId =
-      new Map<
-        string,
-        {
-          title: string;
-          artist: string;
-          cover: string;
-        }
-      >();
-
-    for (const albumDoc of albumSnapshot.docs) {
-      const album =
-        albumDoc.data();
-
-      const albumTracks =
-        Array.isArray(album.tracks)
-          ? album.tracks
-          : [];
-
-      const coverStoragePath =
-        typeof album.coverStoragePath === "string"
-          ? album.coverStoragePath
-          : "";
-
-      const signedCover =
-        coverStoragePath
-          ? await signedReadUrl(
-              coverStoragePath
-            )
-          : null;
-
-      const legacyCover =
-        typeof album.legacyCoverPath === "string"
-          ? album.legacyCoverPath
-          : "";
-
-      const cover =
-        signedCover ||
-        legacyCover ||
-        "";
-
-      const albumTitle =
-        typeof album.title === "string" &&
-        album.title
-          ? album.title
-          : albumDoc.id;
-
-      const artist =
-        typeof album.artist === "string" &&
-        album.artist
-          ? album.artist
-          : "Solo Beats";
-
-      for (const rawTrack of albumTracks) {
-        if (
-          !rawTrack ||
-          typeof rawTrack !== "object"
-        ) {
-          continue;
-        }
-
-        const mediaId =
-          (
-            rawTrack as {
-              mediaId?: unknown;
-            }
-          ).mediaId;
-
-        if (
-          typeof mediaId !== "string" ||
-          !mediaId
-        ) {
-          continue;
-        }
-
-        albumByMediaId.set(
-          mediaId,
-          {
-            title: albumTitle,
-            artist,
-            cover,
-          }
-        );
-      }
-    }
-
     const tracks = (
       await Promise.all(
         activeDocs.map(
@@ -372,28 +281,6 @@ export async function GET() {
               return null;
             }
 
-            const albumMetadata =
-              albumByMediaId.get(
-                mediaId
-              );
-
-            const storedAlbumTitle =
-              typeof item.albumTitle === "string"
-                ? item.albumTitle.trim()
-                : "";
-
-            const storedCover =
-              typeof item.cover === "string"
-                ? item.cover.trim()
-                : "";
-
-            const isGenericAlbumTitle =
-              !storedAlbumTitle ||
-              storedAlbumTitle ===
-                selected.playlist.name ||
-              storedAlbumTitle ===
-                "SOLO BEATS RADIO";
-
             return {
               id: mediaId,
               title:
@@ -402,19 +289,14 @@ export async function GET() {
                 media.originalName ||
                 "Untitled Track",
               albumTitle:
-                isGenericAlbumTitle
-                  ? albumMetadata?.title ||
-                    selected.playlist.name ||
-                    "SOLO BEATS RADIO"
-                  : storedAlbumTitle,
+                item.albumTitle ||
+                selected.playlist.name ||
+                "SOLO BEATS RADIO",
               artist:
                 item.artist ||
-                albumMetadata?.artist ||
                 "Solo Beats",
               cover:
-                storedCover ||
-                albumMetadata?.cover ||
-                "",
+                item.cover || "",
               src,
               order:
                 Number(item.order) || 0,
@@ -471,5 +353,4 @@ export async function GET() {
     );
   }
 }
-
 

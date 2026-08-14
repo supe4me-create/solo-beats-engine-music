@@ -1118,39 +1118,6 @@ export default function AlbumManagerPage() {
     }
   }
 
-  async function migrateNeonOverdrive() {
-    const confirmed = window.confirm(
-      "Link the existing Neon Overdrive Storage tracks to the Central Media Library? No audio files will be uploaded or duplicated."
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setActionBusy("migrate-neon-overdrive");
-    setError("");
-    setNotice("");
-
-    try {
-      const data = await postAlbumAction({
-        action: "migrate-neon-overdrive",
-      });
-
-      setNotice(
-        `${data.message || "Neon Overdrive migration complete."} ${data.migrated ?? 0} tracks linked.`
-      );
-
-      await loadData();
-    } catch (migrationError) {
-      setError(
-        migrationError instanceof Error
-          ? migrationError.message
-          : "Neon Overdrive migration could not be completed."
-      );
-    } finally {
-      setActionBusy("");
-    }
-  }
   async function importExistingCatalog() {
     setActionBusy("import-static");
     setError("");
@@ -1380,16 +1347,6 @@ export default function AlbumManagerPage() {
                 : "Import Existing Catalog"}
             </button>
 
-            <button
-              type="button"
-              disabled={actionBusy === "migrate-neon-overdrive"}
-              onClick={() => void migrateNeonOverdrive()}
-              className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100 hover:bg-cyan-300/15 disabled:opacity-50"
-            >
-              {actionBusy === "migrate-neon-overdrive"
-                ? "Migrating Neon Overdrive..."
-                : "Migrate Neon Overdrive"}
-            </button>
             <Link
               href="/developer"
               className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold hover:bg-white/[0.08]"
@@ -2432,7 +2389,6 @@ export default function AlbumManagerPage() {
     </main>
   );
 }
-
 
 
 

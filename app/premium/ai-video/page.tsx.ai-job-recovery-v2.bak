@@ -135,9 +135,6 @@ export default function PremiumAiVideoPage() {
     useState<string | null>(
       null
     );
-  const AI_VIDEO_ACTIVE_JOB_KEY =
-    "solo-beats-ai-video-active-job";
-
 
   const [
     currentJobId,
@@ -486,11 +483,6 @@ export default function PremiumAiVideoPage() {
           "AI video generation completed."
         );
 
-        
-        window.localStorage.removeItem(
-          AI_VIDEO_ACTIVE_JOB_KEY
-        );
-
         return;
       }
 
@@ -500,11 +492,6 @@ export default function PremiumAiVideoPage() {
         data.status ===
           "canceled"
       ) {
-        
-        window.localStorage.removeItem(
-          AI_VIDEO_ACTIVE_JOB_KEY
-        );
-
         throw new Error(
           data.error ||
             "AI video generation did not complete."
@@ -532,79 +519,6 @@ export default function PremiumAiVideoPage() {
     );
   }
 
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    const recoveryUser = user;
-
-    const savedJobId =
-      window.localStorage
-        .getItem(
-          AI_VIDEO_ACTIVE_JOB_KEY
-        )
-        ?.trim() || "";
-
-    if (!savedJobId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function recoverActiveJob() {
-      try {
-        setCurrentJobId(
-          savedJobId
-        );
-
-        setCreating(true);
-        setGenerationError(null);
-        setProgress(25);
-
-        setGenerationMessage(
-          "Recovering your unfinished AI video..."
-        );
-
-        const token =
-          await recoveryUser.getIdToken();
-
-        if (cancelled) {
-          return;
-        }
-
-        await pollRunwayJob(
-          savedJobId,
-          token
-        );
-
-        if (!cancelled) {
-          await loadCredits();
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setGenerationError(
-            error instanceof Error
-              ? error.message
-              : "AI video job recovery failed."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setCreating(false);
-        }
-      }
-    }
-
-    void recoverActiveJob();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    user,
-    loadCredits,
-  ]);
   async function handleGenerate() {
     if (
       !user ||
@@ -704,12 +618,6 @@ export default function PremiumAiVideoPage() {
         jobData.job.id;
 
       setCurrentJobId(
-        jobId
-      );
-
-      
-      window.localStorage.setItem(
-        AI_VIDEO_ACTIVE_JOB_KEY,
         jobId
       );
 
@@ -1194,14 +1102,11 @@ export default function PremiumAiVideoPage() {
                 <p className="mt-1 font-black text-emerald-300">
                   {typeof creditBalance ===
                   "number"
-                    ? progress === 100 &&
-                      outputUrl
-                      ? creditBalance
-                      : Math.max(
-                          0,
-                          creditBalance -
-                            selectedCreditCost
-                        )
+                    ? Math.max(
+                        0,
+                        creditBalance -
+                          selectedCreditCost
+                      )
                     : "--"}
                 </p>
               </div>
@@ -1357,5 +1262,3 @@ export default function PremiumAiVideoPage() {
     </main>
   );
 }
-
-

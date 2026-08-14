@@ -1194,14 +1194,11 @@ export default function PremiumAiVideoPage() {
                 <p className="mt-1 font-black text-emerald-300">
                   {typeof creditBalance ===
                   "number"
-                    ? progress === 100 &&
-                      outputUrl
-                      ? creditBalance
-                      : Math.max(
-                          0,
-                          creditBalance -
-                            selectedCreditCost
-                        )
+                    ? Math.max(
+                        0,
+                        creditBalance -
+                          selectedCreditCost
+                      )
                     : "--"}
                 </p>
               </div>
@@ -1357,5 +1354,4 @@ export default function PremiumAiVideoPage() {
     </main>
   );
 }
-
 

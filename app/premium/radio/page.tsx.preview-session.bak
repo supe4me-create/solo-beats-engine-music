@@ -517,7 +517,7 @@ export default function PremiumRadioPage() {
   useEffect(() => {
     try {
       const savedCount = Number(
-        window.sessionStorage.getItem(
+        window.localStorage.getItem(
           RADIO_PREVIEW_STORAGE_KEY
         ) || "0"
       );
@@ -876,7 +876,7 @@ useEffect(() => {
     setPreviewPlays(nextPreviewCount);
 
     try {
-      window.sessionStorage.setItem(
+      window.localStorage.setItem(
         RADIO_PREVIEW_STORAGE_KEY,
         String(nextPreviewCount)
       );
@@ -1498,7 +1498,6 @@ useEffect(() => {
     </main>
   );
 }
-
 
 
 

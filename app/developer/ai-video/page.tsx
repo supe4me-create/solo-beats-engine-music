@@ -2450,7 +2450,7 @@ export default function AiVideoGeneratorPage() {
               </div>
 
               <p className="mt-3 text-sm leading-6 text-white/50">
-                Owner generation is unrestricted in the UI. Subscriber credits and plan limits will be enforced when the backend is connected.
+                Owner generation is unrestricted. Subscriber generations use the live AI Video credit system and backend credit enforcement.
               </p>
             </section>
           </div>
@@ -2501,13 +2501,14 @@ export default function AiVideoGeneratorPage() {
         </div>
 
           <p className="mt-4 text-xs text-white/35">
-            Save completed AI videos to Video Manager first. Homepage Channel, Premium TV, and Advertising controls will activate in the next integration step.
+            Generated videos can be saved to Video Manager and distributed to Homepage Channel, Premium TV, or Advertising from AI Studio.
           </p>
         </section>
       </div>
     </main>
   );
 }
+
 
 
 

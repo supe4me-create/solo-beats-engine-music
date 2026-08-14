@@ -449,15 +449,15 @@ const TRACK_DOWNLOAD_FILES: Record<string, DownloadFile> = {
 
   ...registerTracks("neon-overdrive", [
     { fileName: "Pulse Invaders1.wav", title: "Pulse Invaders" },
-    { fileName: "Pixel Riot2.wav", title: "Pixel Riot" },
-    { fileName: "Rhythm Nexus3.wav", title: "Rhythm Nexus" },
-    { fileName: "Voltage Arena4.wav", title: "Voltage Arena" },
-    { fileName: "Level Up5.wav", title: "Level Up" },
-    { fileName: "Dance Protocol6.wav", title: "Dance Protocol" },
-    { fileName: "Nightshift Energy7.wav", title: "Nightshift Energy" },
-    { fileName: "Neon Overdrive8.wav", title: "Neon Overdrive" },
-    { fileName: "Bass Crusaders9.wav", title: "Bass Crusaders" },
-    { fileName: "Cyber Groove10.wav", title: "Cyber Groove" },
+    { fileName: "Pixel Riot2.mp3", title: "Pixel Riot" },
+    { fileName: "Rhythm Nexus3.mp3", title: "Rhythm Nexus" },
+    { fileName: "Voltage Arena4.mp3", title: "Voltage Arena" },
+    { fileName: "Level Up5.mp3", title: "Level Up" },
+    { fileName: "Dance Protocol6.mp3", title: "Dance Protocol" },
+    { fileName: "Nightshift Energy7.mp3", title: "Nightshift Energy" },
+    { fileName: "Neon Overdrive8.mp3", title: "Neon Overdrive" },
+    { fileName: "Bass Crusaders9.mp3", title: "Bass Crusaders" },
+    { fileName: "Cyber Groove10.mp3", title: "Cyber Groove" },
   ]),
 
   ...registerTracks("unchained-energy", [
@@ -1197,7 +1197,6 @@ export async function POST(request: Request) {
     );
   }
 }
-
 
 
 

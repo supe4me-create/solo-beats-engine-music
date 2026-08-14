@@ -368,20 +368,20 @@ const albumCatalog: Album[] = [
     genre: "Complextro",
     status: "released",
     cover: "/covers/neon-overdrive.jpg",
-    albumPreviewFileName: "Neon Overdrive8.wav",
+    albumPreviewFileName: "Neon Overdrive8.mp3",
     description:
       "Experience Neon Overdrive, a ten-track Solo Beats album packed with futuristic complextro energy, cyber-powered bass, bright synths and high-speed electronic rhythms.",
     tracks: [
       { title: "Pulse Invaders", fileName: "Pulse Invaders1.wav" },
-      { title: "Pixel Riot", fileName: "Pixel Riot2.wav" },
-      { title: "Rhythm Nexus", fileName: "Rhythm Nexus3.wav" },
-      { title: "Voltage Arena", fileName: "Voltage Arena4.wav" },
-      { title: "Level Up", fileName: "Level Up5.wav" },
-      { title: "Dance Protocol", fileName: "Dance Protocol6.wav" },
-      { title: "Nightshift Energy", fileName: "Nightshift Energy7.wav" },
-      { title: "Neon Overdrive", fileName: "Neon Overdrive8.wav" },
-      { title: "Bass Crusaders", fileName: "Bass Crusaders9.wav" },
-      { title: "Cyber Groove", fileName: "Cyber Groove10.wav" },
+      { title: "Pixel Riot", fileName: "Pixel Riot2.mp3" },
+      { title: "Rhythm Nexus", fileName: "Rhythm Nexus3.mp3" },
+      { title: "Voltage Arena", fileName: "Voltage Arena4.mp3" },
+      { title: "Level Up", fileName: "Level Up5.mp3" },
+      { title: "Dance Protocol", fileName: "Dance Protocol6.mp3" },
+      { title: "Nightshift Energy", fileName: "Nightshift Energy7.mp3" },
+      { title: "Neon Overdrive", fileName: "Neon Overdrive8.mp3" },
+      { title: "Bass Crusaders", fileName: "Bass Crusaders9.mp3" },
+      { title: "Cyber Groove", fileName: "Cyber Groove10.mp3" },
     ],
   }),
 
@@ -650,7 +650,6 @@ export function getTrackById(trackId: string) {
 
   return undefined;
 }
-
 
 
 
