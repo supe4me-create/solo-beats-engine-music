@@ -1043,7 +1043,7 @@ export default function AlbumsPage() {
                 : "border-zinc-700 bg-zinc-900 text-gray-200 hover:border-pink-500 hover:text-pink-400"
             }`}
           >
-            â™¥ Favorites
+            {"\u2665"} Favorites
           </button>
         </div>
 
