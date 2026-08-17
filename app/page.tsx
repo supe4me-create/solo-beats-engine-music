@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import HomepageVideoChannel from "./components/HomepageVideoChannel";
 
@@ -1162,7 +1162,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "â™¥" : "â™¡"}
+                          {albumIsFavorite ? "\u2665" : "\u2661"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">
@@ -1273,7 +1273,7 @@ export default function AlbumsPage() {
                               : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
                           }`}
                         >
-                          {albumIsFavorite ? "â™¥" : "â™¡"}
+                          {albumIsFavorite ? "\u2665" : "\u2661"}
                         </button>
 
                         <div className="overflow-hidden rounded-xl">

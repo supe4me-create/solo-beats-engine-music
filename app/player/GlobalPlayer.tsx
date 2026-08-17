@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useAuth } from "../auth/AuthContext";
 import { usePlayer } from "./usePlayer";
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -40,8 +46,43 @@ export default function GlobalPlayer() {
     clearQueue,
   } = usePlayer();
 
+  const { user, loading: authLoading } = useAuth();
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [isQueueOpen, setIsQueueOpen] = useState(false);
+
+  const previousUserIdRef =
+    useRef<string | null | undefined>(undefined);
+
+  // SIGNOUT_PLAYER_CLEANUP_V1
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    const currentUserId =
+      user?.uid ?? null;
+
+    const previousUserId =
+      previousUserIdRef.current;
+
+    if (
+      previousUserId !== undefined &&
+      previousUserId !== null &&
+      currentUserId === null
+    ) {
+      clearQueue();
+      setIsExpanded(false);
+      setIsQueueOpen(false);
+    }
+
+    previousUserIdRef.current =
+      currentUserId;
+  }, [
+    authLoading,
+    user,
+    clearQueue,
+  ]);
 
   const progressPercent = useMemo(() => {
     if (!duration || duration <= 0) {
