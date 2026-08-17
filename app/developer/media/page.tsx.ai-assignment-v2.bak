@@ -28,11 +28,6 @@ type MediaItem = {
   createdAt: string | null;
   updatedAt: string | null;
   previewUrl: string | null;
-  source?: string | null;
-  aiMusicGenerationId?: string | null;
-  published?: boolean;
-  premiumAssigned?: boolean;
-  radioAssigned?: boolean;
 };
 
 type MediaResponse = {
@@ -107,9 +102,6 @@ export default function MediaLibraryPage() {
 
   
   const [deletingMediaId, setDeletingMediaId] =
-    useState("");
-
-  const [updatingMediaId, setUpdatingMediaId] =
     useState("");
 const isOwner =
     !!user &&
@@ -235,86 +227,6 @@ const isOwner =
       );
     } else {
       setTitle("");
-    }
-  }
-
-  async function updateMediaAssignment(
-    item: MediaItem,
-    field:
-      | "published"
-      | "premiumAssigned"
-      | "radioAssigned",
-    value: boolean
-  ) {
-    if (!user || updatingMediaId) {
-      return;
-    }
-
-    setUpdatingMediaId(item.mediaId);
-    setError("");
-    setNotice("");
-
-    try {
-      const token =
-        await user.getIdToken();
-
-      const response =
-        await fetch(
-          "/api/owner/media",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization:
-                `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              action: "assign",
-              mediaId: item.mediaId,
-              field,
-              value,
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.error ||
-            "Media assignment could not be updated."
-        );
-      }
-
-      setMedia((current) =>
-        current.map((mediaItem) =>
-          mediaItem.mediaId ===
-          item.mediaId
-            ? {
-                ...mediaItem,
-                [field]: value,
-              }
-            : mediaItem
-        )
-      );
-
-      setNotice(
-        data.message ||
-          "Media assignment updated."
-      );
-    } catch (assignmentError) {
-      setError(
-        assignmentError instanceof Error
-          ? assignmentError.message
-          : "Media assignment could not be updated."
-      );
-    } finally {
-      setUpdatingMediaId("");
     }
   }
 
@@ -913,12 +825,6 @@ const isOwner =
                           {item.kind}
                         </span>
 
-                        {item.source === "ai-music" && (
-                          <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase text-cyan-200">
-                            AI MUSIC
-                          </span>
-                        )}
-
                         {item.extension && (
                           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase text-white/50">
                             {
@@ -980,93 +886,6 @@ const isOwner =
                           item.createdAt
                         )}
                       </p>
-                      {item.kind === "audio" &&
-                      item.source === "ai-music" ? (
-                        <div className="mt-5 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.04] p-4">
-                          <p className="text-xs font-black uppercase tracking-[0.15em] text-cyan-200">
-                            AI Music Publishing
-                          </p>
-
-                          <div className="mt-4 space-y-3">
-
-                            <button
-                              type="button"
-                              disabled={
-                                updatingMediaId ===
-                                item.mediaId
-                              }
-                              onClick={() =>
-                                void updateMediaAssignment(
-                                  item,
-                                  "published",
-                                  !item.published
-                                )
-                              }
-                              className={
-                                item.published
-                                  ? "w-full rounded-xl bg-emerald-500/20 px-4 py-3 text-sm font-black text-emerald-200 disabled:opacity-50"
-                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
-                              }
-                            >
-                              {item.published
-                                ? "PUBLISHED"
-                                : "PRIVATE"}
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={
-                                updatingMediaId ===
-                                item.mediaId
-                              }
-                              onClick={() =>
-                                void updateMediaAssignment(
-                                  item,
-                                  "premiumAssigned",
-                                  !item.premiumAssigned
-                                )
-                              }
-                              className={
-                                item.premiumAssigned
-                                  ? "w-full rounded-xl bg-violet-500/20 px-4 py-3 text-sm font-black text-violet-200 disabled:opacity-50"
-                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
-                              }
-                            >
-                              Premium Library:{" "}
-                              {item.premiumAssigned
-                                ? "ON"
-                                : "OFF"}
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={
-                                updatingMediaId ===
-                                item.mediaId
-                              }
-                              onClick={() =>
-                                void updateMediaAssignment(
-                                  item,
-                                  "radioAssigned",
-                                  !item.radioAssigned
-                                )
-                              }
-                              className={
-                                item.radioAssigned
-                                  ? "w-full rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-black text-cyan-200 disabled:opacity-50"
-                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
-                              }
-                            >
-                              Radio:{" "}
-                              {item.radioAssigned
-                                ? "ON"
-                                : "OFF"}
-                            </button>
-
-                          </div>
-                        </div>
-                      ) : null}
-
                   <button
                     type="button"
                     onClick={() =>

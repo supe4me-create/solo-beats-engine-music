@@ -253,6 +253,16 @@ export async function GET() {
         }
       >();
 
+    const albumByTitle =
+      new Map<
+        string,
+        {
+          title: string;
+          artist: string;
+          cover: string;
+        }
+      >();
+
     for (const albumDoc of albumSnapshot.docs) {
       const album =
         albumDoc.data();
@@ -269,9 +279,9 @@ export async function GET() {
 
       const signedCover =
         coverStoragePath
-          ? await signedReadUrl(
+          ? `/api/radio/cover?path=${encodeURIComponent(
               coverStoragePath
-            )
+            )}`
           : null;
 
       const legacyCover =
@@ -295,6 +305,15 @@ export async function GET() {
         album.artist
           ? album.artist
           : "Solo Beats";
+
+      albumByTitle.set(
+        albumTitle.trim().toLowerCase(),
+        {
+          title: albumTitle,
+          artist,
+          cover,
+        }
+      );
 
       for (const rawTrack of albumTracks) {
         if (
@@ -329,7 +348,7 @@ export async function GET() {
       }
     }
 
-    const tracks = (
+    const playlistTracks = (
       await Promise.all(
         activeDocs.map(
           async (item) => {
@@ -372,20 +391,42 @@ export async function GET() {
               return null;
             }
 
-            const albumMetadata =
-              albumByMediaId.get(
-                mediaId
-              );
-
             const storedAlbumTitle =
               typeof item.albumTitle === "string"
                 ? item.albumTitle.trim()
                 : "";
 
+            const albumMetadata =
+              albumByMediaId.get(
+                mediaId
+              ) ||
+              (
+                storedAlbumTitle
+                  ? albumByTitle.get(
+                      storedAlbumTitle.toLowerCase()
+                    )
+                  : undefined
+              );
+
             const storedCover =
               typeof item.cover === "string"
                 ? item.cover.trim()
                 : "";
+
+            let resolvedStoredCover = storedCover;
+
+            if (
+              storedCover &&
+              !storedCover.startsWith("http://") &&
+              !storedCover.startsWith("https://") &&
+              !storedCover.startsWith("/") &&
+              !storedCover.startsWith("data:") &&
+              !storedCover.startsWith("blob:")
+            ) {
+              resolvedStoredCover =
+                (await signedReadUrl(storedCover)) ||
+                "";
+            }
 
             const isGenericAlbumTitle =
               !storedAlbumTitle ||
@@ -412,8 +453,8 @@ export async function GET() {
                 albumMetadata?.artist ||
                 "Solo Beats",
               cover:
-                storedCover ||
                 albumMetadata?.cover ||
+                resolvedStoredCover ||
                 "",
               src,
               order:
@@ -429,6 +470,101 @@ export async function GET() {
         typeof track
       > => Boolean(track)
     );
+
+    const aiRadioSnapshot =
+      await adminDb
+        .collection("mediaLibrary")
+        .where(
+          "radioAssigned",
+          "==",
+          true
+        )
+        .get();
+
+    const existingTrackIds =
+      new Set(
+        playlistTracks
+          .filter(Boolean)
+          .map(
+            (track) =>
+              track!.id
+          )
+      );
+
+    const aiRadioTracks = (
+      await Promise.all(
+        aiRadioSnapshot.docs.map(
+          async (mediaDoc) => {
+            const media =
+              mediaDoc.data();
+
+            if (
+              media.kind !== "audio" ||
+              media.status === "deleted" ||
+              media.published !== true ||
+              media.radioAssigned !== true ||
+              media.source !== "ai-music"
+            ) {
+              return null;
+            }
+
+            if (
+              existingTrackIds.has(
+                mediaDoc.id
+              )
+            ) {
+              return null;
+            }
+
+            const src =
+              await signedReadUrl(
+                media.storagePath
+              );
+
+            if (!src) {
+              return null;
+            }
+
+            return {
+              id:
+                mediaDoc.id,
+
+              title:
+                typeof media.title ===
+                  "string" &&
+                media.title.trim()
+                  ? media.title.trim()
+                  : "AI Music",
+
+              albumTitle:
+                "AI Music",
+
+              artist:
+                "Solo Beats",
+
+              cover:
+                "",
+
+              src,
+
+              order:
+                1000000,
+            };
+          }
+        )
+      )
+    ).filter(
+      (
+        track
+      ): track is NonNullable<
+        typeof track
+      > => Boolean(track)
+    );
+
+    const tracks = [
+      ...playlistTracks.filter(Boolean),
+      ...aiRadioTracks,
+    ];
 
     return NextResponse.json(
       {
@@ -471,5 +607,9 @@ export async function GET() {
     );
   }
 }
+
+
+
+
 
 

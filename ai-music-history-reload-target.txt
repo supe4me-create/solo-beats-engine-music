@@ -1,0 +1,761 @@
+﻿===================================================
+1. HISTORY API
+===================================================
+import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../lib/firebaseAdmin";
+
+function token(request: Request) {
+  return (
+    request.headers
+      .get("authorization")
+      ?.match(/^Bearer\s+(.+)$/i)?.[1]
+      ?.trim() || null
+  );
+}
+
+async function userFromRequest(
+  request: Request
+) {
+  const idToken = token(request);
+
+  if (!idToken) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  return getAuth(
+    firebaseAdminApp
+  ).verifyIdToken(idToken);
+}
+
+async function signedUrl(
+  storagePath: unknown
+) {
+  if (
+    typeof storagePath !== "string" ||
+    !storagePath
+  ) {
+    return null;
+  }
+
+  const file =
+    adminBucket.file(storagePath);
+
+  const [exists] =
+    await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [url] =
+    await file.getSignedUrl({
+      action: "read",
+      expires:
+        Date.now() +
+        60 * 60 * 1000,
+    });
+
+  return url;
+}
+
+export async function GET(
+  request: Request
+) {
+  try {
+    const user =
+      await userFromRequest(request);
+
+    const snapshot =
+      await adminDb
+        .collection("aiMusicGenerations")
+        .where("uid", "==", user.uid)
+        .limit(50)
+        .get();
+
+    const generations =
+      await Promise.all(
+        snapshot.docs.map(
+          async (doc) => {
+            const data =
+              doc.data();
+
+            return {
+              generationId:
+                doc.id,
+
+              prompt:
+                typeof data.prompt === "string"
+                  ? data.prompt
+                  : "",
+
+              genre:
+                typeof data.genre === "string"
+                  ? data.genre
+                  : "",
+
+              mood:
+                typeof data.mood === "string"
+                  ? data.mood
+                  : "",
+
+              bpm:
+                Number(data.bpm) || 0,
+
+              musicKey:
+                typeof data.musicKey === "string"
+                  ? data.musicKey
+                  : "",
+
+              duration:
+                Number(data.duration) || 0,
+
+              vocalMode:
+                typeof data.vocalMode === "string"
+                  ? data.vocalMode
+                  : "",
+
+              accessMode:
+                typeof data.accessMode === "string"
+                  ? data.accessMode
+                  : "",
+
+              audioUrl:
+                await signedUrl(
+                  data.storagePath
+                ),
+
+              savedToMediaLibrary:
+                Boolean(
+                  data.mediaLibraryId
+                ),
+
+              mediaLibraryId:
+                typeof data.mediaLibraryId ===
+                "string"
+                  ? data.mediaLibraryId
+                  : null,
+
+              createdAt:
+                typeof data.createdAt ===
+                "string"
+                  ? data.createdAt
+                  : "",
+            };
+          }
+        )
+      );
+
+    generations.sort(
+      (a, b) =>
+        new Date(
+          b.createdAt || 0
+        ).getTime() -
+        new Date(
+          a.createdAt || 0
+        ).getTime()
+    );
+
+    return NextResponse.json({
+      success: true,
+      generations,
+    });
+  } catch (error) {
+    console.error(
+      "AI MUSIC HISTORY ERROR",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "AI Music history could not be loaded.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+===================================================
+2. AI MUSIC PAGE HISTORY STATE + LOAD
+===================================================
+
+  app\premium\ai-music\page.tsx:55:
+  app\premium\ai-music\page.tsx:56:  const [vocalMode, setVocalMode] =
+  app\premium\ai-music\page.tsx:57:    useState<VocalMode>(
+  app\premium\ai-music\page.tsx:58:      "instrumental"
+  app\premium\ai-music\page.tsx:59:    );
+  app\premium\ai-music\page.tsx:60:
+  app\premium\ai-music\page.tsx:61:  const [creating, setCreating] =
+  app\premium\ai-music\page.tsx:62:    useState(false);
+  app\premium\ai-music\page.tsx:63:
+  app\premium\ai-music\page.tsx:64:  const [status, setStatus] =
+  app\premium\ai-music\page.tsx:65:    useState(
+  app\premium\ai-music\page.tsx:66:      "Ready to generate."
+  app\premium\ai-music\page.tsx:67:    );
+  app\premium\ai-music\page.tsx:68:
+  app\premium\ai-music\page.tsx:69:  const [audioUrl, setAudioUrl] =
+  app\premium\ai-music\page.tsx:70:    useState<string | null>(null);
+  app\premium\ai-music\page.tsx:71:
+  app\premium\ai-music\page.tsx:72:  const [
+> app\premium\ai-music\page.tsx:73:    generationId,
+> app\premium\ai-music\page.tsx:74:    setGenerationId,
+  app\premium\ai-music\page.tsx:75:  ] =
+  app\premium\ai-music\page.tsx:76:    useState<string | null>(
+  app\premium\ai-music\page.tsx:77:      null
+  app\premium\ai-music\page.tsx:78:    );
+  app\premium\ai-music\page.tsx:79:
+  app\premium\ai-music\page.tsx:80:  const [
+> app\premium\ai-music\page.tsx:81:    recentGenerations,
+> app\premium\ai-music\page.tsx:82:    setRecentGenerations,
+  app\premium\ai-music\page.tsx:83:  ] =
+  app\premium\ai-music\page.tsx:84:    useState<
+  app\premium\ai-music\page.tsx:85:      Array<{
+> app\premium\ai-music\page.tsx:86:        generationId: string;
+  app\premium\ai-music\page.tsx:87:        prompt: string;
+  app\premium\ai-music\page.tsx:88:        genre: string;
+  app\premium\ai-music\page.tsx:89:        duration: number;
+  app\premium\ai-music\page.tsx:90:        audioUrl: string | null;
+> app\premium\ai-music\page.tsx:91:        savedToMediaLibrary: boolean;
+  app\premium\ai-music\page.tsx:92:        createdAt: string;
+  app\premium\ai-music\page.tsx:93:      }>
+  app\premium\ai-music\page.tsx:94:    >([]);
+  app\premium\ai-music\page.tsx:95:
+  app\premium\ai-music\page.tsx:96:  const [
+> app\premium\ai-music\page.tsx:97:    historyLoading,
+> app\premium\ai-music\page.tsx:98:    setHistoryLoading,
+  app\premium\ai-music\page.tsx:99:  ] =
+  app\premium\ai-music\page.tsx:100:    useState(false);
+  app\premium\ai-music\page.tsx:101:
+  app\premium\ai-music\page.tsx:102:  const [
+  app\premium\ai-music\page.tsx:103:    savingToMedia,
+  app\premium\ai-music\page.tsx:104:    setSavingToMedia,
+  app\premium\ai-music\page.tsx:105:  ] =
+  app\premium\ai-music\page.tsx:106:    useState(false);
+  app\premium\ai-music\page.tsx:107:
+  app\premium\ai-music\page.tsx:108:  const [
+  app\premium\ai-music\page.tsx:109:    mediaMessage,
+  app\premium\ai-music\page.tsx:110:    setMediaMessage,
+  app\premium\ai-music\page.tsx:111:  ] =
+  app\premium\ai-music\page.tsx:112:    useState<string | null>(
+  app\premium\ai-music\page.tsx:113:      null
+  app\premium\ai-music\page.tsx:114:    );
+  app\premium\ai-music\page.tsx:115:
+  app\premium\ai-music\page.tsx:116:  const [error, setError] =
+  app\premium\ai-music\page.tsx:117:    useState<string | null>(null);
+  app\premium\ai-music\page.tsx:118:
+  app\premium\ai-music\page.tsx:119:  const [access, setAccess] =
+  app\premium\ai-music\page.tsx:120:    useState<AccessInfo | null>(
+  app\premium\ai-music\page.tsx:121:      null
+  app\premium\ai-music\page.tsx:122:    );
+  app\premium\ai-music\page.tsx:123:
+  app\premium\ai-music\page.tsx:124:  const [accessLoading, setAccessLoading] =
+  app\premium\ai-music\page.tsx:125:    useState(false);
+  app\premium\ai-music\page.tsx:126:
+  app\premium\ai-music\page.tsx:127:  const loadAccess =
+  app\premium\ai-music\page.tsx:128:    useCallback(async () => {
+  app\premium\ai-music\page.tsx:129:      if (!user) {
+  app\premium\ai-music\page.tsx:130:        setAccess(null);
+  app\premium\ai-music\page.tsx:131:        return;
+  app\premium\ai-music\page.tsx:132:      }
+  app\premium\ai-music\page.tsx:133:
+  app\premium\ai-music\page.tsx:134:      setAccessLoading(true);
+  app\premium\ai-music\page.tsx:135:
+  app\premium\ai-music\page.tsx:136:      try {
+  app\premium\ai-music\page.tsx:137:        const token =
+  app\premium\ai-music\page.tsx:138:          await user.getIdToken();
+  app\premium\ai-music\page.tsx:139:
+  app\premium\ai-music\page.tsx:140:        const response =
+  app\premium\ai-music\page.tsx:141:          await fetch(
+  app\premium\ai-music\page.tsx:142:            "/api/ai-music/generate",
+  app\premium\ai-music\page.tsx:143:            {
+  app\premium\ai-music\page.tsx:196:          accessMode:
+  app\premium\ai-music\page.tsx:197:            data.accessMode,
+  app\premium\ai-music\page.tsx:198:        });
+  app\premium\ai-music\page.tsx:199:      } catch (err) {
+  app\premium\ai-music\page.tsx:200:        setError(
+  app\premium\ai-music\page.tsx:201:          err instanceof Error
+  app\premium\ai-music\page.tsx:202:            ? err.message
+  app\premium\ai-music\page.tsx:203:            : "AI Music access could not be loaded."
+  app\premium\ai-music\page.tsx:204:        );
+  app\premium\ai-music\page.tsx:205:      } finally {
+  app\premium\ai-music\page.tsx:206:        setAccessLoading(false);
+  app\premium\ai-music\page.tsx:207:      }
+  app\premium\ai-music\page.tsx:208:    }, [user]);
+  app\premium\ai-music\page.tsx:209:
+  app\premium\ai-music\page.tsx:210:  useEffect(() => {
+  app\premium\ai-music\page.tsx:211:    void loadAccess();
+  app\premium\ai-music\page.tsx:212:  }, [loadAccess]);
+  app\premium\ai-music\page.tsx:213:
+> app\premium\ai-music\page.tsx:214:  const loadHistory =
+  app\premium\ai-music\page.tsx:215:    useCallback(
+  app\premium\ai-music\page.tsx:216:      async () => {
+  app\premium\ai-music\page.tsx:217:        if (!user) {
+> app\premium\ai-music\page.tsx:218:          setRecentGenerations(
+  app\premium\ai-music\page.tsx:219:            []
+  app\premium\ai-music\page.tsx:220:          );
+  app\premium\ai-music\page.tsx:221:          return;
+  app\premium\ai-music\page.tsx:222:        }
+  app\premium\ai-music\page.tsx:223:
+> app\premium\ai-music\page.tsx:224:        setHistoryLoading(
+  app\premium\ai-music\page.tsx:225:          true
+  app\premium\ai-music\page.tsx:226:        );
+  app\premium\ai-music\page.tsx:227:
+  app\premium\ai-music\page.tsx:228:        try {
+  app\premium\ai-music\page.tsx:229:          const token =
+  app\premium\ai-music\page.tsx:230:            await user
+  app\premium\ai-music\page.tsx:231:              .getIdToken();
+  app\premium\ai-music\page.tsx:232:
+  app\premium\ai-music\page.tsx:233:          const response =
+  app\premium\ai-music\page.tsx:234:            await fetch(
+> app\premium\ai-music\page.tsx:235:              "/api/ai-music/history",
+  app\premium\ai-music\page.tsx:236:              {
+  app\premium\ai-music\page.tsx:237:                headers: {
+  app\premium\ai-music\page.tsx:238:                  Authorization:
+  app\premium\ai-music\page.tsx:239:                    `Bearer ${token}`,
+  app\premium\ai-music\page.tsx:240:                },
+  app\premium\ai-music\page.tsx:241:                cache:
+  app\premium\ai-music\page.tsx:242:                  "no-store",
+  app\premium\ai-music\page.tsx:243:              }
+  app\premium\ai-music\page.tsx:244:            );
+  app\premium\ai-music\page.tsx:245:
+  app\premium\ai-music\page.tsx:246:          const data =
+  app\premium\ai-music\page.tsx:247:            await response
+  app\premium\ai-music\page.tsx:248:              .json();
+  app\premium\ai-music\page.tsx:249:
+  app\premium\ai-music\page.tsx:250:          if (
+  app\premium\ai-music\page.tsx:251:            response.ok &&
+  app\premium\ai-music\page.tsx:252:            data.success
+  app\premium\ai-music\page.tsx:253:          ) {
+> app\premium\ai-music\page.tsx:254:            setRecentGenerations(
+  app\premium\ai-music\page.tsx:255:              Array.isArray(
+  app\premium\ai-music\page.tsx:256:                data.generations
+  app\premium\ai-music\page.tsx:257:              )
+  app\premium\ai-music\page.tsx:258:                ? data.generations
+  app\premium\ai-music\page.tsx:259:                : []
+  app\premium\ai-music\page.tsx:260:            );
+  app\premium\ai-music\page.tsx:261:          }
+  app\premium\ai-music\page.tsx:262:        } catch (error) {
+  app\premium\ai-music\page.tsx:263:          console.error(
+  app\premium\ai-music\page.tsx:264:            "AI MUSIC HISTORY",
+  app\premium\ai-music\page.tsx:265:            error
+  app\premium\ai-music\page.tsx:266:          );
+  app\premium\ai-music\page.tsx:267:        } finally {
+> app\premium\ai-music\page.tsx:268:          setHistoryLoading(
+  app\premium\ai-music\page.tsx:269:            false
+  app\premium\ai-music\page.tsx:270:          );
+  app\premium\ai-music\page.tsx:271:        }
+  app\premium\ai-music\page.tsx:272:      },
+  app\premium\ai-music\page.tsx:273:      [user]
+  app\premium\ai-music\page.tsx:274:    );
+  app\premium\ai-music\page.tsx:275:
+  app\premium\ai-music\page.tsx:276:  useEffect(() => {
+> app\premium\ai-music\page.tsx:277:    void loadHistory();
+> app\premium\ai-music\page.tsx:278:  }, [loadHistory]);
+  app\premium\ai-music\page.tsx:279:
+  app\premium\ai-music\page.tsx:280:  async function handleGenerate() {
+  app\premium\ai-music\page.tsx:281:    if (
+  app\premium\ai-music\page.tsx:282:      !user ||
+  app\premium\ai-music\page.tsx:283:      !prompt.trim() ||
+  app\premium\ai-music\page.tsx:284:      creating
+  app\premium\ai-music\page.tsx:285:    ) {
+  app\premium\ai-music\page.tsx:286:      return;
+  app\premium\ai-music\page.tsx:287:    }
+  app\premium\ai-music\page.tsx:288:
+  app\premium\ai-music\page.tsx:289:    if (
+  app\premium\ai-music\page.tsx:290:      access &&
+  app\premium\ai-music\page.tsx:291:      !access.canGenerate
+  app\premium\ai-music\page.tsx:292:    ) {
+  app\premium\ai-music\page.tsx:293:      setError(
+  app\premium\ai-music\page.tsx:294:        access.premiumActive
+  app\premium\ai-music\page.tsx:295:          ? "Your monthly AI Music credits have been used. Please wait for your next monthly credit reset."
+  app\premium\ai-music\page.tsx:296:          : "Your free trial is complete. Subscribe to SOLO BEATS PREMIUM to continue generating music."
+  app\premium\ai-music\page.tsx:297:      );
+  app\premium\ai-music\page.tsx:298:      return;
+  app\premium\ai-music\page.tsx:299:    }
+  app\premium\ai-music\page.tsx:300:
+  app\premium\ai-music\page.tsx:301:    setCreating(true);
+  app\premium\ai-music\page.tsx:302:    setError(null);
+  app\premium\ai-music\page.tsx:303:    setAudioUrl(null);
+> app\premium\ai-music\page.tsx:304:    setGenerationId(null);
+  app\premium\ai-music\page.tsx:305:    setMediaMessage(null);
+  app\premium\ai-music\page.tsx:306:
+  app\premium\ai-music\page.tsx:307:    setStatus(
+  app\premium\ai-music\page.tsx:308:      "Creating your AI song..."
+  app\premium\ai-music\page.tsx:309:    );
+  app\premium\ai-music\page.tsx:310:
+  app\premium\ai-music\page.tsx:311:    try {
+  app\premium\ai-music\page.tsx:312:      const token =
+  app\premium\ai-music\page.tsx:313:        await user.getIdToken();
+  app\premium\ai-music\page.tsx:314:
+  app\premium\ai-music\page.tsx:315:      const response =
+  app\premium\ai-music\page.tsx:316:        await fetch(
+  app\premium\ai-music\page.tsx:317:          "/api/ai-music/generate",
+  app\premium\ai-music\page.tsx:318:          {
+  app\premium\ai-music\page.tsx:319:            method: "POST",
+  app\premium\ai-music\page.tsx:320:            headers: {
+  app\premium\ai-music\page.tsx:321:              Authorization:
+  app\premium\ai-music\page.tsx:322:                `Bearer ${token}`,
+  app\premium\ai-music\page.tsx:323:              "Content-Type":
+  app\premium\ai-music\page.tsx:324:                "application/json",
+  app\premium\ai-music\page.tsx:325:            },
+  app\premium\ai-music\page.tsx:326:            body: JSON.stringify({
+  app\premium\ai-music\page.tsx:327:              prompt,
+  app\premium\ai-music\page.tsx:328:              genre,
+  app\premium\ai-music\page.tsx:329:              mood,
+  app\premium\ai-music\page.tsx:330:              bpm,
+  app\premium\ai-music\page.tsx:331:              musicKey,
+  app\premium\ai-music\page.tsx:332:              duration,
+  app\premium\ai-music\page.tsx:333:              vocalMode,
+  app\premium\ai-music\page.tsx:334:            }),
+  app\premium\ai-music\page.tsx:335:          }
+  app\premium\ai-music\page.tsx:336:        );
+  app\premium\ai-music\page.tsx:337:
+  app\premium\ai-music\page.tsx:338:      const data =
+  app\premium\ai-music\page.tsx:339:        await response.json();
+  app\premium\ai-music\page.tsx:340:
+  app\premium\ai-music\page.tsx:341:      if (!response.ok) {
+  app\premium\ai-music\page.tsx:342:        throw new Error(
+  app\premium\ai-music\page.tsx:343:          data.error ||
+  app\premium\ai-music\page.tsx:344:            "AI music generation failed."
+  app\premium\ai-music\page.tsx:345:        );
+  app\premium\ai-music\page.tsx:346:      }
+  app\premium\ai-music\page.tsx:347:
+  app\premium\ai-music\page.tsx:348:      setAudioUrl(
+  app\premium\ai-music\page.tsx:349:        data.audioUrl ||
+  app\premium\ai-music\page.tsx:350:        null
+  app\premium\ai-music\page.tsx:351:      );
+  app\premium\ai-music\page.tsx:352:
+> app\premium\ai-music\page.tsx:353:      setGenerationId(
+> app\premium\ai-music\page.tsx:354:        typeof data.generationId ===
+  app\premium\ai-music\page.tsx:355:          "string"
+> app\premium\ai-music\page.tsx:356:          ? data.generationId
+  app\premium\ai-music\page.tsx:357:          : null
+  app\premium\ai-music\page.tsx:358:      );
+  app\premium\ai-music\page.tsx:359:
+  app\premium\ai-music\page.tsx:360:      setStatus(
+  app\premium\ai-music\page.tsx:361:        "Generation complete."
+  app\premium\ai-music\page.tsx:362:      );
+  app\premium\ai-music\page.tsx:363:
+  app\premium\ai-music\page.tsx:364:      await Promise.all([
+  app\premium\ai-music\page.tsx:365:        loadAccess(),
+> app\premium\ai-music\page.tsx:366:        loadHistory(),
+  app\premium\ai-music\page.tsx:367:      ]);
+  app\premium\ai-music\page.tsx:368:    } catch (err) {
+  app\premium\ai-music\page.tsx:369:      setError(
+  app\premium\ai-music\page.tsx:370:        err instanceof Error
+  app\premium\ai-music\page.tsx:371:          ? err.message
+  app\premium\ai-music\page.tsx:372:          : "AI music generation failed."
+  app\premium\ai-music\page.tsx:373:      );
+  app\premium\ai-music\page.tsx:374:
+  app\premium\ai-music\page.tsx:375:      setStatus(
+  app\premium\ai-music\page.tsx:376:        "Generation failed."
+  app\premium\ai-music\page.tsx:377:      );
+  app\premium\ai-music\page.tsx:378:
+  app\premium\ai-music\page.tsx:379:      await loadAccess();
+  app\premium\ai-music\page.tsx:380:    } finally {
+  app\premium\ai-music\page.tsx:381:      setCreating(false);
+  app\premium\ai-music\page.tsx:382:    }
+  app\premium\ai-music\page.tsx:383:  }
+  app\premium\ai-music\page.tsx:384:
+  app\premium\ai-music\page.tsx:385:  async function handleSaveToMediaLibrary(
+> app\premium\ai-music\page.tsx:386:    targetGenerationId?: string
+  app\premium\ai-music\page.tsx:387:  ) {
+> app\premium\ai-music\page.tsx:388:    const selectedGenerationId =
+> app\premium\ai-music\page.tsx:389:      targetGenerationId ||
+> app\premium\ai-music\page.tsx:390:      generationId;
+  app\premium\ai-music\page.tsx:391:
+  app\premium\ai-music\page.tsx:392:    if (
+  app\premium\ai-music\page.tsx:393:      !user ||
+> app\premium\ai-music\page.tsx:394:      !selectedGenerationId ||
+  app\premium\ai-music\page.tsx:395:      savingToMedia
+  app\premium\ai-music\page.tsx:396:    ) {
+  app\premium\ai-music\page.tsx:397:      return;
+  app\premium\ai-music\page.tsx:398:    }
+  app\premium\ai-music\page.tsx:399:
+  app\premium\ai-music\page.tsx:400:    setSavingToMedia(true);
+  app\premium\ai-music\page.tsx:401:    setMediaMessage(null);
+  app\premium\ai-music\page.tsx:402:
+  app\premium\ai-music\page.tsx:403:    try {
+  app\premium\ai-music\page.tsx:404:      const token =
+  app\premium\ai-music\page.tsx:405:        await user
+  app\premium\ai-music\page.tsx:406:          .getIdToken();
+  app\premium\ai-music\page.tsx:407:
+  app\premium\ai-music\page.tsx:408:      const response =
+  app\premium\ai-music\page.tsx:409:        await fetch(
+  app\premium\ai-music\page.tsx:410:          "/api/ai-music/save-to-media",
+  app\premium\ai-music\page.tsx:411:          {
+  app\premium\ai-music\page.tsx:412:            method:
+  app\premium\ai-music\page.tsx:413:              "POST",
+  app\premium\ai-music\page.tsx:414:
+  app\premium\ai-music\page.tsx:415:            headers: {
+  app\premium\ai-music\page.tsx:416:              Authorization:
+  app\premium\ai-music\page.tsx:417:                `Bearer ${token}`,
+  app\premium\ai-music\page.tsx:418:
+  app\premium\ai-music\page.tsx:419:              "Content-Type":
+  app\premium\ai-music\page.tsx:420:                "application/json",
+  app\premium\ai-music\page.tsx:421:            },
+  app\premium\ai-music\page.tsx:422:
+  app\premium\ai-music\page.tsx:423:            body:
+  app\premium\ai-music\page.tsx:424:              JSON.stringify({
+> app\premium\ai-music\page.tsx:425:                generationId:
+> app\premium\ai-music\page.tsx:426:                  selectedGenerationId,
+  app\premium\ai-music\page.tsx:427:              }),
+  app\premium\ai-music\page.tsx:428:          }
+  app\premium\ai-music\page.tsx:429:        );
+  app\premium\ai-music\page.tsx:430:
+  app\premium\ai-music\page.tsx:431:      const data =
+  app\premium\ai-music\page.tsx:432:        await response
+  app\premium\ai-music\page.tsx:433:          .json();
+  app\premium\ai-music\page.tsx:434:
+  app\premium\ai-music\page.tsx:435:      if (
+  app\premium\ai-music\page.tsx:436:        !response.ok ||
+  app\premium\ai-music\page.tsx:437:        !data.success
+  app\premium\ai-music\page.tsx:438:      ) {
+  app\premium\ai-music\page.tsx:439:        throw new Error(
+  app\premium\ai-music\page.tsx:440:          data.error ||
+  app\premium\ai-music\page.tsx:441:            "Song could not be saved."
+  app\premium\ai-music\page.tsx:442:        );
+  app\premium\ai-music\page.tsx:443:      }
+  app\premium\ai-music\page.tsx:444:
+  app\premium\ai-music\page.tsx:445:      setMediaMessage(
+  app\premium\ai-music\page.tsx:446:        data.message ||
+  app\premium\ai-music\page.tsx:447:          "Song saved to Media Library."
+  app\premium\ai-music\page.tsx:448:      );
+  app\premium\ai-music\page.tsx:449:
+> app\premium\ai-music\page.tsx:450:      await loadHistory();
+  app\premium\ai-music\page.tsx:451:    } catch (error) {
+  app\premium\ai-music\page.tsx:452:      setMediaMessage(
+  app\premium\ai-music\page.tsx:453:        error instanceof Error
+  app\premium\ai-music\page.tsx:454:          ? error.message
+  app\premium\ai-music\page.tsx:455:          : "Song could not be saved."
+  app\premium\ai-music\page.tsx:456:      );
+  app\premium\ai-music\page.tsx:457:    } finally {
+  app\premium\ai-music\page.tsx:458:      setSavingToMedia(false);
+  app\premium\ai-music\page.tsx:459:    }
+  app\premium\ai-music\page.tsx:460:  }
+  app\premium\ai-music\page.tsx:461:
+  app\premium\ai-music\page.tsx:462:  const fieldClass =
+  app\premium\ai-music\page.tsx:463:    "mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none";
+  app\premium\ai-music\page.tsx:464:
+  app\premium\ai-music\page.tsx:465:  const buttonText =
+  app\premium\ai-music\page.tsx:466:    creating
+  app\premium\ai-music\page.tsx:467:      ? "Generating..."
+  app\premium\ai-music\page.tsx:468:      : access?.isOwner
+  app\premium\ai-music\page.tsx:469:        ? "Generate AI Music — 0 Credits"
+  app\premium\ai-music\page.tsx:470:        : access?.premiumActive
+  app\premium\ai-music\page.tsx:471:          ? access.canGenerate
+  app\premium\ai-music\page.tsx:472:            ? `Generate AI Music — ${access.premiumGenerationCost} Credit`
+  app\premium\ai-music\page.tsx:473:            : "Monthly AI Music Credits Used"
+  app\premium\ai-music\page.tsx:474:          : access
+  app\premium\ai-music\page.tsx:475:            ? `Generate Free Song — ${access.freeRemaining} Left`
+  app\premium\ai-music\page.tsx:476:            : "Generate AI Music";
+  app\premium\ai-music\page.tsx:477:
+  app\premium\ai-music\page.tsx:478:  return (
+  app\premium\ai-music\page.tsx:479:    <main className="min-h-screen bg-[#07070d] px-6 py-10 text-white">
+  app\premium\ai-music\page.tsx:480:      <div className="mx-auto max-w-6xl">
+  app\premium\ai-music\page.tsx:481:        <p className="text-xs font-black uppercase tracking-[0.25em] text-cyan-300">
+  app\premium\ai-music\page.tsx:482:          SOLO BEATS ENGINE MUSIC
+  app\premium\ai-music\page.tsx:483:        </p>
+  app\premium\ai-music\page.tsx:484:
+  app\premium\ai-music\page.tsx:485:        <h1 className="mt-3 text-4xl font-black">
+  app\premium\ai-music\page.tsx:486:          AI Music Generator
+  app\premium\ai-music\page.tsx:487:        </h1>
+  app\premium\ai-music\page.tsx:488:
+  app\premium\ai-music\page.tsx:489:        <p className="mt-3 max-w-3xl text-white/55">
+  app\premium\ai-music\page.tsx:490:          Create original beats and songs
+  app\premium\ai-music\page.tsx:491:          from a prompt.
+  app\premium\ai-music\page.tsx:492:        </p>
+  app\premium\ai-music\page.tsx:493:
+  app\premium\ai-music\page.tsx:494:        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+  app\premium\ai-music\page.tsx:495:          {authLoading ? (
+  app\premium\ai-music\page.tsx:808:
+  app\premium\ai-music\page.tsx:809:            {audioUrl ? (
+  app\premium\ai-music\page.tsx:810:              <div className="mt-6">
+  app\premium\ai-music\page.tsx:811:                <audio
+  app\premium\ai-music\page.tsx:812:                  controls
+  app\premium\ai-music\page.tsx:813:                  src={audioUrl}
+  app\premium\ai-music\page.tsx:814:                  className="w-full"
+  app\premium\ai-music\page.tsx:815:                />
+  app\premium\ai-music\page.tsx:816:
+  app\premium\ai-music\page.tsx:817:                <div className="mt-4 flex flex-wrap gap-3">
+  app\premium\ai-music\page.tsx:818:                  <a
+  app\premium\ai-music\page.tsx:819:                    href={audioUrl}
+  app\premium\ai-music\page.tsx:820:                    download
+  app\premium\ai-music\page.tsx:821:                    className="inline-flex rounded-xl border border-white/15 px-5 py-3 font-black hover:bg-white/10"
+  app\premium\ai-music\page.tsx:822:                  >
+  app\premium\ai-music\page.tsx:823:                    Download Song
+  app\premium\ai-music\page.tsx:824:                  </a>
+  app\premium\ai-music\page.tsx:825:
+> app\premium\ai-music\page.tsx:826:                  {generationId ? (
+  app\premium\ai-music\page.tsx:827:                    <button
+  app\premium\ai-music\page.tsx:828:                      type="button"
+  app\premium\ai-music\page.tsx:829:                      onClick={() =>
+  app\premium\ai-music\page.tsx:830:                        void handleSaveToMediaLibrary()
+  app\premium\ai-music\page.tsx:831:                      }
+  app\premium\ai-music\page.tsx:832:                      disabled={
+  app\premium\ai-music\page.tsx:833:                        savingToMedia
+  app\premium\ai-music\page.tsx:834:                      }
+  app\premium\ai-music\page.tsx:835:                      className="inline-flex rounded-xl bg-fuchsia-600 px-5 py-3 font-black text-white hover:bg-fuchsia-500 disabled:opacity-50"
+  app\premium\ai-music\page.tsx:836:                    >
+  app\premium\ai-music\page.tsx:837:                      {savingToMedia
+  app\premium\ai-music\page.tsx:838:                        ? "Saving..."
+  app\premium\ai-music\page.tsx:839:                        : "Save to Media Library"}
+  app\premium\ai-music\page.tsx:840:                    </button>
+  app\premium\ai-music\page.tsx:841:                  ) : null}
+  app\premium\ai-music\page.tsx:842:                </div>
+  app\premium\ai-music\page.tsx:843:
+  app\premium\ai-music\page.tsx:844:                {mediaMessage ? (
+  app\premium\ai-music\page.tsx:845:                  <p className="mt-3 text-sm font-bold text-fuchsia-200">
+  app\premium\ai-music\page.tsx:846:                    {mediaMessage}
+  app\premium\ai-music\page.tsx:847:                  </p>
+  app\premium\ai-music\page.tsx:848:                ) : null}
+  app\premium\ai-music\page.tsx:849:              </div>
+  app\premium\ai-music\page.tsx:850:            ) : (
+  app\premium\ai-music\page.tsx:851:              <div className="mt-6 grid min-h-64 place-items-center rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
+  app\premium\ai-music\page.tsx:852:                <div>
+  app\premium\ai-music\page.tsx:853:                  <p className="text-xl font-black text-white/60">
+  app\premium\ai-music\page.tsx:854:                    Generated music will
+  app\premium\ai-music\page.tsx:855:                    appear here
+  app\premium\ai-music\page.tsx:856:                  </p>
+  app\premium\ai-music\page.tsx:857:
+  app\premium\ai-music\page.tsx:858:                  <p className="mt-2 text-sm text-white/35">
+  app\premium\ai-music\page.tsx:859:                    Enter a prompt and create
+  app\premium\ai-music\page.tsx:860:                    an AI song.
+  app\premium\ai-music\page.tsx:861:                  </p>
+  app\premium\ai-music\page.tsx:862:                </div>
+  app\premium\ai-music\page.tsx:863:              </div>
+  app\premium\ai-music\page.tsx:864:            )}
+  app\premium\ai-music\page.tsx:865:
+  app\premium\ai-music\page.tsx:866:            <div className="mt-6 rounded-2xl border border-white/10 p-5">
+  app\premium\ai-music\page.tsx:867:              <div className="flex items-center justify-between gap-4">
+  app\premium\ai-music\page.tsx:868:                <div>
+  app\premium\ai-music\page.tsx:869:                  <p className="font-black">
+  app\premium\ai-music\page.tsx:870:                    Recent Generations
+  app\premium\ai-music\page.tsx:871:                  </p>
+  app\premium\ai-music\page.tsx:872:
+  app\premium\ai-music\page.tsx:873:                  <p className="mt-1 text-sm text-white/40">
+  app\premium\ai-music\page.tsx:874:                    Your generated songs are stored privately.
+  app\premium\ai-music\page.tsx:875:                  </p>
+  app\premium\ai-music\page.tsx:876:                </div>
+  app\premium\ai-music\page.tsx:877:
+  app\premium\ai-music\page.tsx:878:                <button
+  app\premium\ai-music\page.tsx:879:                  type="button"
+  app\premium\ai-music\page.tsx:880:                  onClick={() =>
+> app\premium\ai-music\page.tsx:881:                    void loadHistory()
+  app\premium\ai-music\page.tsx:882:                  }
+  app\premium\ai-music\page.tsx:883:                  disabled={
+> app\premium\ai-music\page.tsx:884:                    historyLoading
+  app\premium\ai-music\page.tsx:885:                  }
+  app\premium\ai-music\page.tsx:886:                  className="rounded-xl border border-white/15 px-4 py-2 text-sm font-black hover:bg-white/10 disabled:opacity-50"
+  app\premium\ai-music\page.tsx:887:                >
+> app\premium\ai-music\page.tsx:888:                  {historyLoading
+  app\premium\ai-music\page.tsx:889:                    ? "Loading..."
+  app\premium\ai-music\page.tsx:890:                    : "Refresh"}
+  app\premium\ai-music\page.tsx:891:                </button>
+  app\premium\ai-music\page.tsx:892:              </div>
+  app\premium\ai-music\page.tsx:893:
+> app\premium\ai-music\page.tsx:894:              {recentGenerations.length ? (
+  app\premium\ai-music\page.tsx:895:                <div className="mt-5 space-y-4">
+> app\premium\ai-music\page.tsx:896:                  {recentGenerations
+  app\premium\ai-music\page.tsx:897:                    .slice(0, 10)
+  app\premium\ai-music\page.tsx:898:                    .map((item) => (
+  app\premium\ai-music\page.tsx:899:                      <div
+  app\premium\ai-music\page.tsx:900:                        key={
+> app\premium\ai-music\page.tsx:901:                          item.generationId
+  app\premium\ai-music\page.tsx:902:                        }
+  app\premium\ai-music\page.tsx:903:                        className="rounded-xl border border-white/10 bg-black/25 p-4"
+  app\premium\ai-music\page.tsx:904:                      >
+  app\premium\ai-music\page.tsx:905:                        <p className="font-black">
+  app\premium\ai-music\page.tsx:906:                          {item.genre ||
+  app\premium\ai-music\page.tsx:907:                            "AI Music Generation"}
+  app\premium\ai-music\page.tsx:908:                        </p>
+  app\premium\ai-music\page.tsx:909:
+  app\premium\ai-music\page.tsx:910:                        <p className="mt-1 text-sm text-white/45">
+  app\premium\ai-music\page.tsx:911:                          {item.prompt}
+  app\premium\ai-music\page.tsx:912:                        </p>
+  app\premium\ai-music\page.tsx:913:
+  app\premium\ai-music\page.tsx:914:                        {item.duration ? (
+  app\premium\ai-music\page.tsx:915:                          <p className="mt-2 text-xs text-white/30">
+  app\premium\ai-music\page.tsx:916:                            {item.duration} seconds
+  app\premium\ai-music\page.tsx:917:                          </p>
+  app\premium\ai-music\page.tsx:918:                        ) : null}
+  app\premium\ai-music\page.tsx:919:
+  app\premium\ai-music\page.tsx:920:                        <p className="mt-2 text-xs font-black text-white/40">
+> app\premium\ai-music\page.tsx:921:                          {item.savedToMediaLibrary
+  app\premium\ai-music\page.tsx:922:                            ? "IN MEDIA LIBRARY"
+  app\premium\ai-music\page.tsx:923:                            : "PRIVATE"}
+  app\premium\ai-music\page.tsx:924:                        </p>
+  app\premium\ai-music\page.tsx:925:
+  app\premium\ai-music\page.tsx:926:                        {item.audioUrl ? (
+  app\premium\ai-music\page.tsx:927:                          <div className="mt-4">
+  app\premium\ai-music\page.tsx:928:                            <audio
+  app\premium\ai-music\page.tsx:929:                              controls
+  app\premium\ai-music\page.tsx:930:                              src={
+  app\premium\ai-music\page.tsx:931:                                item.audioUrl
+  app\premium\ai-music\page.tsx:932:                              }
+  app\premium\ai-music\page.tsx:933:                              className="w-full"
+  app\premium\ai-music\page.tsx:934:                            />
+  app\premium\ai-music\page.tsx:935:
+  app\premium\ai-music\page.tsx:936:                            <div className="mt-3 flex flex-wrap gap-3">
+  app\premium\ai-music\page.tsx:937:                              <a
+  app\premium\ai-music\page.tsx:938:                                href={
+  app\premium\ai-music\page.tsx:939:                                  item.audioUrl
+  app\premium\ai-music\page.tsx:940:                                }
+  app\premium\ai-music\page.tsx:941:                                download
+  app\premium\ai-music\page.tsx:942:                                className="inline-flex rounded-xl border border-white/15 px-4 py-2 text-sm font-black hover:bg-white/10"
+  app\premium\ai-music\page.tsx:943:                              >
+  app\premium\ai-music\page.tsx:944:                                Download Song
+  app\premium\ai-music\page.tsx:945:                              </a>
+  app\premium\ai-music\page.tsx:946:
+  app\premium\ai-music\page.tsx:947:                              <button
+  app\premium\ai-music\page.tsx:948:                                type="button"
+  app\premium\ai-music\page.tsx:949:                                onClick={() =>
+  app\premium\ai-music\page.tsx:950:                                  void handleSaveToMediaLibrary(
+> app\premium\ai-music\page.tsx:951:                                    item.generationId
+  app\premium\ai-music\page.tsx:952:                                  )
+  app\premium\ai-music\page.tsx:953:                                }
+  app\premium\ai-music\page.tsx:954:                                disabled={
+  app\premium\ai-music\page.tsx:955:                                  savingToMedia ||
+> app\premium\ai-music\page.tsx:956:                                  item.savedToMediaLibrary
+  app\premium\ai-music\page.tsx:957:                                }
+  app\premium\ai-music\page.tsx:958:                                className="inline-flex rounded-xl bg-fuchsia-600 px-4 py-2 text-sm font-black text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-50"
+  app\premium\ai-music\page.tsx:959:                              >
+> app\premium\ai-music\page.tsx:960:                                {item.savedToMediaLibrary
+  app\premium\ai-music\page.tsx:961:                                  ? "Saved to Media Library"
+  app\premium\ai-music\page.tsx:962:                                  : savingToMedia
+  app\premium\ai-music\page.tsx:963:                                    ? "Saving..."
+  app\premium\ai-music\page.tsx:964:                                    : "Save to Media Library"}
+  app\premium\ai-music\page.tsx:965:                              </button>
+  app\premium\ai-music\page.tsx:966:                            </div>
+  app\premium\ai-music\page.tsx:967:                          </div>
+  app\premium\ai-music\page.tsx:968:                        ) : null}
+  app\premium\ai-music\page.tsx:969:                      </div>
+  app\premium\ai-music\page.tsx:970:                    ))}
+  app\premium\ai-music\page.tsx:971:                </div>
+  app\premium\ai-music\page.tsx:972:              ) : (
+  app\premium\ai-music\page.tsx:973:                <p className="mt-5 text-sm text-white/40">
+> app\premium\ai-music\page.tsx:974:                  {historyLoading
+  app\premium\ai-music\page.tsx:975:                    ? "Loading history..."
+  app\premium\ai-music\page.tsx:976:                    : "No stored generations yet."}
+  app\premium\ai-music\page.tsx:977:                </p>
+  app\premium\ai-music\page.tsx:978:              )}
+  app\premium\ai-music\page.tsx:979:            </div>
+  app\premium\ai-music\page.tsx:980:          </section>
+  app\premium\ai-music\page.tsx:981:        </div>
+  app\premium\ai-music\page.tsx:982:      </div>
+  app\premium\ai-music\page.tsx:983:    </main>
+  app\premium\ai-music\page.tsx:984:  );
+  app\premium\ai-music\page.tsx:985:}
+  app\premium\ai-music\page.tsx:986:
+
+
+

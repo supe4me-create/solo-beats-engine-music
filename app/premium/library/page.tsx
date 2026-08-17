@@ -36,9 +36,23 @@ type PremiumUsage = {
   cycleKey: string | null;
 };
 
+type AiPremiumTrack = {
+  id: string;
+  title: string;
+  artist: string;
+  albumTitle: string;
+  previewUrl: string;
+};
+
 export default function PremiumLibraryPage() {
   const [user, setUser] =
     useState<User | null>(null);
+
+  const [
+    aiPremiumTracks,
+    setAiPremiumTracks,
+  ] =
+    useState<AiPremiumTrack[]>([]);
   const [accessState, setAccessState] =
     useState<AccessState>("loading");
   const [message, setMessage] =
@@ -72,6 +86,77 @@ export default function PremiumLibraryPage() {
     useState("");
   const [downloadError, setDownloadError] =
     useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAiPremiumTracks() {
+      if (
+        !user ||
+        accessState !== "active"
+      ) {
+        setAiPremiumTracks([]);
+        return;
+      }
+
+      try {
+        const idToken =
+          await user.getIdToken();
+
+        const response =
+          await fetch(
+            "/api/premium/ai-music",
+            {
+              headers: {
+                Authorization:
+                  `Bearer ${idToken}`,
+              },
+              cache: "no-store",
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          response.ok &&
+          data.success &&
+          Array.isArray(
+            data.tracks
+          )
+        ) {
+          setAiPremiumTracks(
+            data.tracks
+          );
+          return;
+        }
+
+        setAiPremiumTracks([]);
+      } catch (error) {
+        console.error(
+          "Premium AI Music load error:",
+          error
+        );
+
+        if (!cancelled) {
+          setAiPremiumTracks([]);
+        }
+      }
+    }
+
+    void loadAiPremiumTracks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user,
+    accessState,
+  ]);
 
   const audioRef =
     useRef<HTMLAudioElement | null>(null);
@@ -237,6 +322,43 @@ export default function PremiumLibraryPage() {
       },
     ]);
     setCurrentIndex(0);
+  }
+
+  function playAiPremiumTrack(
+    trackId: string
+  ) {
+    const aiQueue:
+      PlayerItem[] =
+      aiPremiumTracks.map(
+        (track) => ({
+          id:
+            track.id,
+          title:
+            track.title,
+          albumTitle:
+            track.albumTitle,
+          src:
+            track.previewUrl,
+        })
+      );
+
+    const nextIndex =
+      aiQueue.findIndex(
+        (track) =>
+          track.id === trackId
+      );
+
+    if (
+      nextIndex < 0
+    ) {
+      return;
+    }
+
+    setQueue(aiQueue);
+
+    setCurrentIndex(
+      nextIndex
+    );
   }
 
   function playAlbumTrack(
@@ -540,7 +662,7 @@ export default function PremiumLibraryPage() {
           <p className="mt-5 max-w-3xl text-lg leading-8 text-white/60">
             Welcome{user?.displayName
               ? `, ${user.displayName}`
-              : ""}. Your membership unlocks {premiumAlbums.length} selected albums and {totalTracks} tracks.
+              : ""}. Your membership unlocks {premiumAlbums.length} selected albums and {totalTracks + aiPremiumTracks.length} tracks.
           </p>
         </section>
 
@@ -582,6 +704,67 @@ export default function PremiumLibraryPage() {
             </p>
           ) : null}
         </section>
+
+        {aiPremiumTracks.length > 0 ? (
+          <section className="mt-10 rounded-[2rem] border border-emerald-300/20 bg-emerald-300/[0.04] p-6 sm:p-8">
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.2em] text-emerald-300">
+                AI Music for Premium
+              </p>
+
+              <h2 className="mt-2 text-4xl font-black">
+                Selected AI Music
+              </h2>
+
+              <p className="mt-3 max-w-3xl text-white/50">
+                AI-generated music selected by Solo Beats for Premium members.
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              {aiPremiumTracks.map(
+                (track) => (
+                  <div
+                    key={track.id}
+                    className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/20 p-4 sm:flex-row sm:items-center"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-emerald-200">
+                          Premium
+                        </span>
+
+                        <span className="rounded-full border border-violet-300/20 bg-violet-300/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.14em] text-violet-200">
+                          AI Music
+                        </span>
+                      </div>
+
+                      <p className="mt-3 truncate text-lg font-black">
+                        {track.title}
+                      </p>
+
+                      <p className="mt-1 text-sm text-white/45">
+                        {track.artist} • {track.albumTitle}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        playAiPremiumTrack(
+                          track.id
+                        )
+                      }
+                      className="rounded-xl bg-white px-5 py-3 font-black text-black"
+                    >
+                      Play
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

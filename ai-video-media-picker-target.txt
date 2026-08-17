@@ -1,0 +1,737 @@
+﻿=== OWNER MEDIA RESPONSE ===
+  }
+
+  const file = adminBucket.file(storagePath);
+  const [exists] = await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [url] = await file.getSignedUrl({
+    action: "read",
+    expires: Date.now() + 60 * 60 * 1000,
+  });
+
+  return url;
+}
+
+export async function GET(request: Request) {
+  try {
+    await verifyOwner(request);
+
+    const snapshot = await adminDb
+      .collection("mediaLibrary")
+      .orderBy("createdAt", "desc")
+      .get();
+
+    const media = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const data = doc.data();
+
+        return {
+          mediaId: doc.id,
+          title:
+            data.title ||
+            data.originalName ||
+            "Untitled Media",
+          kind: data.kind || null,
+          mimeType: data.mimeType || null,
+          originalName:
+            data.originalName || null,
+          extension:
+            data.extension || null,
+          sizeBytes:
+            data.sizeBytes || 0,
+          storagePath:
+            data.storagePath || null,
+          status:
+            data.status || "active",
+          createdAt:
+            toIso(data.createdAt),
+          updatedAt:
+            toIso(data.updatedAt),
+          previewUrl:
+            await previewUrl(
+              data.storagePath
+            ),
+
+          source:
+            typeof data.source === "string"
+              ? data.source
+              : null,
+
+          aiMusicGenerationId:
+            typeof data.aiMusicGenerationId === "string"
+              ? data.aiMusicGenerationId
+              : null,
+
+          published:
+            data.published === true,
+
+          premiumAssigned:
+            data.premiumAssigned === true,
+
+          radioAssigned:
+            data.radioAssigned === true,
+        };
+      })
+    );
+
+    return NextResponse.json({
+      success: true,
+      media,
+    });
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Media Library GET error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Media Library could not be loaded.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const owner =
+      await verifyOwner(request);
+
+    const payload = await request.json();
+
+    if (payload.action === "prepare") {
+      const file =
+        payload.file as UploadFile;
+
+      const error =
+        validateFile(file);
+
+      if (error) {
+        return NextResponse.json(
+          {
+            success: false,
+            error,
+          },
+          { status: 400 }
+        );
+      }
+
+      const kind = getMediaKind(file)!;
+
+      const ref = adminDb
+        .collection("mediaLibrary")
+        .doc();
+
+      const mediaId = ref.id;
+
+      const storagePath =
+        `media/${kind}/${mediaId}/` +
+        safeFileName(file.name);
+
+      const [uploadUrl] =
+        await adminBucket
+          .file(storagePath)
+          .getSignedUrl({
+            action: "write",
+            expires:
+              Date.now() +
+              15 * 60 * 1000,
+
+=== AI VIDEO STATE ===
+    creditError,
+    setCreditError,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    paymentMessage,
+    setPaymentMessage,
+  ] =
+    useState<string | null>(
+      null
+    );
+
+  const [
+    generationMode,
+    setGenerationMode,
+  ] =
+    useState<GenerationMode>(
+      "text"
+    );
+
+  const [
+    imageFile,
+    setImageFile,
+  ] =
+    useState<File | null>(
+      null
+    );
+
+  const [
+    audioFile,
+    setAudioFile,
+  ] =
+    useState<File | null>(
+      null
+    );
+
+  const [
+    prompt,
+    setPrompt,
+  ] =
+    useState("");
+
+  const [
+    aspectRatio,
+    setAspectRatio,
+  ] =
+    useState<AspectRatio>(
+      "16:9"
+    );
+
+  const [
+    duration,
+    setDuration,
+  ] =
+    useState<Duration>(
+      "10"
+    );
+
+  const [
+    creating,
+    setCreating,
+  ] =
+    useState(false);
+
+  const [
+    generationMessage,
+    setGenerationMessage,
+  ] =
+    useState(
+      "Ready to generate."
+    );
+
+  const [
+    generationError,
+    setGenerationError,
+  ] =
+    useState<string | null>(
+      null
+    );
+  const AI_VIDEO_ACTIVE_JOB_KEY =
+    "solo-beats-ai-video-active-job";
+
+  const AI_VIDEO_LAST_OUTPUT_KEY =
+    "solo-beats-ai-video-last-output";
+
+  const AI_VIDEO_LAST_JOB_KEY =
+    "solo-beats-ai-video-last-job";
+
+  const AI_VIDEO_SAVED_MEDIA_KEY =
+    "solo-beats-ai-video-saved-media";
+
+
+  const [
+    currentJobId,
+    setCurrentJobId,
+  ] =
+    useState<string | null>(
+
+=== AI VIDEO GENERATION AUDIO FLOW ===
+      setGenerationError(
+        "Prompt is too long. Keep it under 2,000 characters."
+      );
+      return;
+    }
+
+    if (
+      generationMode === "image" ||
+      generationMode === "music"
+    ) {
+      if (!imageFile) {
+        setGenerationError(
+          "Choose an image or album cover first."
+        );
+        return;
+      }
+
+      const imageError =
+        imageValidationError(
+          imageFile
+        );
+
+      if (imageError) {
+        setGenerationError(
+          imageError
+        );
+        return;
+      }
+    }
+
+    if (
+      generationMode ===
+      "music"
+    ) {
+      if (!audioFile) {
+        setGenerationError(
+          "Choose a song or audio file first."
+        );
+        return;
+      }
+
+      const audioError =
+        audioValidationError(
+          audioFile
+        );
+
+      if (audioError) {
+        setGenerationError(
+          audioError
+        );
+        return;
+      }
+    }
+
+    if (!cleanPrompt) {
+      setGenerationError(
+        "Enter a generation prompt."
+      );
+      return;
+    }
+
+    if (
+      (
+        generationMode ===
+          "image" ||
+        generationMode ===
+          "music"
+      ) &&
+      !imageFile
+    ) {
+      setGenerationError(
+        "Choose an image or album cover first."
+      );
+      return;
+    }
+
+    if (
+      generationMode ===
+        "music" &&
+      !audioFile
+    ) {
+      setGenerationError(
+        "Choose a song or audio file first."
+      );
+      return;
+    }
+
+    if (!hasEnoughCredits) {
+      setGenerationError(
+        `You need ${selectedCreditCost} AI Video credit${
+          selectedCreditCost ===
+          1
+            ? ""
+            : "s"
+        } for this generation.`
+      );
+      return;
+    }
+
+    setCreating(true);
+    setGenerationError(
+      null
+    );
+    setOutputUrl(null);
+
+    window.localStorage.removeItem(
+      `${AI_VIDEO_LAST_OUTPUT_KEY}:${user.uid}`
+    );
+
+    window.localStorage.removeItem(
+      `${AI_VIDEO_LAST_JOB_KEY}:${user.uid}`
+    );
+
+    window.localStorage.removeItem(
+      `${AI_VIDEO_SAVED_MEDIA_KEY}:${user.uid}`
+    );
+
+    setSavedVideoMediaId(null);
+    setSaveVideoMessage(null);
+    setSaveVideoError(null);
+
+    setCurrentJobId(null);
+    setProgress(0);
+
+    try {
+      const token =
+        await user.getIdToken();
+
+      setGenerationMessage(
+        generationMode === "music"
+          ? "Step 1 - Creating Song + Cover job..."
+          : generationMode === "image"
+            ? "Step 1 - Creating Image to Video job..."
+            : "Step 1 - Creating Text to Video job..."
+      );
+
+      const jobResponse =
+        await fetch(
+          "/api/owner/ai-video/jobs",
+          {
+            method: "POST",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                mode:
+                  generationMode,
+                prompt:
+                  cleanPrompt,
+                aspectRatio,
+                duration:
+                  Number(
+                    duration
+                  ),
+                imageName:
+                  (
+                    generationMode ===
+                      "image" ||
+                    generationMode ===
+                      "music"
+                  )
+                    ? imageFile
+                        ?.name ||
+                      null
+                    : null,
+                audioName:
+                  generationMode ===
+                    "music"
+                    ? audioFile
+                        ?.name ||
+                      null
+                    : null,
+              }),
+          }
+        );
+
+      const jobData =
+        (await jobResponse.json()) as {
+          success?: boolean;
+          job?: {
+            id?: string;
+          };
+          error?: string;
+        };
+
+      if (
+        !jobResponse.ok ||
+        !jobData.success ||
+        !jobData.job?.id
+      ) {
+        throw new Error(
+          jobData.error ||
+            "AI video job could not be created."
+        );
+      }
+
+      const jobId =
+        jobData.job.id;
+
+      setCurrentJobId(
+        jobId
+      );
+
+      
+      window.localStorage.setItem(
+        AI_VIDEO_ACTIVE_JOB_KEY,
+        jobId
+      );
+
+      if (
+        generationMode ===
+          "image" ||
+        generationMode ===
+          "music"
+      ) {
+        if (!imageFile) {
+          throw new Error(
+            "Choose an image or album cover first."
+          );
+        }
+
+        setGenerationMessage(
+          generationMode === "music"
+            ? "Step 2 - Uploading album cover..."
+            : "Step 2 - Uploading source image..."
+        );
+
+        const imageFormData =
+          new FormData();
+
+        imageFormData.append(
+          "jobId",
+          jobId
+        );
+
+        imageFormData.append(
+          "image",
+          imageFile
+        );
+
+        const imageResponse =
+          await fetch(
+            "/api/owner/ai-video/source-image",
+            {
+              method: "POST",
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+              },
+              body:
+                imageFormData,
+            }
+          );
+
+        const imageData =
+          (await imageResponse.json()) as {
+            success?: boolean;
+            error?: string;
+          };
+
+        if (
+          !imageResponse.ok ||
+          !imageData.success
+        ) {
+          throw new Error(
+            imageData.error ||
+              "Source image could not be uploaded."
+          );
+        }
+      }
+
+      let uploadedAudioMediaId:
+        string | null = null;
+
+      if (
+        generationMode ===
+          "music"
+      ) {
+        if (!audioFile) {
+          throw new Error(
+            "Choose a song or audio file first."
+          );
+        }
+
+        setGenerationMessage(
+          "Uploading song..."
+        );
+
+        const audioFormData =
+          new FormData();
+
+        audioFormData.append(
+          "jobId",
+          jobId
+        );
+
+        audioFormData.append(
+          "audio",
+          audioFile
+        );
+
+        const audioResponse =
+          await fetch(
+            "/api/owner/ai-video/source-audio",
+            {
+              method: "POST",
+              headers: {
+                Authorization:
+                  `Bearer ${token}`,
+              },
+              body:
+                audioFormData,
+            }
+          );
+
+        const audioData =
+          (await audioResponse.json()) as {
+            success?: boolean;
+            audioMediaId?: string;
+            error?: string;
+          };
+
+        if (
+          !audioResponse.ok ||
+          !audioData.success ||
+          !audioData.audioMediaId
+        ) {
+          throw new Error(
+            audioData.error ||
+              "Song could not be uploaded."
+          );
+        }
+
+        uploadedAudioMediaId =
+          audioData.audioMediaId;
+      }
+
+      setGenerationMessage(
+        generationMode ===
+          "music"
+          ? "Creating Song + Cover visual..."
+          : generationMode ===
+              "image"
+            ? "Sending Image to Video job to Runway..."
+            : "Sending your job to Runway..."
+      );
+
+      const runwayResponse =
+        await fetch(
+          "/api/owner/ai-video/runway",
+          {
+            method: "POST",
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+              "Content-Type":
+
+=== SONG PICKER UI ===
+                      event.target.value =
+                        "";
+
+                      return;
+                    }
+
+                    setImageFile(
+                      file
+                    );
+
+                    setGenerationError(
+                      null
+                    );
+                  }}
+                  className="mt-3 block w-full text-sm text-white/60 file:mr-4 file:rounded-xl file:border-0 file:bg-cyan-500/20 file:px-4 file:py-3 file:font-black file:text-cyan-200"
+                />
+
+                {imageFile ? (
+                  <p className="mt-3 break-all text-xs text-emerald-300">
+                    Selected: {
+                      imageFile.name
+                    }
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs text-white/40">
+                    Choose a JPG, JPEG, PNG, or WEBP image up to 20 MB.
+                  </p>
+                )}
+              </label>
+            ) : null}
+
+            {generationMode ===
+            "music" ? (
+              <label className="mt-5 block rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/5 p-4">
+                <span className="text-sm font-black">
+                  Song / Audio
+                </span>
+
+                <input
+                  type="file"
+                  accept="audio/*,.wav,.mp3,.m4a,.aac"
+                  disabled={
+                    creating
+                  }
+                  onChange={(
+                    event
+                  ) => {
+                    const file =
+                      event.target
+                        .files?.[0] ||
+                      null;
+
+                    const error =
+                      audioValidationError(
+                        file
+                      );
+
+                    if (error) {
+                      setAudioFile(
+                        null
+                      );
+
+                      setGenerationError(
+                        error
+                      );
+
+                      event.target.value =
+                        "";
+
+                      return;
+                    }
+
+                    setAudioFile(
+                      file
+                    );
+
+                    setGenerationError(
+                      null
+                    );
+                  }}
+                  className="mt-3 block w-full text-sm text-white/60 file:mr-4 file:rounded-xl file:border-0 file:bg-fuchsia-500/20 file:px-4 file:py-3 file:font-black file:text-fuchsia-200"
+                />
+
+                {audioFile ? (
+                  <p className="mt-3 break-all text-xs text-emerald-300">
+                    Selected song: {
+                      audioFile.name
+                    }
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs text-white/40">
+                    Choose an MP3, WAV, M4A, or AAC song.
+                  </p>
+                )}
+              </label>
+            ) : null}
+
+            <label className="mt-6 block">
+              <span className="text-sm font-black">
+                Prompt
+              </span>
+
+              <textarea
+                value={
+                  prompt
+                }
+                onChange={(
+                  event
+                ) =>
+                  setPrompt(
+                    event
+                      .target
+                      .value
+                  )
+                }
+                rows={7}
+                maxLength={2000}
+                placeholder="Describe the video you want to create..."
+                className="mt-3 w-full rounded-2xl border border-white/10 bg-[#080812] px-4 py-4 text-sm leading-6 text-white outline-none focus:border-violet-400/50"
+              />

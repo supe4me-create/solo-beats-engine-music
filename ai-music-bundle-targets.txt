@@ -1,0 +1,3796 @@
+﻿=== AI MUSIC BUNDLE FINAL TARGET CAPTURE ===
+
+
+===================================================
+1. AI MUSIC SAVE TO MEDIA API
+FILE: .\app\api\ai-music\save-to-media\route.ts
+===================================================
+import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../lib/firebaseAdmin";
+
+function token(request: Request) {
+  return (
+    request.headers
+      .get("authorization")
+      ?.match(/^Bearer\s+(.+)$/i)?.[1]
+      ?.trim() || null
+  );
+}
+
+async function userFromRequest(
+  request: Request
+) {
+  const idToken = token(request);
+
+  if (!idToken) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  return getAuth(
+    firebaseAdminApp
+  ).verifyIdToken(idToken);
+}
+
+export async function POST(
+  request: Request
+) {
+  try {
+    const user =
+      await userFromRequest(request);
+
+    const body =
+      await request.json();
+
+    const generationId =
+      typeof body.generationId === "string"
+        ? body.generationId.trim()
+        : "";
+
+    if (!generationId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Generation ID is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const generationRef =
+      adminDb
+        .collection("aiMusicGenerations")
+        .doc(generationId);
+
+    const snapshot =
+      await generationRef.get();
+
+    if (!snapshot.exists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Generation not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const generation =
+      snapshot.data() || {};
+
+    if (
+      generation.uid !== user.uid
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "You do not own this generation.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    if (
+      typeof generation.mediaLibraryId ===
+        "string" &&
+      generation.mediaLibraryId
+    ) {
+      return NextResponse.json({
+        success: true,
+        alreadySaved: true,
+        mediaId:
+          generation.mediaLibraryId,
+        message:
+          "This song is already saved to the Media Library.",
+      });
+    }
+
+    const storagePath =
+      typeof generation.storagePath ===
+        "string"
+        ? generation.storagePath
+        : "";
+
+    if (!storagePath) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Stored audio file is missing.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const file =
+      adminBucket.file(
+        storagePath
+      );
+
+    const [exists] =
+      await file.exists();
+
+    if (!exists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Stored audio file was not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const [metadata] =
+      await file.getMetadata();
+
+    const mediaRef =
+      adminDb
+        .collection("mediaLibrary")
+        .doc(generationId);
+
+    const genre =
+      typeof generation.genre === "string"
+        ? generation.genre.trim()
+        : "";
+
+    const title =
+      genre
+        ? `AI Music - ${genre}`
+        : `AI Music - ${generationId.slice(
+            0,
+            8
+          )}`;
+
+    await mediaRef.set(
+      {
+        title,
+
+        kind:
+          "audio",
+
+        mimeType:
+          metadata.contentType ||
+          "audio/mpeg",
+
+        originalName:
+          `ai-music-${generationId}.mp3`,
+
+        extension:
+          "mp3",
+
+        sizeBytes:
+          Number(metadata.size) || 0,
+
+        storagePath,
+
+        status:
+          "active",
+
+        uploadedBy:
+          user.email ||
+          user.uid,
+
+        ownerUid:
+          user.uid,
+
+        source:
+          "ai-music",
+
+        aiMusicGenerationId:
+          generationId,
+
+        published:
+          false,
+
+        createdAt:
+          FieldValue.serverTimestamp(),
+
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      },
+      {
+        merge: true,
+      }
+    );
+
+    await generationRef.set(
+      {
+        savedToMediaLibrary:
+          true,
+
+        mediaLibraryId:
+          mediaRef.id,
+
+        savedToMediaLibraryAt:
+          FieldValue.serverTimestamp(),
+
+        updatedAt:
+          new Date().toISOString(),
+      },
+      {
+        merge: true,
+      }
+    );
+
+    return NextResponse.json({
+      success: true,
+
+      mediaId:
+        mediaRef.id,
+
+      message:
+        "Song saved to the Media Library.",
+    });
+  } catch (error) {
+    console.error(
+      "AI MUSIC SAVE ERROR",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Song could not be saved to the Media Library.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+
+===================================================
+2. PREMIUM AI MUSIC API
+FILE: .\app\api\premium\ai-music\route.ts
+===================================================
+import { NextResponse } from "next/server";
+
+import {
+  adminBucket,
+  adminDb,
+} from "../../../../lib/firebaseAdmin";
+
+import {
+  requirePremiumAccess,
+} from "../../../../lib/requirePremium";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+async function signedReadUrl(
+  storagePath: unknown
+) {
+  if (
+    typeof storagePath !== "string" ||
+    !storagePath.trim()
+  ) {
+    return null;
+  }
+
+  const file =
+    adminBucket.file(
+      storagePath.trim()
+    );
+
+  const [exists] =
+    await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [url] =
+    await file.getSignedUrl({
+      action: "read",
+      expires:
+        Date.now() +
+        60 * 60 * 1000,
+    });
+
+  return url;
+}
+
+export async function GET(
+  request: Request
+) {
+  try {
+    const premium =
+      await requirePremiumAccess(
+        request
+      );
+
+    if (!premium.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          tracks: [],
+          error:
+            premium.error,
+        },
+        {
+          status:
+            premium.statusCode,
+          headers: {
+            "Cache-Control":
+              "no-store, max-age=0",
+          },
+        }
+      );
+    }
+
+    const snapshot =
+      await adminDb
+        .collection(
+          "mediaLibrary"
+        )
+        .where(
+          "premiumAssigned",
+          "==",
+          true
+        )
+        .get();
+
+    const tracks = (
+      await Promise.all(
+        snapshot.docs.map(
+          async (mediaDoc) => {
+            const media =
+              mediaDoc.data();
+
+            if (
+              media.kind !== "audio" ||
+              media.status ===
+                "deleted" ||
+              media.published !==
+                true ||
+              media.premiumAssigned !==
+                true ||
+              media.source !==
+                "ai-music"
+            ) {
+              return null;
+            }
+
+            const previewUrl =
+              await signedReadUrl(
+                media.storagePath
+              );
+
+            if (!previewUrl) {
+              return null;
+            }
+
+            return {
+              id:
+                mediaDoc.id,
+
+              title:
+                typeof media.title ===
+                  "string" &&
+                media.title.trim()
+                  ? media.title.trim()
+                  : "AI Music",
+
+              artist:
+                "Solo Beats",
+
+              albumTitle:
+                "AI Music",
+
+              previewUrl,
+            };
+          }
+        )
+      )
+    ).filter(
+      (
+        track
+      ): track is {
+        id: string;
+        title: string;
+        artist: string;
+        albumTitle: string;
+        previewUrl: string;
+      } => track !== null
+    );
+
+    tracks.sort(
+      (a, b) =>
+        a.title.localeCompare(
+          b.title
+        )
+    );
+
+    return NextResponse.json(
+      {
+        success: true,
+        tracks,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "no-store, max-age=0",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Premium AI Music feed error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        tracks: [],
+        error:
+          error instanceof Error
+            ? error.message
+            : "Premium AI Music could not be loaded.",
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control":
+            "no-store, max-age=0",
+        },
+      }
+    );
+  }
+}
+
+
+===================================================
+3. AI MUSIC HISTORY API
+FILE: .\app\api\ai-music\history\route.ts
+===================================================
+import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../lib/firebaseAdmin";
+
+function token(request: Request) {
+  return (
+    request.headers
+      .get("authorization")
+      ?.match(/^Bearer\s+(.+)$/i)?.[1]
+      ?.trim() || null
+  );
+}
+
+async function userFromRequest(
+  request: Request
+) {
+  const idToken = token(request);
+
+  if (!idToken) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  return getAuth(
+    firebaseAdminApp
+  ).verifyIdToken(idToken);
+}
+
+async function signedUrl(
+  storagePath: unknown
+) {
+  if (
+    typeof storagePath !== "string" ||
+    !storagePath
+  ) {
+    return null;
+  }
+
+  const file =
+    adminBucket.file(storagePath);
+
+  const [exists] =
+    await file.exists();
+
+  if (!exists) {
+    return null;
+  }
+
+  const [url] =
+    await file.getSignedUrl({
+      action: "read",
+      expires:
+        Date.now() +
+        60 * 60 * 1000,
+    });
+
+  return url;
+}
+
+export async function GET(
+  request: Request
+) {
+  try {
+    const user =
+      await userFromRequest(request);
+
+    const snapshot =
+      await adminDb
+        .collection("aiMusicGenerations")
+        .where("uid", "==", user.uid)
+        .limit(50)
+        .get();
+
+    const generations =
+      await Promise.all(
+        snapshot.docs.map(
+          async (doc) => {
+            const data =
+              doc.data();
+
+            return {
+              generationId:
+                doc.id,
+
+              prompt:
+                typeof data.prompt === "string"
+                  ? data.prompt
+                  : "",
+
+              genre:
+                typeof data.genre === "string"
+                  ? data.genre
+                  : "",
+
+              mood:
+                typeof data.mood === "string"
+                  ? data.mood
+                  : "",
+
+              bpm:
+                Number(data.bpm) || 0,
+
+              musicKey:
+                typeof data.musicKey === "string"
+                  ? data.musicKey
+                  : "",
+
+              duration:
+                Number(data.duration) || 0,
+
+              vocalMode:
+                typeof data.vocalMode === "string"
+                  ? data.vocalMode
+                  : "",
+
+              accessMode:
+                typeof data.accessMode === "string"
+                  ? data.accessMode
+                  : "",
+
+              audioUrl:
+                await signedUrl(
+                  data.storagePath
+                ),
+
+              savedToMediaLibrary:
+                Boolean(
+                  data.mediaLibraryId
+                ),
+
+              mediaLibraryId:
+                typeof data.mediaLibraryId ===
+                "string"
+                  ? data.mediaLibraryId
+                  : null,
+
+              createdAt:
+                typeof data.createdAt ===
+                "string"
+                  ? data.createdAt
+                  : "",
+            };
+          }
+        )
+      );
+
+    generations.sort(
+      (a, b) =>
+        new Date(
+          b.createdAt || 0
+        ).getTime() -
+        new Date(
+          a.createdAt || 0
+        ).getTime()
+    );
+
+    return NextResponse.json({
+      success: true,
+      generations,
+    });
+  } catch (error) {
+    console.error(
+      "AI MUSIC HISTORY ERROR",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "AI Music history could not be loaded.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+
+===================================================
+4. RADIO PLAYLIST AI MUSIC AREA
+FILE: .\app\api\radio\playlist\route.ts
+===================================================
+                (await signedReadUrl(storedCover)) ||
+                "";
+            }
+
+            const isGenericAlbumTitle =
+              !storedAlbumTitle ||
+              storedAlbumTitle ===
+                selected.playlist.name ||
+              storedAlbumTitle ===
+                "SOLO BEATS RADIO";
+
+            return {
+              id: mediaId,
+              title:
+                item.title ||
+                media.title ||
+                media.originalName ||
+                "Untitled Track",
+              albumTitle:
+                isGenericAlbumTitle
+                  ? albumMetadata?.title ||
+                    selected.playlist.name ||
+                    "SOLO BEATS RADIO"
+                  : storedAlbumTitle,
+              artist:
+                item.artist ||
+                albumMetadata?.artist ||
+                "Solo Beats",
+              cover:
+                resolvedStoredCover ||
+                albumMetadata?.cover ||
+                "",
+              src,
+              order:
+                Number(item.order) || 0,
+            };
+          }
+        )
+      )
+    ).filter(
+      (
+        track
+      ): track is NonNullable<
+        typeof track
+      > => Boolean(track)
+    );
+
+    const aiRadioSnapshot =
+      await adminDb
+        .collection("mediaLibrary")
+        .where(
+          "radioAssigned",
+          "==",
+          true
+        )
+        .get();
+
+    const existingTrackIds =
+      new Set(
+        playlistTracks
+          .filter(Boolean)
+          .map(
+            (track) =>
+              track!.id
+          )
+      );
+
+    const aiRadioTracks = (
+      await Promise.all(
+        aiRadioSnapshot.docs.map(
+          async (mediaDoc) => {
+            const media =
+              mediaDoc.data();
+
+            if (
+              media.kind !== "audio" ||
+              media.status === "deleted" ||
+              media.published !== true ||
+              media.radioAssigned !== true ||
+              media.source !== "ai-music"
+            ) {
+              return null;
+            }
+
+            if (
+              existingTrackIds.has(
+                mediaDoc.id
+              )
+            ) {
+              return null;
+            }
+
+            const src =
+              await signedReadUrl(
+                media.storagePath
+              );
+
+            if (!src) {
+              return null;
+            }
+
+            return {
+              id:
+                mediaDoc.id,
+
+              title:
+                typeof media.title ===
+                  "string" &&
+                media.title.trim()
+                  ? media.title.trim()
+                  : "AI Music",
+
+              albumTitle:
+                "AI Music",
+
+              artist:
+                "Solo Beats",
+
+              cover:
+                "",
+
+              src,
+
+              order:
+                1000000,
+            };
+          }
+        )
+      )
+    ).filter(
+      (
+        track
+      ): track is NonNullable<
+        typeof track
+      > => Boolean(track)
+    );
+
+    const tracks = [
+      ...playlistTracks.filter(Boolean),
+      ...aiRadioTracks,
+    ];
+
+    return NextResponse.json(
+      {
+        success: true,
+        source: selected.source,
+        playlist: {
+          playlistId:
+            selected.playlist.id,
+          name:
+            selected.playlist.name ||
+            "SOLO BEATS RADIO",
+          description:
+            selected.playlist.description ||
+            "",
+        },
+        tracks,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "no-store, max-age=0",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Radio playlist GET error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        playlist: null,
+        tracks: [],
+        error:
+          "Radio playlist could not be loaded.",
+      },
+      { status: 500 }
+
+
+===================================================
+5. OWNER MEDIA API UPDATE AREA
+FILE: .\app\api\owner\media\route.ts
+===================================================
+      const kind = getMediaKind(file)!;
+
+      if (
+        !mediaId ||
+        !storagePath ||
+        !storagePath.startsWith(
+          `media/${kind}/${mediaId}/`
+        )
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid Media Library upload.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const storageFile =
+        adminBucket.file(storagePath);
+
+      const [exists] =
+        await storageFile.exists();
+
+      if (!exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Uploaded file was not found.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const [metadata] =
+        await storageFile.getMetadata();
+
+      await adminDb
+        .collection("mediaLibrary")
+        .doc(mediaId)
+        .set(
+          {
+            title:
+              title ||
+              file.name.replace(
+                /\.[^.]+$/,
+                ""
+              ),
+            kind,
+            mimeType:
+              metadata.contentType ||
+              file.type,
+            originalName:
+              file.name,
+            extension:
+              extension(file.name),
+            sizeBytes:
+              Number(metadata.size) ||
+              file.size,
+            storagePath,
+            status: "active",
+            uploadedBy:
+              owner.email ||
+              OWNER_EMAIL,
+            createdAt:
+              FieldValue.serverTimestamp(),
+            updatedAt:
+              FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+      return NextResponse.json({
+        success: true,
+        mediaId,
+        kind,
+        storagePath,
+        message:
+          "Media added to the Central Media Library.",
+      });
+    }
+
+    if (payload.action === "assign") {
+      const mediaId =
+        clean(payload.mediaId, 100);
+
+      const field =
+        clean(payload.field, 50);
+
+      const allowedFields =
+        new Set([
+          "published",
+          "premiumAssigned",
+          "radioAssigned",
+        ]);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!allowedFields.has(field)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid assignment field.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (
+        typeof payload.value !==
+        "boolean"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Assignment value must be true or false.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const mediaRef =
+        adminDb
+          .collection("mediaLibrary")
+          .doc(mediaId);
+
+      const mediaSnapshot =
+        await mediaRef.get();
+
+      if (!mediaSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Media item was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      await mediaRef.set(
+        {
+          [field]: payload.value,
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        mediaId,
+        field,
+        value: payload.value,
+        message:
+          "Media assignment updated.",
+      });
+    }
+
+    if (payload.action === "delete") {
+      const mediaId =
+        clean(payload.mediaId, 100);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const mediaRef = adminDb
+        .collection("mediaLibrary")
+        .doc(mediaId);
+
+      const mediaSnapshot =
+        await mediaRef.get();
+
+      if (!mediaSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media item was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      await mediaRef.set(
+        {
+          status: "deleted",
+          deletedAt:
+            FieldValue.serverTimestamp(),
+          deletedBy:
+            owner.email || OWNER_EMAIL,
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        mediaId,
+        message:
+          "Media removed from the Media Library.",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          'Use action "prepare", "finalize", "assign", or "delete".',
+      },
+      { status: 400 }
+    );
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Media Library POST error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Media upload could not be completed.",
+      },
+
+
+===================================================
+6. MEDIA MANAGER AI MUSIC TARGETS
+===================================================
+
+  app\developer\media\page.tsx:21:  kind: MediaKind;
+  app\developer\media\page.tsx:22:  mimeType: string | null;
+  app\developer\media\page.tsx:23:  originalName: string | null;
+  app\developer\media\page.tsx:24:  extension: string | null;
+  app\developer\media\page.tsx:25:  sizeBytes: number;
+  app\developer\media\page.tsx:26:  storagePath: string | null;
+  app\developer\media\page.tsx:27:  status: string;
+  app\developer\media\page.tsx:28:  createdAt: string | null;
+  app\developer\media\page.tsx:29:  updatedAt: string | null;
+  app\developer\media\page.tsx:30:  previewUrl: string | null;
+  app\developer\media\page.tsx:31:  source?: string | null;
+  app\developer\media\page.tsx:32:  aiMusicGenerationId?: string | null;
+> app\developer\media\page.tsx:33:  published?: boolean;
+> app\developer\media\page.tsx:34:  premiumAssigned?: boolean;
+> app\developer\media\page.tsx:35:  radioAssigned?: boolean;
+  app\developer\media\page.tsx:36:};
+  app\developer\media\page.tsx:37:
+  app\developer\media\page.tsx:38:type MediaResponse = {
+  app\developer\media\page.tsx:39:  success: boolean;
+  app\developer\media\page.tsx:40:  media?: MediaItem[];
+  app\developer\media\page.tsx:41:  error?: string;
+  app\developer\media\page.tsx:42:};
+  app\developer\media\page.tsx:43:
+  app\developer\media\page.tsx:44:type UploadState =
+  app\developer\media\page.tsx:45:  | "idle"
+  app\developer\media\page.tsx:46:  | "preparing"
+  app\developer\media\page.tsx:47:  | "uploading"
+  app\developer\media\page.tsx:48:  | "finalizing"
+  app\developer\media\page.tsx:49:  | "done"
+  app\developer\media\page.tsx:50:  | "error";
+  app\developer\media\page.tsx:51:
+  app\developer\media\page.tsx:52:function formatBytes(value: number) {
+  app\developer\media\page.tsx:53:  if (!value || value <= 0) return "0 B";
+  app\developer\media\page.tsx:54:
+  app\developer\media\page.tsx:55:  const units = ["B", "KB", "MB", "GB"];
+  app\developer\media\page.tsx:56:  const index = Math.min(
+  app\developer\media\page.tsx:57:    Math.floor(Math.log(value) / Math.log(1024)),
+  app\developer\media\page.tsx:58:    units.length - 1
+  app\developer\media\page.tsx:59:  );
+  app\developer\media\page.tsx:60:
+  app\developer\media\page.tsx:61:  return `${(
+  app\developer\media\page.tsx:62:    value / Math.pow(1024, index)
+  app\developer\media\page.tsx:63:  ).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+  app\developer\media\page.tsx:64:}
+  app\developer\media\page.tsx:65:
+  app\developer\media\page.tsx:66:function formatDate(value: string | null) {
+  app\developer\media\page.tsx:67:  if (!value) return "Unknown";
+  app\developer\media\page.tsx:68:
+  app\developer\media\page.tsx:69:  const date = new Date(value);
+  app\developer\media\page.tsx:70:
+  app\developer\media\page.tsx:123:      ) {
+  app\developer\media\page.tsx:124:        return;
+  app\developer\media\page.tsx:125:      }
+  app\developer\media\page.tsx:126:
+  app\developer\media\page.tsx:127:      setLoadingMedia(true);
+  app\developer\media\page.tsx:128:      setError("");
+  app\developer\media\page.tsx:129:
+  app\developer\media\page.tsx:130:      try {
+  app\developer\media\page.tsx:131:        const token =
+  app\developer\media\page.tsx:132:          await currentUser.getIdToken();
+  app\developer\media\page.tsx:133:
+  app\developer\media\page.tsx:134:        const response = await fetch(
+> app\developer\media\page.tsx:135:          "/api/owner/media",
+  app\developer\media\page.tsx:136:          {
+  app\developer\media\page.tsx:137:            headers: {
+  app\developer\media\page.tsx:138:              Authorization: `Bearer ${token}`,
+  app\developer\media\page.tsx:139:            },
+  app\developer\media\page.tsx:140:            cache: "no-store",
+  app\developer\media\page.tsx:141:          }
+  app\developer\media\page.tsx:142:        );
+  app\developer\media\page.tsx:143:
+  app\developer\media\page.tsx:144:        const data =
+  app\developer\media\page.tsx:145:          (await response.json()) as MediaResponse;
+  app\developer\media\page.tsx:146:
+  app\developer\media\page.tsx:147:        if (!response.ok || !data.success) {
+  app\developer\media\page.tsx:148:          throw new Error(
+  app\developer\media\page.tsx:149:            data.error ||
+  app\developer\media\page.tsx:150:              "Media Library could not be loaded."
+  app\developer\media\page.tsx:151:          );
+  app\developer\media\page.tsx:152:        }
+  app\developer\media\page.tsx:153:
+  app\developer\media\page.tsx:154:        setMedia(data.media || []);
+  app\developer\media\page.tsx:155:      } catch (err) {
+  app\developer\media\page.tsx:156:        setError(
+  app\developer\media\page.tsx:157:          err instanceof Error
+  app\developer\media\page.tsx:158:            ? err.message
+  app\developer\media\page.tsx:159:            : "Media Library could not be loaded."
+  app\developer\media\page.tsx:160:        );
+  app\developer\media\page.tsx:161:      } finally {
+  app\developer\media\page.tsx:162:        setLoadingMedia(false);
+  app\developer\media\page.tsx:163:      }
+  app\developer\media\page.tsx:164:    },
+  app\developer\media\page.tsx:165:    [user]
+  app\developer\media\page.tsx:166:  );
+  app\developer\media\page.tsx:167:
+  app\developer\media\page.tsx:168:  useEffect(() => {
+  app\developer\media\page.tsx:169:    if (!loading && isOwner && user) {
+  app\developer\media\page.tsx:170:      void loadMedia(user);
+  app\developer\media\page.tsx:229:    if (nextFiles.length === 1) {
+  app\developer\media\page.tsx:230:      setTitle(
+  app\developer\media\page.tsx:231:        nextFiles[0].name.replace(
+  app\developer\media\page.tsx:232:          /\.[^.]+$/,
+  app\developer\media\page.tsx:233:          ""
+  app\developer\media\page.tsx:234:        )
+  app\developer\media\page.tsx:235:      );
+  app\developer\media\page.tsx:236:    } else {
+  app\developer\media\page.tsx:237:      setTitle("");
+  app\developer\media\page.tsx:238:    }
+  app\developer\media\page.tsx:239:  }
+  app\developer\media\page.tsx:240:
+> app\developer\media\page.tsx:241:  async function updateMediaAssignment(
+  app\developer\media\page.tsx:242:    item: MediaItem,
+  app\developer\media\page.tsx:243:    field:
+> app\developer\media\page.tsx:244:      | "published"
+> app\developer\media\page.tsx:245:      | "premiumAssigned"
+> app\developer\media\page.tsx:246:      | "radioAssigned",
+  app\developer\media\page.tsx:247:    value: boolean
+  app\developer\media\page.tsx:248:  ) {
+  app\developer\media\page.tsx:249:    if (!user || updatingMediaId) {
+  app\developer\media\page.tsx:250:      return;
+  app\developer\media\page.tsx:251:    }
+  app\developer\media\page.tsx:252:
+  app\developer\media\page.tsx:253:    setUpdatingMediaId(item.mediaId);
+  app\developer\media\page.tsx:254:    setError("");
+  app\developer\media\page.tsx:255:    setNotice("");
+  app\developer\media\page.tsx:256:
+  app\developer\media\page.tsx:257:    try {
+  app\developer\media\page.tsx:258:      const token =
+  app\developer\media\page.tsx:259:        await user.getIdToken();
+  app\developer\media\page.tsx:260:
+  app\developer\media\page.tsx:261:      const response =
+  app\developer\media\page.tsx:262:        await fetch(
+> app\developer\media\page.tsx:263:          "/api/owner/media",
+  app\developer\media\page.tsx:264:          {
+  app\developer\media\page.tsx:265:            method: "POST",
+  app\developer\media\page.tsx:266:            headers: {
+  app\developer\media\page.tsx:267:              "Content-Type":
+  app\developer\media\page.tsx:268:                "application/json",
+  app\developer\media\page.tsx:269:              Authorization:
+  app\developer\media\page.tsx:270:                `Bearer ${token}`,
+  app\developer\media\page.tsx:271:            },
+  app\developer\media\page.tsx:272:            body: JSON.stringify({
+  app\developer\media\page.tsx:273:              action: "assign",
+  app\developer\media\page.tsx:274:              mediaId: item.mediaId,
+  app\developer\media\page.tsx:275:              field,
+  app\developer\media\page.tsx:276:              value,
+  app\developer\media\page.tsx:277:            }),
+  app\developer\media\page.tsx:278:          }
+  app\developer\media\page.tsx:279:        );
+  app\developer\media\page.tsx:280:
+  app\developer\media\page.tsx:281:      const data =
+  app\developer\media\page.tsx:282:        await response.json();
+  app\developer\media\page.tsx:283:
+  app\developer\media\page.tsx:284:      if (
+  app\developer\media\page.tsx:285:        !response.ok ||
+  app\developer\media\page.tsx:286:        !data.success
+  app\developer\media\page.tsx:287:      ) {
+  app\developer\media\page.tsx:288:        throw new Error(
+  app\developer\media\page.tsx:289:          data.error ||
+  app\developer\media\page.tsx:290:            "Media assignment could not be updated."
+  app\developer\media\page.tsx:291:        );
+  app\developer\media\page.tsx:292:      }
+  app\developer\media\page.tsx:293:
+  app\developer\media\page.tsx:294:      setMedia((current) =>
+  app\developer\media\page.tsx:295:        current.map((mediaItem) =>
+  app\developer\media\page.tsx:296:          mediaItem.mediaId ===
+  app\developer\media\page.tsx:297:          item.mediaId
+  app\developer\media\page.tsx:298:            ? {
+  app\developer\media\page.tsx:330:    if (!confirmed) {
+  app\developer\media\page.tsx:331:      return;
+  app\developer\media\page.tsx:332:    }
+  app\developer\media\page.tsx:333:
+  app\developer\media\page.tsx:334:    setDeletingMediaId(item.mediaId);
+  app\developer\media\page.tsx:335:    setError("");
+  app\developer\media\page.tsx:336:    setNotice("");
+  app\developer\media\page.tsx:337:
+  app\developer\media\page.tsx:338:    try {
+  app\developer\media\page.tsx:339:      const token = await user.getIdToken();
+  app\developer\media\page.tsx:340:
+  app\developer\media\page.tsx:341:      const response = await fetch(
+> app\developer\media\page.tsx:342:        "/api/owner/media",
+  app\developer\media\page.tsx:343:        {
+  app\developer\media\page.tsx:344:          method: "POST",
+  app\developer\media\page.tsx:345:          headers: {
+  app\developer\media\page.tsx:346:            "Content-Type": "application/json",
+  app\developer\media\page.tsx:347:            Authorization: `Bearer ${token}`,
+  app\developer\media\page.tsx:348:          },
+  app\developer\media\page.tsx:349:          body: JSON.stringify({
+  app\developer\media\page.tsx:350:            action: "delete",
+  app\developer\media\page.tsx:351:            mediaId: item.mediaId,
+  app\developer\media\page.tsx:352:          }),
+  app\developer\media\page.tsx:353:        }
+  app\developer\media\page.tsx:354:      );
+  app\developer\media\page.tsx:355:
+  app\developer\media\page.tsx:356:      const data = await response.json();
+  app\developer\media\page.tsx:357:
+  app\developer\media\page.tsx:358:      if (!response.ok || !data.success) {
+  app\developer\media\page.tsx:359:        throw new Error(
+  app\developer\media\page.tsx:360:          data.error ||
+  app\developer\media\page.tsx:361:            "Media could not be deleted."
+  app\developer\media\page.tsx:362:        );
+  app\developer\media\page.tsx:363:      }
+  app\developer\media\page.tsx:364:
+  app\developer\media\page.tsx:365:      setMedia((current) =>
+  app\developer\media\page.tsx:366:        current.filter(
+  app\developer\media\page.tsx:367:          (mediaItem) =>
+  app\developer\media\page.tsx:368:            mediaItem.mediaId !== item.mediaId
+  app\developer\media\page.tsx:369:        )
+  app\developer\media\page.tsx:370:      );
+  app\developer\media\page.tsx:371:
+  app\developer\media\page.tsx:372:      setNotice(
+  app\developer\media\page.tsx:373:        `${item.originalName || item.title} removed from the Media Library.`
+  app\developer\media\page.tsx:374:      );
+  app\developer\media\page.tsx:375:    } catch (deleteError) {
+  app\developer\media\page.tsx:376:      setError(
+  app\developer\media\page.tsx:377:        deleteError instanceof Error
+  app\developer\media\page.tsx:432:        };
+  app\developer\media\page.tsx:433:
+  app\developer\media\page.tsx:434:        setUploadState(
+  app\developer\media\page.tsx:435:          "preparing"
+  app\developer\media\page.tsx:436:        );
+  app\developer\media\page.tsx:437:
+  app\developer\media\page.tsx:438:        setNotice(
+  app\developer\media\page.tsx:439:          `Preparing ${index + 1} of ${totalFiles}: ${currentFile.name}`
+  app\developer\media\page.tsx:440:        );
+  app\developer\media\page.tsx:441:
+  app\developer\media\page.tsx:442:        const prepareResponse =
+  app\developer\media\page.tsx:443:          await fetch(
+> app\developer\media\page.tsx:444:            "/api/owner/media",
+  app\developer\media\page.tsx:445:            {
+  app\developer\media\page.tsx:446:              method: "POST",
+  app\developer\media\page.tsx:447:              headers: {
+  app\developer\media\page.tsx:448:                "Content-Type":
+  app\developer\media\page.tsx:449:                  "application/json",
+  app\developer\media\page.tsx:450:                Authorization:
+  app\developer\media\page.tsx:451:                  `Bearer ${token}`,
+  app\developer\media\page.tsx:452:              },
+  app\developer\media\page.tsx:453:              body: JSON.stringify({
+  app\developer\media\page.tsx:454:                action: "prepare",
+  app\developer\media\page.tsx:455:                file: fileInfo,
+  app\developer\media\page.tsx:456:              }),
+  app\developer\media\page.tsx:457:            }
+  app\developer\media\page.tsx:458:          );
+  app\developer\media\page.tsx:459:
+  app\developer\media\page.tsx:460:        const prepareData =
+  app\developer\media\page.tsx:461:          await prepareResponse.json();
+  app\developer\media\page.tsx:462:
+  app\developer\media\page.tsx:463:        if (
+  app\developer\media\page.tsx:464:          !prepareResponse.ok ||
+  app\developer\media\page.tsx:465:          !prepareData.success
+  app\developer\media\page.tsx:466:        ) {
+  app\developer\media\page.tsx:467:          throw new Error(
+  app\developer\media\page.tsx:468:            prepareData.error ||
+  app\developer\media\page.tsx:469:              `Could not prepare ${currentFile.name}.`
+  app\developer\media\page.tsx:470:          );
+  app\developer\media\page.tsx:471:        }
+  app\developer\media\page.tsx:472:
+  app\developer\media\page.tsx:473:        setUploadState(
+  app\developer\media\page.tsx:474:          "uploading"
+  app\developer\media\page.tsx:475:        );
+  app\developer\media\page.tsx:476:
+  app\developer\media\page.tsx:477:        setNotice(
+  app\developer\media\page.tsx:478:          `Uploading ${index + 1} of ${totalFiles}: ${currentFile.name}`
+  app\developer\media\page.tsx:479:        );
+  app\developer\media\page.tsx:499:        }
+  app\developer\media\page.tsx:500:
+  app\developer\media\page.tsx:501:        setUploadState(
+  app\developer\media\page.tsx:502:          "finalizing"
+  app\developer\media\page.tsx:503:        );
+  app\developer\media\page.tsx:504:
+  app\developer\media\page.tsx:505:        setNotice(
+  app\developer\media\page.tsx:506:          `Saving ${index + 1} of ${totalFiles}: ${currentFile.name}`
+  app\developer\media\page.tsx:507:        );
+  app\developer\media\page.tsx:508:
+  app\developer\media\page.tsx:509:        const finalizeResponse =
+  app\developer\media\page.tsx:510:          await fetch(
+> app\developer\media\page.tsx:511:            "/api/owner/media",
+  app\developer\media\page.tsx:512:            {
+  app\developer\media\page.tsx:513:              method: "POST",
+  app\developer\media\page.tsx:514:              headers: {
+  app\developer\media\page.tsx:515:                "Content-Type":
+  app\developer\media\page.tsx:516:                  "application/json",
+  app\developer\media\page.tsx:517:                Authorization:
+  app\developer\media\page.tsx:518:                  `Bearer ${token}`,
+  app\developer\media\page.tsx:519:              },
+  app\developer\media\page.tsx:520:              body: JSON.stringify({
+  app\developer\media\page.tsx:521:                action: "finalize",
+  app\developer\media\page.tsx:522:                mediaId:
+  app\developer\media\page.tsx:523:                  prepareData.mediaId,
+  app\developer\media\page.tsx:524:                storagePath:
+  app\developer\media\page.tsx:525:                  prepareData.storagePath,
+  app\developer\media\page.tsx:526:                title:
+  app\developer\media\page.tsx:527:                  currentTitle,
+  app\developer\media\page.tsx:528:                file:
+  app\developer\media\page.tsx:529:                  fileInfo,
+  app\developer\media\page.tsx:530:              }),
+  app\developer\media\page.tsx:531:            }
+  app\developer\media\page.tsx:532:          );
+  app\developer\media\page.tsx:533:
+  app\developer\media\page.tsx:534:        const finalizeData =
+  app\developer\media\page.tsx:535:          await finalizeResponse.json();
+  app\developer\media\page.tsx:536:
+  app\developer\media\page.tsx:537:        if (
+  app\developer\media\page.tsx:538:          !finalizeResponse.ok ||
+  app\developer\media\page.tsx:539:          !finalizeData.success
+  app\developer\media\page.tsx:540:        ) {
+  app\developer\media\page.tsx:541:          throw new Error(
+  app\developer\media\page.tsx:542:            finalizeData.error ||
+  app\developer\media\page.tsx:543:              `Could not finalize ${currentFile.name}.`
+  app\developer\media\page.tsx:544:          );
+  app\developer\media\page.tsx:545:        }
+  app\developer\media\page.tsx:546:
+  app\developer\media\page.tsx:906:                        </p>
+  app\developer\media\page.tsx:907:                      )}
+  app\developer\media\page.tsx:908:                    </div>
+  app\developer\media\page.tsx:909:
+  app\developer\media\page.tsx:910:                    <div className="p-6">
+  app\developer\media\page.tsx:911:                      <div className="flex gap-2">
+  app\developer\media\page.tsx:912:                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase">
+  app\developer\media\page.tsx:913:                          {item.kind}
+  app\developer\media\page.tsx:914:                        </span>
+  app\developer\media\page.tsx:915:
+  app\developer\media\page.tsx:916:                        {item.source === "ai-music" && (
+  app\developer\media\page.tsx:917:                          <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase text-cyan-200">
+> app\developer\media\page.tsx:918:                            AI MUSIC
+  app\developer\media\page.tsx:919:                          </span>
+  app\developer\media\page.tsx:920:                        )}
+  app\developer\media\page.tsx:921:
+  app\developer\media\page.tsx:922:                        {item.extension && (
+  app\developer\media\page.tsx:923:                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase text-white/50">
+  app\developer\media\page.tsx:924:                            {
+  app\developer\media\page.tsx:925:                              item.extension
+  app\developer\media\page.tsx:926:                            }
+  app\developer\media\page.tsx:927:                          </span>
+  app\developer\media\page.tsx:928:                        )}
+  app\developer\media\page.tsx:929:                      </div>
+  app\developer\media\page.tsx:930:
+  app\developer\media\page.tsx:931:                      <h3 className="mt-4 text-2xl font-black">
+  app\developer\media\page.tsx:932:                        {item.title}
+  app\developer\media\page.tsx:933:                      </h3>
+  app\developer\media\page.tsx:934:
+  app\developer\media\page.tsx:935:                      <p className="mt-2 break-all text-xs text-white/40">
+  app\developer\media\page.tsx:936:                        {item.originalName}
+  app\developer\media\page.tsx:937:                      </p>
+  app\developer\media\page.tsx:938:
+  app\developer\media\page.tsx:939:                      <div className="mt-5 grid grid-cols-2 gap-3">
+  app\developer\media\page.tsx:940:                        <Info
+  app\developer\media\page.tsx:941:                          label="Size"
+  app\developer\media\page.tsx:942:                          value={formatBytes(
+  app\developer\media\page.tsx:943:                            item.sizeBytes
+  app\developer\media\page.tsx:944:                          )}
+  app\developer\media\page.tsx:945:                        />
+  app\developer\media\page.tsx:946:
+  app\developer\media\page.tsx:947:                        <Info
+  app\developer\media\page.tsx:948:                          label="Status"
+  app\developer\media\page.tsx:949:                          value={
+  app\developer\media\page.tsx:950:                            item.status
+  app\developer\media\page.tsx:951:                          }
+  app\developer\media\page.tsx:952:                        />
+  app\developer\media\page.tsx:953:                      </div>
+  app\developer\media\page.tsx:975:                      </div>
+  app\developer\media\page.tsx:976:
+  app\developer\media\page.tsx:977:                      <p className="mt-4 text-xs text-white/30">
+  app\developer\media\page.tsx:978:                        Uploaded{" "}
+  app\developer\media\page.tsx:979:                        {formatDate(
+  app\developer\media\page.tsx:980:                          item.createdAt
+  app\developer\media\page.tsx:981:                        )}
+  app\developer\media\page.tsx:982:                      </p>
+  app\developer\media\page.tsx:983:                      {item.kind === "audio" &&
+  app\developer\media\page.tsx:984:                      item.source === "ai-music" ? (
+  app\developer\media\page.tsx:985:                        <div className="mt-5 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.04] p-4">
+  app\developer\media\page.tsx:986:                          <p className="text-xs font-black uppercase tracking-[0.15em] text-cyan-200">
+> app\developer\media\page.tsx:987:                            AI Music Publishing
+  app\developer\media\page.tsx:988:                          </p>
+  app\developer\media\page.tsx:989:
+  app\developer\media\page.tsx:990:                          <div className="mt-4 space-y-3">
+  app\developer\media\page.tsx:991:
+  app\developer\media\page.tsx:992:                            <button
+  app\developer\media\page.tsx:993:                              type="button"
+  app\developer\media\page.tsx:994:                              disabled={
+  app\developer\media\page.tsx:995:                                updatingMediaId ===
+  app\developer\media\page.tsx:996:                                item.mediaId
+  app\developer\media\page.tsx:997:                              }
+  app\developer\media\page.tsx:998:                              onClick={() =>
+> app\developer\media\page.tsx:999:                                void updateMediaAssignment(
+  app\developer\media\page.tsx:1000:                                  item,
+> app\developer\media\page.tsx:1001:                                  "published",
+> app\developer\media\page.tsx:1002:                                  !item.published
+  app\developer\media\page.tsx:1003:                                )
+  app\developer\media\page.tsx:1004:                              }
+  app\developer\media\page.tsx:1005:                              className={
+> app\developer\media\page.tsx:1006:                                item.published
+  app\developer\media\page.tsx:1007:                                  ? "w-full rounded-xl bg-emerald-500/20 px-4 py-3 text-sm font-black text-emerald-200 disabled:opacity-50"
+  app\developer\media\page.tsx:1008:                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
+  app\developer\media\page.tsx:1009:                              }
+  app\developer\media\page.tsx:1010:                            >
+> app\developer\media\page.tsx:1011:                              {item.published
+> app\developer\media\page.tsx:1012:                                ? "PUBLISHED"
+  app\developer\media\page.tsx:1013:                                : "PRIVATE"}
+  app\developer\media\page.tsx:1014:                            </button>
+  app\developer\media\page.tsx:1015:
+  app\developer\media\page.tsx:1016:                            <button
+  app\developer\media\page.tsx:1017:                              type="button"
+  app\developer\media\page.tsx:1018:                              disabled={
+  app\developer\media\page.tsx:1019:                                updatingMediaId ===
+  app\developer\media\page.tsx:1020:                                item.mediaId
+  app\developer\media\page.tsx:1021:                              }
+  app\developer\media\page.tsx:1022:                              onClick={() =>
+> app\developer\media\page.tsx:1023:                                void updateMediaAssignment(
+  app\developer\media\page.tsx:1024:                                  item,
+> app\developer\media\page.tsx:1025:                                  "premiumAssigned",
+> app\developer\media\page.tsx:1026:                                  !item.premiumAssigned
+  app\developer\media\page.tsx:1027:                                )
+  app\developer\media\page.tsx:1028:                              }
+  app\developer\media\page.tsx:1029:                              className={
+> app\developer\media\page.tsx:1030:                                item.premiumAssigned
+  app\developer\media\page.tsx:1031:                                  ? "w-full rounded-xl bg-violet-500/20 px-4 py-3 text-sm font-black text-violet-200 disabled:opacity-50"
+  app\developer\media\page.tsx:1032:                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
+  app\developer\media\page.tsx:1033:                              }
+  app\developer\media\page.tsx:1034:                            >
+  app\developer\media\page.tsx:1035:                              Premium Library:{" "}
+> app\developer\media\page.tsx:1036:                              {item.premiumAssigned
+  app\developer\media\page.tsx:1037:                                ? "ON"
+  app\developer\media\page.tsx:1038:                                : "OFF"}
+  app\developer\media\page.tsx:1039:                            </button>
+  app\developer\media\page.tsx:1040:
+  app\developer\media\page.tsx:1041:                            <button
+  app\developer\media\page.tsx:1042:                              type="button"
+  app\developer\media\page.tsx:1043:                              disabled={
+  app\developer\media\page.tsx:1044:                                updatingMediaId ===
+  app\developer\media\page.tsx:1045:                                item.mediaId
+  app\developer\media\page.tsx:1046:                              }
+  app\developer\media\page.tsx:1047:                              onClick={() =>
+> app\developer\media\page.tsx:1048:                                void updateMediaAssignment(
+  app\developer\media\page.tsx:1049:                                  item,
+> app\developer\media\page.tsx:1050:                                  "radioAssigned",
+> app\developer\media\page.tsx:1051:                                  !item.radioAssigned
+  app\developer\media\page.tsx:1052:                                )
+  app\developer\media\page.tsx:1053:                              }
+  app\developer\media\page.tsx:1054:                              className={
+> app\developer\media\page.tsx:1055:                                item.radioAssigned
+  app\developer\media\page.tsx:1056:                                  ? "w-full rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-black text-cyan-200 disabled:opacity-50"
+  app\developer\media\page.tsx:1057:                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
+  app\developer\media\page.tsx:1058:                              }
+  app\developer\media\page.tsx:1059:                            >
+  app\developer\media\page.tsx:1060:                              Radio:{" "}
+> app\developer\media\page.tsx:1061:                              {item.radioAssigned
+  app\developer\media\page.tsx:1062:                                ? "ON"
+  app\developer\media\page.tsx:1063:                                : "OFF"}
+  app\developer\media\page.tsx:1064:                            </button>
+  app\developer\media\page.tsx:1065:
+  app\developer\media\page.tsx:1066:                          </div>
+  app\developer\media\page.tsx:1067:                        </div>
+  app\developer\media\page.tsx:1068:                      ) : null}
+  app\developer\media\page.tsx:1069:
+  app\developer\media\page.tsx:1070:                  <button
+  app\developer\media\page.tsx:1071:                    type="button"
+  app\developer\media\page.tsx:1072:                    onClick={() =>
+  app\developer\media\page.tsx:1073:                      void deleteMedia(item)
+  app\developer\media\page.tsx:1074:                    }
+  app\developer\media\page.tsx:1075:                    disabled={
+  app\developer\media\page.tsx:1076:                      deletingMediaId ===
+  app\developer\media\page.tsx:1077:                      item.mediaId
+  app\developer\media\page.tsx:1078:                    }
+  app\developer\media\page.tsx:1079:                    className="mt-5 w-full rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+  app\developer\media\page.tsx:1080:                  >
+  app\developer\media\page.tsx:1081:                    {deletingMediaId ===
+  app\developer\media\page.tsx:1082:                    item.mediaId
+  app\developer\media\page.tsx:1083:                      ? "Deleting..."
+  app\developer\media\page.tsx:1084:                      : "Delete Media"}
+  app\developer\media\page.tsx:1085:                  </button>
+  app\developer\media\page.tsx:1086:                    </div>
+  app\developer\media\page.tsx:1087:                  </article>
+  app\developer\media\page.tsx:1088:                )
+  app\developer\media\page.tsx:1089:              )}
+  app\developer\media\page.tsx:1090:            </div>
+  app\developer\media\page.tsx:1091:          )}
+  app\developer\media\page.tsx:1092:        </section>
+  app\developer\media\page.tsx:1093:      </div>
+  app\developer\media\page.tsx:1094:    </main>
+  app\developer\media\page.tsx:1095:  );
+  app\developer\media\page.tsx:1096:}
+
+
+
+
+
+===================================================
+7. AI MUSIC PAGE HISTORY / SAVE TARGETS
+===================================================
+
+  app\premium\ai-music\page.tsx:58:      "instrumental"
+  app\premium\ai-music\page.tsx:59:    );
+  app\premium\ai-music\page.tsx:60:
+  app\premium\ai-music\page.tsx:61:  const [creating, setCreating] =
+  app\premium\ai-music\page.tsx:62:    useState(false);
+  app\premium\ai-music\page.tsx:63:
+  app\premium\ai-music\page.tsx:64:  const [status, setStatus] =
+  app\premium\ai-music\page.tsx:65:    useState(
+  app\premium\ai-music\page.tsx:66:      "Ready to generate."
+  app\premium\ai-music\page.tsx:67:    );
+  app\premium\ai-music\page.tsx:68:
+  app\premium\ai-music\page.tsx:69:  const [audioUrl, setAudioUrl] =
+  app\premium\ai-music\page.tsx:70:    useState<string | null>(null);
+  app\premium\ai-music\page.tsx:71:
+  app\premium\ai-music\page.tsx:72:  const [
+> app\premium\ai-music\page.tsx:73:    generationId,
+> app\premium\ai-music\page.tsx:74:    setGenerationId,
+  app\premium\ai-music\page.tsx:75:  ] =
+  app\premium\ai-music\page.tsx:76:    useState<string | null>(
+  app\premium\ai-music\page.tsx:77:      null
+  app\premium\ai-music\page.tsx:78:    );
+  app\premium\ai-music\page.tsx:79:
+  app\premium\ai-music\page.tsx:80:  const [
+> app\premium\ai-music\page.tsx:81:    recentGenerations,
+> app\premium\ai-music\page.tsx:82:    setRecentGenerations,
+  app\premium\ai-music\page.tsx:83:  ] =
+  app\premium\ai-music\page.tsx:84:    useState<
+  app\premium\ai-music\page.tsx:85:      Array<{
+> app\premium\ai-music\page.tsx:86:        generationId: string;
+  app\premium\ai-music\page.tsx:87:        prompt: string;
+  app\premium\ai-music\page.tsx:88:        genre: string;
+  app\premium\ai-music\page.tsx:89:        duration: number;
+  app\premium\ai-music\page.tsx:90:        audioUrl: string | null;
+> app\premium\ai-music\page.tsx:91:        savedToMediaLibrary: boolean;
+  app\premium\ai-music\page.tsx:92:        createdAt: string;
+  app\premium\ai-music\page.tsx:93:      }>
+  app\premium\ai-music\page.tsx:94:    >([]);
+  app\premium\ai-music\page.tsx:95:
+  app\premium\ai-music\page.tsx:96:  const [
+> app\premium\ai-music\page.tsx:97:    historyLoading,
+> app\premium\ai-music\page.tsx:98:    setHistoryLoading,
+  app\premium\ai-music\page.tsx:99:  ] =
+  app\premium\ai-music\page.tsx:100:    useState(false);
+  app\premium\ai-music\page.tsx:101:
+  app\premium\ai-music\page.tsx:102:  const [
+  app\premium\ai-music\page.tsx:103:    savingToMedia,
+  app\premium\ai-music\page.tsx:104:    setSavingToMedia,
+  app\premium\ai-music\page.tsx:105:  ] =
+  app\premium\ai-music\page.tsx:106:    useState(false);
+  app\premium\ai-music\page.tsx:107:
+  app\premium\ai-music\page.tsx:108:  const [
+  app\premium\ai-music\page.tsx:109:    mediaMessage,
+  app\premium\ai-music\page.tsx:110:    setMediaMessage,
+  app\premium\ai-music\page.tsx:111:  ] =
+  app\premium\ai-music\page.tsx:112:    useState<string | null>(
+  app\premium\ai-music\page.tsx:113:      null
+  app\premium\ai-music\page.tsx:114:    );
+  app\premium\ai-music\page.tsx:115:
+  app\premium\ai-music\page.tsx:116:  const [error, setError] =
+  app\premium\ai-music\page.tsx:117:    useState<string | null>(null);
+  app\premium\ai-music\page.tsx:118:
+  app\premium\ai-music\page.tsx:119:  const [access, setAccess] =
+  app\premium\ai-music\page.tsx:120:    useState<AccessInfo | null>(
+  app\premium\ai-music\page.tsx:121:      null
+  app\premium\ai-music\page.tsx:122:    );
+  app\premium\ai-music\page.tsx:123:
+  app\premium\ai-music\page.tsx:124:  const [accessLoading, setAccessLoading] =
+  app\premium\ai-music\page.tsx:125:    useState(false);
+  app\premium\ai-music\page.tsx:126:
+  app\premium\ai-music\page.tsx:127:  const loadAccess =
+  app\premium\ai-music\page.tsx:128:    useCallback(async () => {
+  app\premium\ai-music\page.tsx:129:      if (!user) {
+  app\premium\ai-music\page.tsx:130:        setAccess(null);
+  app\premium\ai-music\page.tsx:131:        return;
+  app\premium\ai-music\page.tsx:132:      }
+  app\premium\ai-music\page.tsx:133:
+  app\premium\ai-music\page.tsx:134:      setAccessLoading(true);
+  app\premium\ai-music\page.tsx:135:
+  app\premium\ai-music\page.tsx:136:      try {
+  app\premium\ai-music\page.tsx:137:        const token =
+  app\premium\ai-music\page.tsx:138:          await user.getIdToken();
+  app\premium\ai-music\page.tsx:139:
+  app\premium\ai-music\page.tsx:140:        const response =
+  app\premium\ai-music\page.tsx:141:          await fetch(
+  app\premium\ai-music\page.tsx:142:            "/api/ai-music/generate",
+  app\premium\ai-music\page.tsx:143:            {
+  app\premium\ai-music\page.tsx:199:      } catch (err) {
+  app\premium\ai-music\page.tsx:200:        setError(
+  app\premium\ai-music\page.tsx:201:          err instanceof Error
+  app\premium\ai-music\page.tsx:202:            ? err.message
+  app\premium\ai-music\page.tsx:203:            : "AI Music access could not be loaded."
+  app\premium\ai-music\page.tsx:204:        );
+  app\premium\ai-music\page.tsx:205:      } finally {
+  app\premium\ai-music\page.tsx:206:        setAccessLoading(false);
+  app\premium\ai-music\page.tsx:207:      }
+  app\premium\ai-music\page.tsx:208:    }, [user]);
+  app\premium\ai-music\page.tsx:209:
+  app\premium\ai-music\page.tsx:210:  useEffect(() => {
+  app\premium\ai-music\page.tsx:211:    void loadAccess();
+  app\premium\ai-music\page.tsx:212:  }, [loadAccess]);
+  app\premium\ai-music\page.tsx:213:
+> app\premium\ai-music\page.tsx:214:  const loadHistory =
+  app\premium\ai-music\page.tsx:215:    useCallback(
+  app\premium\ai-music\page.tsx:216:      async () => {
+  app\premium\ai-music\page.tsx:217:        if (!user) {
+> app\premium\ai-music\page.tsx:218:          setRecentGenerations(
+  app\premium\ai-music\page.tsx:219:            []
+  app\premium\ai-music\page.tsx:220:          );
+  app\premium\ai-music\page.tsx:221:          return;
+  app\premium\ai-music\page.tsx:222:        }
+  app\premium\ai-music\page.tsx:223:
+> app\premium\ai-music\page.tsx:224:        setHistoryLoading(
+  app\premium\ai-music\page.tsx:225:          true
+  app\premium\ai-music\page.tsx:226:        );
+  app\premium\ai-music\page.tsx:227:
+  app\premium\ai-music\page.tsx:228:        try {
+  app\premium\ai-music\page.tsx:229:          const token =
+  app\premium\ai-music\page.tsx:230:            await user
+  app\premium\ai-music\page.tsx:231:              .getIdToken();
+  app\premium\ai-music\page.tsx:232:
+  app\premium\ai-music\page.tsx:233:          const response =
+  app\premium\ai-music\page.tsx:234:            await fetch(
+> app\premium\ai-music\page.tsx:235:              "/api/ai-music/history",
+  app\premium\ai-music\page.tsx:236:              {
+  app\premium\ai-music\page.tsx:237:                headers: {
+  app\premium\ai-music\page.tsx:238:                  Authorization:
+  app\premium\ai-music\page.tsx:239:                    `Bearer ${token}`,
+  app\premium\ai-music\page.tsx:240:                },
+  app\premium\ai-music\page.tsx:241:                cache:
+  app\premium\ai-music\page.tsx:242:                  "no-store",
+  app\premium\ai-music\page.tsx:243:              }
+  app\premium\ai-music\page.tsx:244:            );
+  app\premium\ai-music\page.tsx:245:
+  app\premium\ai-music\page.tsx:246:          const data =
+  app\premium\ai-music\page.tsx:247:            await response
+  app\premium\ai-music\page.tsx:248:              .json();
+  app\premium\ai-music\page.tsx:249:
+  app\premium\ai-music\page.tsx:250:          if (
+  app\premium\ai-music\page.tsx:251:            response.ok &&
+  app\premium\ai-music\page.tsx:252:            data.success
+  app\premium\ai-music\page.tsx:253:          ) {
+> app\premium\ai-music\page.tsx:254:            setRecentGenerations(
+  app\premium\ai-music\page.tsx:255:              Array.isArray(
+  app\premium\ai-music\page.tsx:256:                data.generations
+  app\premium\ai-music\page.tsx:257:              )
+  app\premium\ai-music\page.tsx:258:                ? data.generations
+  app\premium\ai-music\page.tsx:259:                : []
+  app\premium\ai-music\page.tsx:260:            );
+  app\premium\ai-music\page.tsx:261:          }
+  app\premium\ai-music\page.tsx:262:        } catch (error) {
+  app\premium\ai-music\page.tsx:263:          console.error(
+> app\premium\ai-music\page.tsx:264:            "AI MUSIC HISTORY",
+  app\premium\ai-music\page.tsx:265:            error
+  app\premium\ai-music\page.tsx:266:          );
+  app\premium\ai-music\page.tsx:267:        } finally {
+> app\premium\ai-music\page.tsx:268:          setHistoryLoading(
+  app\premium\ai-music\page.tsx:269:            false
+  app\premium\ai-music\page.tsx:270:          );
+  app\premium\ai-music\page.tsx:271:        }
+  app\premium\ai-music\page.tsx:272:      },
+  app\premium\ai-music\page.tsx:273:      [user]
+  app\premium\ai-music\page.tsx:274:    );
+  app\premium\ai-music\page.tsx:275:
+  app\premium\ai-music\page.tsx:276:  useEffect(() => {
+> app\premium\ai-music\page.tsx:277:    void loadHistory();
+> app\premium\ai-music\page.tsx:278:  }, [loadHistory]);
+  app\premium\ai-music\page.tsx:279:
+  app\premium\ai-music\page.tsx:280:  async function handleGenerate() {
+  app\premium\ai-music\page.tsx:281:    if (
+  app\premium\ai-music\page.tsx:282:      !user ||
+  app\premium\ai-music\page.tsx:283:      !prompt.trim() ||
+  app\premium\ai-music\page.tsx:284:      creating
+  app\premium\ai-music\page.tsx:285:    ) {
+  app\premium\ai-music\page.tsx:286:      return;
+  app\premium\ai-music\page.tsx:287:    }
+  app\premium\ai-music\page.tsx:288:
+  app\premium\ai-music\page.tsx:289:    if (
+  app\premium\ai-music\page.tsx:290:      access &&
+  app\premium\ai-music\page.tsx:291:      !access.canGenerate
+  app\premium\ai-music\page.tsx:292:    ) {
+  app\premium\ai-music\page.tsx:293:      setError(
+  app\premium\ai-music\page.tsx:294:        access.premiumActive
+  app\premium\ai-music\page.tsx:295:          ? "Your monthly AI Music credits have been used. Please wait for your next monthly credit reset."
+  app\premium\ai-music\page.tsx:296:          : "Your free trial is complete. Subscribe to SOLO BEATS PREMIUM to continue generating music."
+  app\premium\ai-music\page.tsx:297:      );
+  app\premium\ai-music\page.tsx:298:      return;
+  app\premium\ai-music\page.tsx:299:    }
+  app\premium\ai-music\page.tsx:300:
+  app\premium\ai-music\page.tsx:301:    setCreating(true);
+  app\premium\ai-music\page.tsx:302:    setError(null);
+  app\premium\ai-music\page.tsx:303:    setAudioUrl(null);
+> app\premium\ai-music\page.tsx:304:    setGenerationId(null);
+  app\premium\ai-music\page.tsx:305:    setMediaMessage(null);
+  app\premium\ai-music\page.tsx:306:
+  app\premium\ai-music\page.tsx:307:    setStatus(
+  app\premium\ai-music\page.tsx:308:      "Creating your AI song..."
+  app\premium\ai-music\page.tsx:309:    );
+  app\premium\ai-music\page.tsx:310:
+  app\premium\ai-music\page.tsx:311:    try {
+  app\premium\ai-music\page.tsx:312:      const token =
+  app\premium\ai-music\page.tsx:313:        await user.getIdToken();
+  app\premium\ai-music\page.tsx:314:
+  app\premium\ai-music\page.tsx:315:      const response =
+  app\premium\ai-music\page.tsx:316:        await fetch(
+  app\premium\ai-music\page.tsx:317:          "/api/ai-music/generate",
+  app\premium\ai-music\page.tsx:318:          {
+  app\premium\ai-music\page.tsx:319:            method: "POST",
+  app\premium\ai-music\page.tsx:320:            headers: {
+  app\premium\ai-music\page.tsx:321:              Authorization:
+  app\premium\ai-music\page.tsx:322:                `Bearer ${token}`,
+  app\premium\ai-music\page.tsx:323:              "Content-Type":
+  app\premium\ai-music\page.tsx:324:                "application/json",
+  app\premium\ai-music\page.tsx:325:            },
+  app\premium\ai-music\page.tsx:326:            body: JSON.stringify({
+  app\premium\ai-music\page.tsx:327:              prompt,
+  app\premium\ai-music\page.tsx:328:              genre,
+  app\premium\ai-music\page.tsx:329:              mood,
+  app\premium\ai-music\page.tsx:330:              bpm,
+  app\premium\ai-music\page.tsx:331:              musicKey,
+  app\premium\ai-music\page.tsx:332:              duration,
+  app\premium\ai-music\page.tsx:333:              vocalMode,
+  app\premium\ai-music\page.tsx:334:            }),
+  app\premium\ai-music\page.tsx:335:          }
+  app\premium\ai-music\page.tsx:336:        );
+  app\premium\ai-music\page.tsx:337:
+  app\premium\ai-music\page.tsx:338:      const data =
+  app\premium\ai-music\page.tsx:339:        await response.json();
+  app\premium\ai-music\page.tsx:340:
+  app\premium\ai-music\page.tsx:341:      if (!response.ok) {
+  app\premium\ai-music\page.tsx:342:        throw new Error(
+  app\premium\ai-music\page.tsx:343:          data.error ||
+  app\premium\ai-music\page.tsx:344:            "AI music generation failed."
+  app\premium\ai-music\page.tsx:345:        );
+  app\premium\ai-music\page.tsx:346:      }
+  app\premium\ai-music\page.tsx:347:
+  app\premium\ai-music\page.tsx:348:      setAudioUrl(
+  app\premium\ai-music\page.tsx:349:        data.audioUrl ||
+  app\premium\ai-music\page.tsx:350:        null
+  app\premium\ai-music\page.tsx:351:      );
+  app\premium\ai-music\page.tsx:352:
+> app\premium\ai-music\page.tsx:353:      setGenerationId(
+> app\premium\ai-music\page.tsx:354:        typeof data.generationId ===
+  app\premium\ai-music\page.tsx:355:          "string"
+> app\premium\ai-music\page.tsx:356:          ? data.generationId
+  app\premium\ai-music\page.tsx:357:          : null
+  app\premium\ai-music\page.tsx:358:      );
+  app\premium\ai-music\page.tsx:359:
+  app\premium\ai-music\page.tsx:360:      setStatus(
+  app\premium\ai-music\page.tsx:361:        "Generation complete."
+  app\premium\ai-music\page.tsx:362:      );
+  app\premium\ai-music\page.tsx:363:
+  app\premium\ai-music\page.tsx:364:      await Promise.all([
+  app\premium\ai-music\page.tsx:365:        loadAccess(),
+> app\premium\ai-music\page.tsx:366:        loadHistory(),
+  app\premium\ai-music\page.tsx:367:      ]);
+  app\premium\ai-music\page.tsx:368:    } catch (err) {
+  app\premium\ai-music\page.tsx:369:      setError(
+  app\premium\ai-music\page.tsx:370:        err instanceof Error
+  app\premium\ai-music\page.tsx:371:          ? err.message
+  app\premium\ai-music\page.tsx:372:          : "AI music generation failed."
+  app\premium\ai-music\page.tsx:373:      );
+  app\premium\ai-music\page.tsx:374:
+  app\premium\ai-music\page.tsx:375:      setStatus(
+  app\premium\ai-music\page.tsx:376:        "Generation failed."
+  app\premium\ai-music\page.tsx:377:      );
+  app\premium\ai-music\page.tsx:378:
+  app\premium\ai-music\page.tsx:379:      await loadAccess();
+  app\premium\ai-music\page.tsx:380:    } finally {
+  app\premium\ai-music\page.tsx:381:      setCreating(false);
+  app\premium\ai-music\page.tsx:382:    }
+  app\premium\ai-music\page.tsx:383:  }
+  app\premium\ai-music\page.tsx:384:
+  app\premium\ai-music\page.tsx:385:  async function handleSaveToMediaLibrary(
+> app\premium\ai-music\page.tsx:386:    targetGenerationId?: string
+  app\premium\ai-music\page.tsx:387:  ) {
+> app\premium\ai-music\page.tsx:388:    const selectedGenerationId =
+> app\premium\ai-music\page.tsx:389:      targetGenerationId ||
+> app\premium\ai-music\page.tsx:390:      generationId;
+  app\premium\ai-music\page.tsx:391:
+  app\premium\ai-music\page.tsx:392:    if (
+  app\premium\ai-music\page.tsx:393:      !user ||
+> app\premium\ai-music\page.tsx:394:      !selectedGenerationId ||
+  app\premium\ai-music\page.tsx:395:      savingToMedia
+  app\premium\ai-music\page.tsx:396:    ) {
+  app\premium\ai-music\page.tsx:397:      return;
+  app\premium\ai-music\page.tsx:398:    }
+  app\premium\ai-music\page.tsx:399:
+  app\premium\ai-music\page.tsx:400:    setSavingToMedia(true);
+  app\premium\ai-music\page.tsx:401:    setMediaMessage(null);
+  app\premium\ai-music\page.tsx:402:
+  app\premium\ai-music\page.tsx:403:    try {
+  app\premium\ai-music\page.tsx:404:      const token =
+  app\premium\ai-music\page.tsx:405:        await user
+  app\premium\ai-music\page.tsx:406:          .getIdToken();
+  app\premium\ai-music\page.tsx:407:
+  app\premium\ai-music\page.tsx:408:      const response =
+  app\premium\ai-music\page.tsx:409:        await fetch(
+> app\premium\ai-music\page.tsx:410:          "/api/ai-music/save-to-media",
+  app\premium\ai-music\page.tsx:411:          {
+  app\premium\ai-music\page.tsx:412:            method:
+  app\premium\ai-music\page.tsx:413:              "POST",
+  app\premium\ai-music\page.tsx:414:
+  app\premium\ai-music\page.tsx:415:            headers: {
+  app\premium\ai-music\page.tsx:416:              Authorization:
+  app\premium\ai-music\page.tsx:417:                `Bearer ${token}`,
+  app\premium\ai-music\page.tsx:418:
+  app\premium\ai-music\page.tsx:419:              "Content-Type":
+  app\premium\ai-music\page.tsx:420:                "application/json",
+  app\premium\ai-music\page.tsx:421:            },
+  app\premium\ai-music\page.tsx:422:
+  app\premium\ai-music\page.tsx:423:            body:
+  app\premium\ai-music\page.tsx:424:              JSON.stringify({
+> app\premium\ai-music\page.tsx:425:                generationId:
+> app\premium\ai-music\page.tsx:426:                  selectedGenerationId,
+  app\premium\ai-music\page.tsx:427:              }),
+  app\premium\ai-music\page.tsx:428:          }
+  app\premium\ai-music\page.tsx:429:        );
+  app\premium\ai-music\page.tsx:430:
+  app\premium\ai-music\page.tsx:431:      const data =
+  app\premium\ai-music\page.tsx:432:        await response
+  app\premium\ai-music\page.tsx:433:          .json();
+  app\premium\ai-music\page.tsx:434:
+  app\premium\ai-music\page.tsx:435:      if (
+  app\premium\ai-music\page.tsx:436:        !response.ok ||
+  app\premium\ai-music\page.tsx:437:        !data.success
+  app\premium\ai-music\page.tsx:438:      ) {
+  app\premium\ai-music\page.tsx:439:        throw new Error(
+  app\premium\ai-music\page.tsx:440:          data.error ||
+  app\premium\ai-music\page.tsx:441:            "Song could not be saved."
+  app\premium\ai-music\page.tsx:442:        );
+  app\premium\ai-music\page.tsx:443:      }
+  app\premium\ai-music\page.tsx:444:
+  app\premium\ai-music\page.tsx:445:      setMediaMessage(
+  app\premium\ai-music\page.tsx:446:        data.message ||
+  app\premium\ai-music\page.tsx:447:          "Song saved to Media Library."
+  app\premium\ai-music\page.tsx:448:      );
+  app\premium\ai-music\page.tsx:449:
+> app\premium\ai-music\page.tsx:450:      await loadHistory();
+  app\premium\ai-music\page.tsx:451:    } catch (error) {
+  app\premium\ai-music\page.tsx:452:      setMediaMessage(
+  app\premium\ai-music\page.tsx:453:        error instanceof Error
+  app\premium\ai-music\page.tsx:454:          ? error.message
+  app\premium\ai-music\page.tsx:455:          : "Song could not be saved."
+  app\premium\ai-music\page.tsx:456:      );
+  app\premium\ai-music\page.tsx:457:    } finally {
+  app\premium\ai-music\page.tsx:458:      setSavingToMedia(false);
+  app\premium\ai-music\page.tsx:459:    }
+  app\premium\ai-music\page.tsx:460:  }
+  app\premium\ai-music\page.tsx:461:
+  app\premium\ai-music\page.tsx:462:  const fieldClass =
+  app\premium\ai-music\page.tsx:463:    "mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none";
+  app\premium\ai-music\page.tsx:464:
+  app\premium\ai-music\page.tsx:465:  const buttonText =
+  app\premium\ai-music\page.tsx:466:    creating
+  app\premium\ai-music\page.tsx:467:      ? "Generating..."
+  app\premium\ai-music\page.tsx:468:      : access?.isOwner
+  app\premium\ai-music\page.tsx:469:        ? "Generate AI Music — 0 Credits"
+  app\premium\ai-music\page.tsx:470:        : access?.premiumActive
+  app\premium\ai-music\page.tsx:471:          ? access.canGenerate
+  app\premium\ai-music\page.tsx:472:            ? `Generate AI Music — ${access.premiumGenerationCost} Credit`
+  app\premium\ai-music\page.tsx:473:            : "Monthly AI Music Credits Used"
+  app\premium\ai-music\page.tsx:474:          : access
+  app\premium\ai-music\page.tsx:475:            ? `Generate Free Song — ${access.freeRemaining} Left`
+  app\premium\ai-music\page.tsx:476:            : "Generate AI Music";
+  app\premium\ai-music\page.tsx:477:
+  app\premium\ai-music\page.tsx:478:  return (
+  app\premium\ai-music\page.tsx:479:    <main className="min-h-screen bg-[#07070d] px-6 py-10 text-white">
+  app\premium\ai-music\page.tsx:480:      <div className="mx-auto max-w-6xl">
+  app\premium\ai-music\page.tsx:481:        <p className="text-xs font-black uppercase tracking-[0.25em] text-cyan-300">
+  app\premium\ai-music\page.tsx:482:          SOLO BEATS ENGINE MUSIC
+  app\premium\ai-music\page.tsx:483:        </p>
+  app\premium\ai-music\page.tsx:484:
+  app\premium\ai-music\page.tsx:485:        <h1 className="mt-3 text-4xl font-black">
+  app\premium\ai-music\page.tsx:486:          AI Music Generator
+  app\premium\ai-music\page.tsx:487:        </h1>
+  app\premium\ai-music\page.tsx:488:
+  app\premium\ai-music\page.tsx:489:        <p className="mt-3 max-w-3xl text-white/55">
+  app\premium\ai-music\page.tsx:490:          Create original beats and songs
+  app\premium\ai-music\page.tsx:491:          from a prompt.
+  app\premium\ai-music\page.tsx:492:        </p>
+  app\premium\ai-music\page.tsx:493:
+  app\premium\ai-music\page.tsx:494:        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+  app\premium\ai-music\page.tsx:495:          {authLoading ? (
+  app\premium\ai-music\page.tsx:805:                {status}
+  app\premium\ai-music\page.tsx:806:              </p>
+  app\premium\ai-music\page.tsx:807:            </div>
+  app\premium\ai-music\page.tsx:808:
+  app\premium\ai-music\page.tsx:809:            {audioUrl ? (
+  app\premium\ai-music\page.tsx:810:              <div className="mt-6">
+  app\premium\ai-music\page.tsx:811:                <audio
+  app\premium\ai-music\page.tsx:812:                  controls
+  app\premium\ai-music\page.tsx:813:                  src={audioUrl}
+  app\premium\ai-music\page.tsx:814:                  className="w-full"
+  app\premium\ai-music\page.tsx:815:                />
+  app\premium\ai-music\page.tsx:816:
+  app\premium\ai-music\page.tsx:817:                <div className="mt-4 flex flex-wrap gap-3">
+  app\premium\ai-music\page.tsx:818:                  <a
+  app\premium\ai-music\page.tsx:819:                    href={audioUrl}
+> app\premium\ai-music\page.tsx:820:                    download
+  app\premium\ai-music\page.tsx:821:                    className="inline-flex rounded-xl border border-white/15 px-5 py-3 font-black hover:bg-white/10"
+  app\premium\ai-music\page.tsx:822:                  >
+> app\premium\ai-music\page.tsx:823:                    Download Song
+  app\premium\ai-music\page.tsx:824:                  </a>
+  app\premium\ai-music\page.tsx:825:
+> app\premium\ai-music\page.tsx:826:                  {generationId ? (
+  app\premium\ai-music\page.tsx:827:                    <button
+  app\premium\ai-music\page.tsx:828:                      type="button"
+  app\premium\ai-music\page.tsx:829:                      onClick={() =>
+  app\premium\ai-music\page.tsx:830:                        void handleSaveToMediaLibrary()
+  app\premium\ai-music\page.tsx:831:                      }
+  app\premium\ai-music\page.tsx:832:                      disabled={
+  app\premium\ai-music\page.tsx:833:                        savingToMedia
+  app\premium\ai-music\page.tsx:834:                      }
+  app\premium\ai-music\page.tsx:835:                      className="inline-flex rounded-xl bg-fuchsia-600 px-5 py-3 font-black text-white hover:bg-fuchsia-500 disabled:opacity-50"
+  app\premium\ai-music\page.tsx:836:                    >
+  app\premium\ai-music\page.tsx:837:                      {savingToMedia
+  app\premium\ai-music\page.tsx:838:                        ? "Saving..."
+> app\premium\ai-music\page.tsx:839:                        : "Save to Media Library"}
+  app\premium\ai-music\page.tsx:840:                    </button>
+  app\premium\ai-music\page.tsx:841:                  ) : null}
+  app\premium\ai-music\page.tsx:842:                </div>
+  app\premium\ai-music\page.tsx:843:
+  app\premium\ai-music\page.tsx:844:                {mediaMessage ? (
+  app\premium\ai-music\page.tsx:845:                  <p className="mt-3 text-sm font-bold text-fuchsia-200">
+  app\premium\ai-music\page.tsx:846:                    {mediaMessage}
+  app\premium\ai-music\page.tsx:847:                  </p>
+  app\premium\ai-music\page.tsx:848:                ) : null}
+  app\premium\ai-music\page.tsx:849:              </div>
+  app\premium\ai-music\page.tsx:850:            ) : (
+  app\premium\ai-music\page.tsx:851:              <div className="mt-6 grid min-h-64 place-items-center rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
+  app\premium\ai-music\page.tsx:852:                <div>
+  app\premium\ai-music\page.tsx:853:                  <p className="text-xl font-black text-white/60">
+  app\premium\ai-music\page.tsx:854:                    Generated music will
+  app\premium\ai-music\page.tsx:855:                    appear here
+  app\premium\ai-music\page.tsx:856:                  </p>
+  app\premium\ai-music\page.tsx:857:
+  app\premium\ai-music\page.tsx:858:                  <p className="mt-2 text-sm text-white/35">
+  app\premium\ai-music\page.tsx:859:                    Enter a prompt and create
+  app\premium\ai-music\page.tsx:860:                    an AI song.
+  app\premium\ai-music\page.tsx:861:                  </p>
+  app\premium\ai-music\page.tsx:862:                </div>
+  app\premium\ai-music\page.tsx:863:              </div>
+  app\premium\ai-music\page.tsx:864:            )}
+  app\premium\ai-music\page.tsx:865:
+  app\premium\ai-music\page.tsx:866:            <div className="mt-6 rounded-2xl border border-white/10 p-5">
+  app\premium\ai-music\page.tsx:867:              <div className="flex items-center justify-between gap-4">
+  app\premium\ai-music\page.tsx:868:                <div>
+  app\premium\ai-music\page.tsx:869:                  <p className="font-black">
+> app\premium\ai-music\page.tsx:870:                    Recent Generations
+  app\premium\ai-music\page.tsx:871:                  </p>
+  app\premium\ai-music\page.tsx:872:
+  app\premium\ai-music\page.tsx:873:                  <p className="mt-1 text-sm text-white/40">
+  app\premium\ai-music\page.tsx:874:                    Your generated songs are stored privately.
+  app\premium\ai-music\page.tsx:875:                  </p>
+  app\premium\ai-music\page.tsx:876:                </div>
+  app\premium\ai-music\page.tsx:877:
+  app\premium\ai-music\page.tsx:878:                <button
+  app\premium\ai-music\page.tsx:879:                  type="button"
+  app\premium\ai-music\page.tsx:880:                  onClick={() =>
+> app\premium\ai-music\page.tsx:881:                    void loadHistory()
+  app\premium\ai-music\page.tsx:882:                  }
+  app\premium\ai-music\page.tsx:883:                  disabled={
+> app\premium\ai-music\page.tsx:884:                    historyLoading
+  app\premium\ai-music\page.tsx:885:                  }
+  app\premium\ai-music\page.tsx:886:                  className="rounded-xl border border-white/15 px-4 py-2 text-sm font-black hover:bg-white/10 disabled:opacity-50"
+  app\premium\ai-music\page.tsx:887:                >
+> app\premium\ai-music\page.tsx:888:                  {historyLoading
+  app\premium\ai-music\page.tsx:889:                    ? "Loading..."
+  app\premium\ai-music\page.tsx:890:                    : "Refresh"}
+  app\premium\ai-music\page.tsx:891:                </button>
+  app\premium\ai-music\page.tsx:892:              </div>
+  app\premium\ai-music\page.tsx:893:
+> app\premium\ai-music\page.tsx:894:              {recentGenerations.length ? (
+  app\premium\ai-music\page.tsx:895:                <div className="mt-5 space-y-4">
+> app\premium\ai-music\page.tsx:896:                  {recentGenerations
+  app\premium\ai-music\page.tsx:897:                    .slice(0, 10)
+  app\premium\ai-music\page.tsx:898:                    .map((item) => (
+  app\premium\ai-music\page.tsx:899:                      <div
+  app\premium\ai-music\page.tsx:900:                        key={
+> app\premium\ai-music\page.tsx:901:                          item.generationId
+  app\premium\ai-music\page.tsx:902:                        }
+  app\premium\ai-music\page.tsx:903:                        className="rounded-xl border border-white/10 bg-black/25 p-4"
+  app\premium\ai-music\page.tsx:904:                      >
+  app\premium\ai-music\page.tsx:905:                        <p className="font-black">
+  app\premium\ai-music\page.tsx:906:                          {item.genre ||
+  app\premium\ai-music\page.tsx:907:                            "AI Music Generation"}
+  app\premium\ai-music\page.tsx:908:                        </p>
+  app\premium\ai-music\page.tsx:909:
+  app\premium\ai-music\page.tsx:910:                        <p className="mt-1 text-sm text-white/45">
+  app\premium\ai-music\page.tsx:911:                          {item.prompt}
+  app\premium\ai-music\page.tsx:912:                        </p>
+  app\premium\ai-music\page.tsx:913:
+  app\premium\ai-music\page.tsx:914:                        {item.duration ? (
+  app\premium\ai-music\page.tsx:915:                          <p className="mt-2 text-xs text-white/30">
+  app\premium\ai-music\page.tsx:916:                            {item.duration} seconds
+  app\premium\ai-music\page.tsx:917:                          </p>
+  app\premium\ai-music\page.tsx:918:                        ) : null}
+  app\premium\ai-music\page.tsx:919:
+  app\premium\ai-music\page.tsx:920:                        <p className="mt-2 text-xs font-black text-white/40">
+> app\premium\ai-music\page.tsx:921:                          {item.savedToMediaLibrary
+  app\premium\ai-music\page.tsx:922:                            ? "IN MEDIA LIBRARY"
+  app\premium\ai-music\page.tsx:923:                            : "PRIVATE"}
+  app\premium\ai-music\page.tsx:924:                        </p>
+  app\premium\ai-music\page.tsx:925:
+  app\premium\ai-music\page.tsx:926:                        {item.audioUrl ? (
+  app\premium\ai-music\page.tsx:927:                          <div className="mt-4">
+  app\premium\ai-music\page.tsx:928:                            <audio
+  app\premium\ai-music\page.tsx:929:                              controls
+  app\premium\ai-music\page.tsx:930:                              src={
+  app\premium\ai-music\page.tsx:931:                                item.audioUrl
+  app\premium\ai-music\page.tsx:932:                              }
+  app\premium\ai-music\page.tsx:933:                              className="w-full"
+  app\premium\ai-music\page.tsx:934:                            />
+  app\premium\ai-music\page.tsx:935:
+  app\premium\ai-music\page.tsx:936:                            <div className="mt-3 flex flex-wrap gap-3">
+  app\premium\ai-music\page.tsx:937:                              <a
+  app\premium\ai-music\page.tsx:938:                                href={
+  app\premium\ai-music\page.tsx:939:                                  item.audioUrl
+  app\premium\ai-music\page.tsx:940:                                }
+> app\premium\ai-music\page.tsx:941:                                download
+  app\premium\ai-music\page.tsx:942:                                className="inline-flex rounded-xl border border-white/15 px-4 py-2 text-sm font-black hover:bg-white/10"
+  app\premium\ai-music\page.tsx:943:                              >
+> app\premium\ai-music\page.tsx:944:                                Download Song
+  app\premium\ai-music\page.tsx:945:                              </a>
+  app\premium\ai-music\page.tsx:946:
+  app\premium\ai-music\page.tsx:947:                              <button
+  app\premium\ai-music\page.tsx:948:                                type="button"
+  app\premium\ai-music\page.tsx:949:                                onClick={() =>
+  app\premium\ai-music\page.tsx:950:                                  void handleSaveToMediaLibrary(
+> app\premium\ai-music\page.tsx:951:                                    item.generationId
+  app\premium\ai-music\page.tsx:952:                                  )
+  app\premium\ai-music\page.tsx:953:                                }
+  app\premium\ai-music\page.tsx:954:                                disabled={
+  app\premium\ai-music\page.tsx:955:                                  savingToMedia ||
+> app\premium\ai-music\page.tsx:956:                                  item.savedToMediaLibrary
+  app\premium\ai-music\page.tsx:957:                                }
+  app\premium\ai-music\page.tsx:958:                                className="inline-flex rounded-xl bg-fuchsia-600 px-4 py-2 text-sm font-black text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-50"
+  app\premium\ai-music\page.tsx:959:                              >
+> app\premium\ai-music\page.tsx:960:                                {item.savedToMediaLibrary
+  app\premium\ai-music\page.tsx:961:                                  ? "Saved to Media Library"
+  app\premium\ai-music\page.tsx:962:                                  : savingToMedia
+  app\premium\ai-music\page.tsx:963:                                    ? "Saving..."
+> app\premium\ai-music\page.tsx:964:                                    : "Save to Media Library"}
+  app\premium\ai-music\page.tsx:965:                              </button>
+  app\premium\ai-music\page.tsx:966:                            </div>
+  app\premium\ai-music\page.tsx:967:                          </div>
+  app\premium\ai-music\page.tsx:968:                        ) : null}
+  app\premium\ai-music\page.tsx:969:                      </div>
+  app\premium\ai-music\page.tsx:970:                    ))}
+  app\premium\ai-music\page.tsx:971:                </div>
+  app\premium\ai-music\page.tsx:972:              ) : (
+  app\premium\ai-music\page.tsx:973:                <p className="mt-5 text-sm text-white/40">
+> app\premium\ai-music\page.tsx:974:                  {historyLoading
+> app\premium\ai-music\page.tsx:975:                    ? "Loading history..."
+  app\premium\ai-music\page.tsx:976:                    : "No stored generations yet."}
+  app\premium\ai-music\page.tsx:977:                </p>
+  app\premium\ai-music\page.tsx:978:              )}
+  app\premium\ai-music\page.tsx:979:            </div>
+  app\premium\ai-music\page.tsx:980:          </section>
+  app\premium\ai-music\page.tsx:981:        </div>
+  app\premium\ai-music\page.tsx:982:      </div>
+  app\premium\ai-music\page.tsx:983:    </main>
+  app\premium\ai-music\page.tsx:984:  );
+  app\premium\ai-music\page.tsx:985:}
+  app\premium\ai-music\page.tsx:986:
+
+
+
+
+
+===================================================
+8. AI VIDEO SONG SOURCE TARGETS
+===================================================
+
+  app\premium\ai-video\page.tsx:288:    setGenerationMode,
+  app\premium\ai-video\page.tsx:289:  ] =
+  app\premium\ai-video\page.tsx:290:    useState<GenerationMode>(
+  app\premium\ai-video\page.tsx:291:      "text"
+  app\premium\ai-video\page.tsx:292:    );
+  app\premium\ai-video\page.tsx:293:
+  app\premium\ai-video\page.tsx:294:  const [
+  app\premium\ai-video\page.tsx:295:    imageFile,
+  app\premium\ai-video\page.tsx:296:    setImageFile,
+  app\premium\ai-video\page.tsx:297:  ] =
+  app\premium\ai-video\page.tsx:298:    useState<File | null>(
+  app\premium\ai-video\page.tsx:299:      null
+  app\premium\ai-video\page.tsx:300:    );
+  app\premium\ai-video\page.tsx:301:
+  app\premium\ai-video\page.tsx:302:  const [
+> app\premium\ai-video\page.tsx:303:    audioFile,
+> app\premium\ai-video\page.tsx:304:    setAudioFile,
+  app\premium\ai-video\page.tsx:305:  ] =
+  app\premium\ai-video\page.tsx:306:    useState<File | null>(
+  app\premium\ai-video\page.tsx:307:      null
+  app\premium\ai-video\page.tsx:308:    );
+  app\premium\ai-video\page.tsx:309:
+  app\premium\ai-video\page.tsx:310:  const [
+  app\premium\ai-video\page.tsx:311:    prompt,
+  app\premium\ai-video\page.tsx:312:    setPrompt,
+  app\premium\ai-video\page.tsx:313:  ] =
+  app\premium\ai-video\page.tsx:314:    useState("");
+  app\premium\ai-video\page.tsx:315:
+  app\premium\ai-video\page.tsx:316:  const [
+  app\premium\ai-video\page.tsx:317:    aspectRatio,
+  app\premium\ai-video\page.tsx:318:    setAspectRatio,
+  app\premium\ai-video\page.tsx:319:  ] =
+  app\premium\ai-video\page.tsx:320:    useState<AspectRatio>(
+  app\premium\ai-video\page.tsx:321:      "16:9"
+  app\premium\ai-video\page.tsx:322:    );
+  app\premium\ai-video\page.tsx:323:
+  app\premium\ai-video\page.tsx:324:  const [
+  app\premium\ai-video\page.tsx:325:    duration,
+  app\premium\ai-video\page.tsx:326:    setDuration,
+  app\premium\ai-video\page.tsx:327:  ] =
+  app\premium\ai-video\page.tsx:328:    useState<Duration>(
+  app\premium\ai-video\page.tsx:329:      "10"
+  app\premium\ai-video\page.tsx:330:    );
+  app\premium\ai-video\page.tsx:331:
+  app\premium\ai-video\page.tsx:332:  const [
+  app\premium\ai-video\page.tsx:333:    creating,
+  app\premium\ai-video\page.tsx:334:    setCreating,
+  app\premium\ai-video\page.tsx:335:  ] =
+  app\premium\ai-video\page.tsx:336:    useState(false);
+  app\premium\ai-video\page.tsx:337:
+  app\premium\ai-video\page.tsx:338:  const [
+  app\premium\ai-video\page.tsx:339:    generationMessage,
+  app\premium\ai-video\page.tsx:340:    setGenerationMessage,
+  app\premium\ai-video\page.tsx:341:  ] =
+  app\premium\ai-video\page.tsx:342:    useState(
+  app\premium\ai-video\page.tsx:343:      "Ready to generate."
+  app\premium\ai-video\page.tsx:344:    );
+  app\premium\ai-video\page.tsx:345:
+  app\premium\ai-video\page.tsx:346:  const [
+  app\premium\ai-video\page.tsx:347:    generationError,
+  app\premium\ai-video\page.tsx:348:    setGenerationError,
+  app\premium\ai-video\page.tsx:349:  ] =
+  app\premium\ai-video\page.tsx:994:      job.aspectRatio === "9:16"
+  app\premium\ai-video\page.tsx:995:    ) {
+  app\premium\ai-video\page.tsx:996:      setAspectRatio(job.aspectRatio);
+  app\premium\ai-video\page.tsx:997:    }
+  app\premium\ai-video\page.tsx:998:
+  app\premium\ai-video\page.tsx:999:    if (
+  app\premium\ai-video\page.tsx:1000:      job.duration === 5 ||
+  app\premium\ai-video\page.tsx:1001:      job.duration === 10
+  app\premium\ai-video\page.tsx:1002:    ) {
+  app\premium\ai-video\page.tsx:1003:      setDuration(
+  app\premium\ai-video\page.tsx:1004:        String(job.duration) as Duration
+  app\premium\ai-video\page.tsx:1005:      );
+  app\premium\ai-video\page.tsx:1006:    }
+  app\premium\ai-video\page.tsx:1007:
+  app\premium\ai-video\page.tsx:1008:    setImageFile(null);
+> app\premium\ai-video\page.tsx:1009:    setAudioFile(null);
+  app\premium\ai-video\page.tsx:1010:    setGenerationError(null);
+  app\premium\ai-video\page.tsx:1011:
+  app\premium\ai-video\page.tsx:1012:    setRecentJobsActionMessage(
+  app\premium\ai-video\page.tsx:1013:      job.mode === "image" ||
+  app\premium\ai-video\page.tsx:1014:      job.mode === "music"
+  app\premium\ai-video\page.tsx:1015:        ? "Prompt and settings loaded. Re-select the source files before generating."
+  app\premium\ai-video\page.tsx:1016:        : "Prompt and settings loaded into the generator."
+  app\premium\ai-video\page.tsx:1017:    );
+  app\premium\ai-video\page.tsx:1018:
+  app\premium\ai-video\page.tsx:1019:    window.scrollTo({
+  app\premium\ai-video\page.tsx:1020:      top: 0,
+  app\premium\ai-video\page.tsx:1021:      behavior: "smooth",
+  app\premium\ai-video\page.tsx:1022:    });
+  app\premium\ai-video\page.tsx:1023:  }
+  app\premium\ai-video\page.tsx:1024:
+  app\premium\ai-video\page.tsx:1025:  const loadRecentJobs =
+  app\premium\ai-video\page.tsx:1026:    useCallback(
+  app\premium\ai-video\page.tsx:1027:      async () => {
+  app\premium\ai-video\page.tsx:1028:        if (!user) {
+  app\premium\ai-video\page.tsx:1029:          setRecentJobs([]);
+  app\premium\ai-video\page.tsx:1030:          return;
+  app\premium\ai-video\page.tsx:1031:        }
+  app\premium\ai-video\page.tsx:1032:
+  app\premium\ai-video\page.tsx:1033:        setRecentJobsLoading(true);
+  app\premium\ai-video\page.tsx:1034:        setRecentJobsError(null);
+  app\premium\ai-video\page.tsx:1035:
+  app\premium\ai-video\page.tsx:1036:        try {
+  app\premium\ai-video\page.tsx:1037:          const token =
+  app\premium\ai-video\page.tsx:1038:            await user.getIdToken();
+  app\premium\ai-video\page.tsx:1039:
+  app\premium\ai-video\page.tsx:1040:          const response =
+  app\premium\ai-video\page.tsx:1041:            await fetch(
+  app\premium\ai-video\page.tsx:1042:              "/api/owner/ai-video/jobs",
+  app\premium\ai-video\page.tsx:1043:              {
+  app\premium\ai-video\page.tsx:1044:                headers: {
+  app\premium\ai-video\page.tsx:1045:                  Authorization:
+  app\premium\ai-video\page.tsx:1046:                    `Bearer ${token}`,
+  app\premium\ai-video\page.tsx:1047:                },
+  app\premium\ai-video\page.tsx:1048:                cache:
+  app\premium\ai-video\page.tsx:1049:                  "no-store",
+  app\premium\ai-video\page.tsx:1050:              }
+  app\premium\ai-video\page.tsx:1051:            );
+  app\premium\ai-video\page.tsx:1052:
+  app\premium\ai-video\page.tsx:1053:          const data =
+  app\premium\ai-video\page.tsx:1054:            (await response.json()) as {
+  app\premium\ai-video\page.tsx:1577:
+  app\premium\ai-video\page.tsx:1578:    return () => {
+  app\premium\ai-video\page.tsx:1579:      cancelled = true;
+  app\premium\ai-video\page.tsx:1580:    };
+  app\premium\ai-video\page.tsx:1581:  }, [
+  app\premium\ai-video\page.tsx:1582:    user,
+  app\premium\ai-video\page.tsx:1583:    loadCredits,
+  app\premium\ai-video\page.tsx:1584:  ]);
+  app\premium\ai-video\page.tsx:1585:  function startAnotherGeneration() {
+  app\premium\ai-video\page.tsx:1586:    if (creating) {
+  app\premium\ai-video\page.tsx:1587:      return;
+  app\premium\ai-video\page.tsx:1588:    }
+  app\premium\ai-video\page.tsx:1589:
+  app\premium\ai-video\page.tsx:1590:    setPrompt("");
+  app\premium\ai-video\page.tsx:1591:    setImageFile(null);
+> app\premium\ai-video\page.tsx:1592:    setAudioFile(null);
+  app\premium\ai-video\page.tsx:1593:
+  app\premium\ai-video\page.tsx:1594:    setCurrentJobId(null);
+  app\premium\ai-video\page.tsx:1595:    setProgress(0);
+  app\premium\ai-video\page.tsx:1596:    setOutputUrl(null);
+  app\premium\ai-video\page.tsx:1597:
+  app\premium\ai-video\page.tsx:1598:    setSavedVideoMediaId(null);
+  app\premium\ai-video\page.tsx:1599:    setSaveVideoMessage(null);
+  app\premium\ai-video\page.tsx:1600:    setSaveVideoError(null);
+  app\premium\ai-video\page.tsx:1601:
+  app\premium\ai-video\page.tsx:1602:    setGenerationError(null);
+  app\premium\ai-video\page.tsx:1603:    setGenerationMessage(
+  app\premium\ai-video\page.tsx:1604:      "Ready for another generation."
+  app\premium\ai-video\page.tsx:1605:    );
+  app\premium\ai-video\page.tsx:1606:
+  app\premium\ai-video\page.tsx:1607:    if (user) {
+  app\premium\ai-video\page.tsx:1608:      window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1609:        AI_VIDEO_ACTIVE_JOB_KEY
+  app\premium\ai-video\page.tsx:1610:      );
+  app\premium\ai-video\page.tsx:1611:
+  app\premium\ai-video\page.tsx:1612:      window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1613:        AI_VIDEO_LAST_OUTPUT_KEY +
+  app\premium\ai-video\page.tsx:1614:          ":" +
+  app\premium\ai-video\page.tsx:1615:          user.uid
+  app\premium\ai-video\page.tsx:1616:      );
+  app\premium\ai-video\page.tsx:1617:
+  app\premium\ai-video\page.tsx:1618:      window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1619:        AI_VIDEO_LAST_JOB_KEY +
+  app\premium\ai-video\page.tsx:1620:          ":" +
+  app\premium\ai-video\page.tsx:1621:          user.uid
+  app\premium\ai-video\page.tsx:1622:      );
+  app\premium\ai-video\page.tsx:1623:
+  app\premium\ai-video\page.tsx:1624:      window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1625:        AI_VIDEO_SAVED_MEDIA_KEY +
+  app\premium\ai-video\page.tsx:1626:          ":" +
+  app\premium\ai-video\page.tsx:1627:          user.uid
+  app\premium\ai-video\page.tsx:1628:      );
+  app\premium\ai-video\page.tsx:1629:    }
+  app\premium\ai-video\page.tsx:1630:  }
+  app\premium\ai-video\page.tsx:1631:
+  app\premium\ai-video\page.tsx:1632:  function useLastRecentPrompt() {
+  app\premium\ai-video\page.tsx:1633:    const previous =
+  app\premium\ai-video\page.tsx:1634:      recentJobs.find(
+  app\premium\ai-video\page.tsx:1635:        (job) =>
+  app\premium\ai-video\page.tsx:1636:          typeof job.prompt ===
+  app\premium\ai-video\page.tsx:1637:            "string" &&
+  app\premium\ai-video\page.tsx:1668:      );
+  app\premium\ai-video\page.tsx:1669:    }
+  app\premium\ai-video\page.tsx:1670:
+  app\premium\ai-video\page.tsx:1671:    if (
+  app\premium\ai-video\page.tsx:1672:      previous.duration === 5 ||
+  app\premium\ai-video\page.tsx:1673:      previous.duration === 10
+  app\premium\ai-video\page.tsx:1674:    ) {
+  app\premium\ai-video\page.tsx:1675:      setDuration(
+  app\premium\ai-video\page.tsx:1676:        String(
+  app\premium\ai-video\page.tsx:1677:          previous.duration
+  app\premium\ai-video\page.tsx:1678:        ) as Duration
+  app\premium\ai-video\page.tsx:1679:      );
+  app\premium\ai-video\page.tsx:1680:    }
+  app\premium\ai-video\page.tsx:1681:
+  app\premium\ai-video\page.tsx:1682:    setImageFile(null);
+> app\premium\ai-video\page.tsx:1683:    setAudioFile(null);
+  app\premium\ai-video\page.tsx:1684:    setGenerationError(null);
+  app\premium\ai-video\page.tsx:1685:
+  app\premium\ai-video\page.tsx:1686:    setGenerationMessage(
+  app\premium\ai-video\page.tsx:1687:      "Previous prompt and settings loaded."
+  app\premium\ai-video\page.tsx:1688:    );
+  app\premium\ai-video\page.tsx:1689:
+  app\premium\ai-video\page.tsx:1690:    window.scrollTo({
+  app\premium\ai-video\page.tsx:1691:      top: 0,
+  app\premium\ai-video\page.tsx:1692:      behavior: "smooth",
+  app\premium\ai-video\page.tsx:1693:    });
+  app\premium\ai-video\page.tsx:1694:  }
+  app\premium\ai-video\page.tsx:1695:
+  app\premium\ai-video\page.tsx:1696:  async function handleGenerate() {
+  app\premium\ai-video\page.tsx:1697:    if (
+  app\premium\ai-video\page.tsx:1698:      !user ||
+  app\premium\ai-video\page.tsx:1699:      creating
+  app\premium\ai-video\page.tsx:1700:    ) {
+  app\premium\ai-video\page.tsx:1701:      return;
+  app\premium\ai-video\page.tsx:1702:    }
+  app\premium\ai-video\page.tsx:1703:
+  app\premium\ai-video\page.tsx:1704:    const cleanPrompt =
+  app\premium\ai-video\page.tsx:1705:      prompt.trim();
+  app\premium\ai-video\page.tsx:1706:
+  app\premium\ai-video\page.tsx:1707:    if (
+  app\premium\ai-video\page.tsx:1708:      cleanPrompt.length >
+  app\premium\ai-video\page.tsx:1709:      2000
+  app\premium\ai-video\page.tsx:1710:    ) {
+  app\premium\ai-video\page.tsx:1711:      setGenerationError(
+  app\premium\ai-video\page.tsx:1712:        "Prompt is too long. Keep it under 2,000 characters."
+  app\premium\ai-video\page.tsx:1713:      );
+  app\premium\ai-video\page.tsx:1714:      return;
+  app\premium\ai-video\page.tsx:1715:    }
+  app\premium\ai-video\page.tsx:1716:
+  app\premium\ai-video\page.tsx:1717:    if (
+  app\premium\ai-video\page.tsx:1718:      generationMode === "image" ||
+  app\premium\ai-video\page.tsx:1719:      generationMode === "music"
+  app\premium\ai-video\page.tsx:1720:    ) {
+  app\premium\ai-video\page.tsx:1721:      if (!imageFile) {
+  app\premium\ai-video\page.tsx:1722:        setGenerationError(
+  app\premium\ai-video\page.tsx:1723:          "Choose an image or album cover first."
+  app\premium\ai-video\page.tsx:1724:        );
+  app\premium\ai-video\page.tsx:1725:        return;
+  app\premium\ai-video\page.tsx:1726:      }
+  app\premium\ai-video\page.tsx:1727:
+  app\premium\ai-video\page.tsx:1728:      const imageError =
+  app\premium\ai-video\page.tsx:1730:          imageFile
+  app\premium\ai-video\page.tsx:1731:        );
+  app\premium\ai-video\page.tsx:1732:
+  app\premium\ai-video\page.tsx:1733:      if (imageError) {
+  app\premium\ai-video\page.tsx:1734:        setGenerationError(
+  app\premium\ai-video\page.tsx:1735:          imageError
+  app\premium\ai-video\page.tsx:1736:        );
+  app\premium\ai-video\page.tsx:1737:        return;
+  app\premium\ai-video\page.tsx:1738:      }
+  app\premium\ai-video\page.tsx:1739:    }
+  app\premium\ai-video\page.tsx:1740:
+  app\premium\ai-video\page.tsx:1741:    if (
+  app\premium\ai-video\page.tsx:1742:      generationMode ===
+  app\premium\ai-video\page.tsx:1743:      "music"
+  app\premium\ai-video\page.tsx:1744:    ) {
+> app\premium\ai-video\page.tsx:1745:      if (!audioFile) {
+  app\premium\ai-video\page.tsx:1746:        setGenerationError(
+> app\premium\ai-video\page.tsx:1747:          "Choose a song or audio file first."
+  app\premium\ai-video\page.tsx:1748:        );
+  app\premium\ai-video\page.tsx:1749:        return;
+  app\premium\ai-video\page.tsx:1750:      }
+  app\premium\ai-video\page.tsx:1751:
+  app\premium\ai-video\page.tsx:1752:      const audioError =
+  app\premium\ai-video\page.tsx:1753:        audioValidationError(
+> app\premium\ai-video\page.tsx:1754:          audioFile
+  app\premium\ai-video\page.tsx:1755:        );
+  app\premium\ai-video\page.tsx:1756:
+  app\premium\ai-video\page.tsx:1757:      if (audioError) {
+  app\premium\ai-video\page.tsx:1758:        setGenerationError(
+  app\premium\ai-video\page.tsx:1759:          audioError
+  app\premium\ai-video\page.tsx:1760:        );
+  app\premium\ai-video\page.tsx:1761:        return;
+  app\premium\ai-video\page.tsx:1762:      }
+  app\premium\ai-video\page.tsx:1763:    }
+  app\premium\ai-video\page.tsx:1764:
+  app\premium\ai-video\page.tsx:1765:    if (!cleanPrompt) {
+  app\premium\ai-video\page.tsx:1766:      setGenerationError(
+  app\premium\ai-video\page.tsx:1767:        "Enter a generation prompt."
+  app\premium\ai-video\page.tsx:1768:      );
+  app\premium\ai-video\page.tsx:1769:      return;
+  app\premium\ai-video\page.tsx:1770:    }
+  app\premium\ai-video\page.tsx:1771:
+  app\premium\ai-video\page.tsx:1772:    if (
+  app\premium\ai-video\page.tsx:1773:      (
+  app\premium\ai-video\page.tsx:1774:        generationMode ===
+  app\premium\ai-video\page.tsx:1775:          "image" ||
+  app\premium\ai-video\page.tsx:1776:        generationMode ===
+  app\premium\ai-video\page.tsx:1777:          "music"
+  app\premium\ai-video\page.tsx:1778:      ) &&
+  app\premium\ai-video\page.tsx:1779:      !imageFile
+  app\premium\ai-video\page.tsx:1780:    ) {
+  app\premium\ai-video\page.tsx:1781:      setGenerationError(
+  app\premium\ai-video\page.tsx:1782:        "Choose an image or album cover first."
+  app\premium\ai-video\page.tsx:1783:      );
+  app\premium\ai-video\page.tsx:1784:      return;
+  app\premium\ai-video\page.tsx:1785:    }
+  app\premium\ai-video\page.tsx:1786:
+  app\premium\ai-video\page.tsx:1787:    if (
+  app\premium\ai-video\page.tsx:1788:      generationMode ===
+  app\premium\ai-video\page.tsx:1789:        "music" &&
+> app\premium\ai-video\page.tsx:1790:      !audioFile
+  app\premium\ai-video\page.tsx:1791:    ) {
+  app\premium\ai-video\page.tsx:1792:      setGenerationError(
+> app\premium\ai-video\page.tsx:1793:        "Choose a song or audio file first."
+  app\premium\ai-video\page.tsx:1794:      );
+  app\premium\ai-video\page.tsx:1795:      return;
+  app\premium\ai-video\page.tsx:1796:    }
+  app\premium\ai-video\page.tsx:1797:
+  app\premium\ai-video\page.tsx:1798:    if (!hasEnoughCredits) {
+  app\premium\ai-video\page.tsx:1799:      setGenerationError(
+  app\premium\ai-video\page.tsx:1800:        `You need ${selectedCreditCost} AI Video credit${
+  app\premium\ai-video\page.tsx:1801:          selectedCreditCost ===
+  app\premium\ai-video\page.tsx:1802:          1
+  app\premium\ai-video\page.tsx:1803:            ? ""
+  app\premium\ai-video\page.tsx:1804:            : "s"
+  app\premium\ai-video\page.tsx:1805:        } for this generation.`
+  app\premium\ai-video\page.tsx:1806:      );
+  app\premium\ai-video\page.tsx:1807:      return;
+  app\premium\ai-video\page.tsx:1808:    }
+  app\premium\ai-video\page.tsx:1809:
+  app\premium\ai-video\page.tsx:1810:    setCreating(true);
+  app\premium\ai-video\page.tsx:1811:    setGenerationError(
+  app\premium\ai-video\page.tsx:1812:      null
+  app\premium\ai-video\page.tsx:1813:    );
+  app\premium\ai-video\page.tsx:1814:    setOutputUrl(null);
+  app\premium\ai-video\page.tsx:1815:
+  app\premium\ai-video\page.tsx:1816:    window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1817:      `${AI_VIDEO_LAST_OUTPUT_KEY}:${user.uid}`
+  app\premium\ai-video\page.tsx:1818:    );
+  app\premium\ai-video\page.tsx:1819:
+  app\premium\ai-video\page.tsx:1820:    window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1821:      `${AI_VIDEO_LAST_JOB_KEY}:${user.uid}`
+  app\premium\ai-video\page.tsx:1822:    );
+  app\premium\ai-video\page.tsx:1823:
+  app\premium\ai-video\page.tsx:1824:    window.localStorage.removeItem(
+  app\premium\ai-video\page.tsx:1825:      `${AI_VIDEO_SAVED_MEDIA_KEY}:${user.uid}`
+  app\premium\ai-video\page.tsx:1826:    );
+  app\premium\ai-video\page.tsx:1827:
+  app\premium\ai-video\page.tsx:1828:    setSavedVideoMediaId(null);
+  app\premium\ai-video\page.tsx:1829:    setSaveVideoMessage(null);
+  app\premium\ai-video\page.tsx:1830:    setSaveVideoError(null);
+  app\premium\ai-video\page.tsx:1831:
+  app\premium\ai-video\page.tsx:1832:    setCurrentJobId(null);
+  app\premium\ai-video\page.tsx:1833:    setProgress(0);
+  app\premium\ai-video\page.tsx:1834:
+  app\premium\ai-video\page.tsx:1835:    try {
+  app\premium\ai-video\page.tsx:1836:      const token =
+  app\premium\ai-video\page.tsx:1837:        await user.getIdToken();
+  app\premium\ai-video\page.tsx:1838:
+  app\premium\ai-video\page.tsx:1868:                  ),
+  app\premium\ai-video\page.tsx:1869:                imageName:
+  app\premium\ai-video\page.tsx:1870:                  (
+  app\premium\ai-video\page.tsx:1871:                    generationMode ===
+  app\premium\ai-video\page.tsx:1872:                      "image" ||
+  app\premium\ai-video\page.tsx:1873:                    generationMode ===
+  app\premium\ai-video\page.tsx:1874:                      "music"
+  app\premium\ai-video\page.tsx:1875:                  )
+  app\premium\ai-video\page.tsx:1876:                    ? imageFile
+  app\premium\ai-video\page.tsx:1877:                        ?.name ||
+  app\premium\ai-video\page.tsx:1878:                      null
+  app\premium\ai-video\page.tsx:1879:                    : null,
+  app\premium\ai-video\page.tsx:1880:                audioName:
+  app\premium\ai-video\page.tsx:1881:                  generationMode ===
+  app\premium\ai-video\page.tsx:1882:                    "music"
+> app\premium\ai-video\page.tsx:1883:                    ? audioFile
+  app\premium\ai-video\page.tsx:1884:                        ?.name ||
+  app\premium\ai-video\page.tsx:1885:                      null
+  app\premium\ai-video\page.tsx:1886:                    : null,
+  app\premium\ai-video\page.tsx:1887:              }),
+  app\premium\ai-video\page.tsx:1888:          }
+  app\premium\ai-video\page.tsx:1889:        );
+  app\premium\ai-video\page.tsx:1890:
+  app\premium\ai-video\page.tsx:1891:      const jobData =
+  app\premium\ai-video\page.tsx:1892:        (await jobResponse.json()) as {
+  app\premium\ai-video\page.tsx:1893:          success?: boolean;
+  app\premium\ai-video\page.tsx:1894:          job?: {
+  app\premium\ai-video\page.tsx:1895:            id?: string;
+  app\premium\ai-video\page.tsx:1896:          };
+  app\premium\ai-video\page.tsx:1897:          error?: string;
+  app\premium\ai-video\page.tsx:1898:        };
+  app\premium\ai-video\page.tsx:1899:
+  app\premium\ai-video\page.tsx:1900:      if (
+  app\premium\ai-video\page.tsx:1901:        !jobResponse.ok ||
+  app\premium\ai-video\page.tsx:1902:        !jobData.success ||
+  app\premium\ai-video\page.tsx:1903:        !jobData.job?.id
+  app\premium\ai-video\page.tsx:1904:      ) {
+  app\premium\ai-video\page.tsx:1905:        throw new Error(
+  app\premium\ai-video\page.tsx:1906:          jobData.error ||
+  app\premium\ai-video\page.tsx:1907:            "AI video job could not be created."
+  app\premium\ai-video\page.tsx:1908:        );
+  app\premium\ai-video\page.tsx:1909:      }
+  app\premium\ai-video\page.tsx:1910:
+  app\premium\ai-video\page.tsx:1911:      const jobId =
+  app\premium\ai-video\page.tsx:1912:        jobData.job.id;
+  app\premium\ai-video\page.tsx:1913:
+  app\premium\ai-video\page.tsx:1914:      setCurrentJobId(
+  app\premium\ai-video\page.tsx:1915:        jobId
+  app\premium\ai-video\page.tsx:1916:      );
+  app\premium\ai-video\page.tsx:1917:
+  app\premium\ai-video\page.tsx:1918:      
+  app\premium\ai-video\page.tsx:1919:      window.localStorage.setItem(
+  app\premium\ai-video\page.tsx:1920:        AI_VIDEO_ACTIVE_JOB_KEY,
+  app\premium\ai-video\page.tsx:1921:        jobId
+  app\premium\ai-video\page.tsx:1922:      );
+  app\premium\ai-video\page.tsx:1923:
+  app\premium\ai-video\page.tsx:1924:      if (
+  app\premium\ai-video\page.tsx:1925:        generationMode ===
+  app\premium\ai-video\page.tsx:1926:          "image" ||
+  app\premium\ai-video\page.tsx:1927:        generationMode ===
+  app\premium\ai-video\page.tsx:1928:          "music"
+  app\premium\ai-video\page.tsx:1971:            success?: boolean;
+  app\premium\ai-video\page.tsx:1972:            error?: string;
+  app\premium\ai-video\page.tsx:1973:          };
+  app\premium\ai-video\page.tsx:1974:
+  app\premium\ai-video\page.tsx:1975:        if (
+  app\premium\ai-video\page.tsx:1976:          !imageResponse.ok ||
+  app\premium\ai-video\page.tsx:1977:          !imageData.success
+  app\premium\ai-video\page.tsx:1978:        ) {
+  app\premium\ai-video\page.tsx:1979:          throw new Error(
+  app\premium\ai-video\page.tsx:1980:            imageData.error ||
+  app\premium\ai-video\page.tsx:1981:              "Source image could not be uploaded."
+  app\premium\ai-video\page.tsx:1982:          );
+  app\premium\ai-video\page.tsx:1983:        }
+  app\premium\ai-video\page.tsx:1984:      }
+  app\premium\ai-video\page.tsx:1985:
+> app\premium\ai-video\page.tsx:1986:      let uploadedAudioMediaId:
+  app\premium\ai-video\page.tsx:1987:        string | null = null;
+  app\premium\ai-video\page.tsx:1988:
+  app\premium\ai-video\page.tsx:1989:      if (
+  app\premium\ai-video\page.tsx:1990:        generationMode ===
+  app\premium\ai-video\page.tsx:1991:          "music"
+  app\premium\ai-video\page.tsx:1992:      ) {
+> app\premium\ai-video\page.tsx:1993:        if (!audioFile) {
+  app\premium\ai-video\page.tsx:1994:          throw new Error(
+> app\premium\ai-video\page.tsx:1995:            "Choose a song or audio file first."
+  app\premium\ai-video\page.tsx:1996:          );
+  app\premium\ai-video\page.tsx:1997:        }
+  app\premium\ai-video\page.tsx:1998:
+  app\premium\ai-video\page.tsx:1999:        setGenerationMessage(
+  app\premium\ai-video\page.tsx:2000:          "Uploading song..."
+  app\premium\ai-video\page.tsx:2001:        );
+  app\premium\ai-video\page.tsx:2002:
+  app\premium\ai-video\page.tsx:2003:        const audioFormData =
+  app\premium\ai-video\page.tsx:2004:          new FormData();
+  app\premium\ai-video\page.tsx:2005:
+  app\premium\ai-video\page.tsx:2006:        audioFormData.append(
+  app\premium\ai-video\page.tsx:2007:          "jobId",
+  app\premium\ai-video\page.tsx:2008:          jobId
+  app\premium\ai-video\page.tsx:2009:        );
+  app\premium\ai-video\page.tsx:2010:
+  app\premium\ai-video\page.tsx:2011:        audioFormData.append(
+  app\premium\ai-video\page.tsx:2012:          "audio",
+> app\premium\ai-video\page.tsx:2013:          audioFile
+  app\premium\ai-video\page.tsx:2014:        );
+  app\premium\ai-video\page.tsx:2015:
+  app\premium\ai-video\page.tsx:2016:        const audioResponse =
+  app\premium\ai-video\page.tsx:2017:          await fetch(
+> app\premium\ai-video\page.tsx:2018:            "/api/owner/ai-video/source-audio",
+  app\premium\ai-video\page.tsx:2019:            {
+  app\premium\ai-video\page.tsx:2020:              method: "POST",
+  app\premium\ai-video\page.tsx:2021:              headers: {
+  app\premium\ai-video\page.tsx:2022:                Authorization:
+  app\premium\ai-video\page.tsx:2023:                  `Bearer ${token}`,
+  app\premium\ai-video\page.tsx:2024:              },
+  app\premium\ai-video\page.tsx:2025:              body:
+  app\premium\ai-video\page.tsx:2026:                audioFormData,
+  app\premium\ai-video\page.tsx:2027:            }
+  app\premium\ai-video\page.tsx:2028:          );
+  app\premium\ai-video\page.tsx:2029:
+  app\premium\ai-video\page.tsx:2030:        const audioData =
+  app\premium\ai-video\page.tsx:2031:          (await audioResponse.json()) as {
+  app\premium\ai-video\page.tsx:2032:            success?: boolean;
+  app\premium\ai-video\page.tsx:2033:            audioMediaId?: string;
+  app\premium\ai-video\page.tsx:2034:            error?: string;
+  app\premium\ai-video\page.tsx:2035:          };
+  app\premium\ai-video\page.tsx:2036:
+  app\premium\ai-video\page.tsx:2037:        if (
+  app\premium\ai-video\page.tsx:2038:          !audioResponse.ok ||
+  app\premium\ai-video\page.tsx:2039:          !audioData.success ||
+  app\premium\ai-video\page.tsx:2040:          !audioData.audioMediaId
+  app\premium\ai-video\page.tsx:2041:        ) {
+  app\premium\ai-video\page.tsx:2042:          throw new Error(
+  app\premium\ai-video\page.tsx:2043:            audioData.error ||
+  app\premium\ai-video\page.tsx:2044:              "Song could not be uploaded."
+  app\premium\ai-video\page.tsx:2045:          );
+  app\premium\ai-video\page.tsx:2046:        }
+  app\premium\ai-video\page.tsx:2047:
+> app\premium\ai-video\page.tsx:2048:        uploadedAudioMediaId =
+  app\premium\ai-video\page.tsx:2049:          audioData.audioMediaId;
+  app\premium\ai-video\page.tsx:2050:      }
+  app\premium\ai-video\page.tsx:2051:
+  app\premium\ai-video\page.tsx:2052:      setGenerationMessage(
+  app\premium\ai-video\page.tsx:2053:        generationMode ===
+  app\premium\ai-video\page.tsx:2054:          "music"
+  app\premium\ai-video\page.tsx:2055:          ? "Creating Song + Cover visual..."
+  app\premium\ai-video\page.tsx:2056:          : generationMode ===
+  app\premium\ai-video\page.tsx:2057:              "image"
+  app\premium\ai-video\page.tsx:2058:            ? "Sending Image to Video job to Runway..."
+  app\premium\ai-video\page.tsx:2059:            : "Sending your job to Runway..."
+  app\premium\ai-video\page.tsx:2060:      );
+  app\premium\ai-video\page.tsx:2061:
+  app\premium\ai-video\page.tsx:2062:      const runwayResponse =
+  app\premium\ai-video\page.tsx:2063:        await fetch(
+  app\premium\ai-video\page.tsx:2064:          "/api/owner/ai-video/runway",
+  app\premium\ai-video\page.tsx:2065:          {
+  app\premium\ai-video\page.tsx:2066:            method: "POST",
+  app\premium\ai-video\page.tsx:2067:            headers: {
+  app\premium\ai-video\page.tsx:2068:              Authorization:
+  app\premium\ai-video\page.tsx:2069:                `Bearer ${token}`,
+  app\premium\ai-video\page.tsx:2070:              "Content-Type":
+  app\premium\ai-video\page.tsx:2071:                "application/json",
+  app\premium\ai-video\page.tsx:2072:            },
+  app\premium\ai-video\page.tsx:2073:            body:
+  app\premium\ai-video\page.tsx:2074:              JSON.stringify({
+  app\premium\ai-video\page.tsx:2075:                jobId,
+  app\premium\ai-video\page.tsx:2076:              }),
+  app\premium\ai-video\page.tsx:2077:          }
+  app\premium\ai-video\page.tsx:2078:        );
+  app\premium\ai-video\page.tsx:2079:
+  app\premium\ai-video\page.tsx:2080:      const runwayData =
+  app\premium\ai-video\page.tsx:2081:        (await runwayResponse.json()) as {
+  app\premium\ai-video\page.tsx:2082:          success?: boolean;
+  app\premium\ai-video\page.tsx:2083:          status?: string;
+  app\premium\ai-video\page.tsx:2084:          progress?: number;
+  app\premium\ai-video\page.tsx:2085:          error?: string;
+  app\premium\ai-video\page.tsx:2086:        };
+  app\premium\ai-video\page.tsx:2087:
+  app\premium\ai-video\page.tsx:2088:      if (
+  app\premium\ai-video\page.tsx:2089:        !runwayResponse.ok ||
+  app\premium\ai-video\page.tsx:2090:        !runwayData.success
+  app\premium\ai-video\page.tsx:2091:      ) {
+  app\premium\ai-video\page.tsx:2092:        throw new Error(
+  app\premium\ai-video\page.tsx:2093:          runwayData.error ||
+  app\premium\ai-video\page.tsx:2108:        "Runway generation started."
+  app\premium\ai-video\page.tsx:2109:      );
+  app\premium\ai-video\page.tsx:2110:
+  app\premium\ai-video\page.tsx:2111:      await loadCredits();
+  app\premium\ai-video\page.tsx:2112:
+  app\premium\ai-video\page.tsx:2113:      await pollRunwayJob(
+  app\premium\ai-video\page.tsx:2114:        jobId,
+  app\premium\ai-video\page.tsx:2115:        token
+  app\premium\ai-video\page.tsx:2116:      );
+  app\premium\ai-video\page.tsx:2117:
+  app\premium\ai-video\page.tsx:2118:      if (
+  app\premium\ai-video\page.tsx:2119:        generationMode ===
+  app\premium\ai-video\page.tsx:2120:          "music"
+  app\premium\ai-video\page.tsx:2121:      ) {
+  app\premium\ai-video\page.tsx:2122:        if (
+> app\premium\ai-video\page.tsx:2123:          !uploadedAudioMediaId
+  app\premium\ai-video\page.tsx:2124:        ) {
+  app\premium\ai-video\page.tsx:2125:          throw new Error(
+  app\premium\ai-video\page.tsx:2126:            "Song upload did not return a Media ID."
+  app\premium\ai-video\page.tsx:2127:          );
+  app\premium\ai-video\page.tsx:2128:        }
+  app\premium\ai-video\page.tsx:2129:
+  app\premium\ai-video\page.tsx:2130:        setGenerationMessage(
+  app\premium\ai-video\page.tsx:2131:          "Adding song to completed AI video..."
+  app\premium\ai-video\page.tsx:2132:        );
+  app\premium\ai-video\page.tsx:2133:
+  app\premium\ai-video\page.tsx:2134:        const musicResponse =
+  app\premium\ai-video\page.tsx:2135:          await fetch(
+  app\premium\ai-video\page.tsx:2136:            "/api/owner/ai-video/add-music",
+  app\premium\ai-video\page.tsx:2137:            {
+  app\premium\ai-video\page.tsx:2138:              method: "POST",
+  app\premium\ai-video\page.tsx:2139:              headers: {
+  app\premium\ai-video\page.tsx:2140:                Authorization:
+  app\premium\ai-video\page.tsx:2141:                  `Bearer ${token}`,
+  app\premium\ai-video\page.tsx:2142:                "Content-Type":
+  app\premium\ai-video\page.tsx:2143:                  "application/json",
+  app\premium\ai-video\page.tsx:2144:              },
+  app\premium\ai-video\page.tsx:2145:              body:
+  app\premium\ai-video\page.tsx:2146:                JSON.stringify({
+  app\premium\ai-video\page.tsx:2147:                  jobId,
+  app\premium\ai-video\page.tsx:2148:                  audioMediaId:
+> app\premium\ai-video\page.tsx:2149:                    uploadedAudioMediaId,
+  app\premium\ai-video\page.tsx:2150:                  volume: 1,
+  app\premium\ai-video\page.tsx:2151:                  musicStart: 0,
+  app\premium\ai-video\page.tsx:2152:                  loopMusic: true,
+  app\premium\ai-video\page.tsx:2153:                }),
+  app\premium\ai-video\page.tsx:2154:            }
+  app\premium\ai-video\page.tsx:2155:          );
+  app\premium\ai-video\page.tsx:2156:
+  app\premium\ai-video\page.tsx:2157:        const musicData =
+  app\premium\ai-video\page.tsx:2158:          (await musicResponse.json()) as {
+  app\premium\ai-video\page.tsx:2159:            success?: boolean;
+  app\premium\ai-video\page.tsx:2160:            mediaId?: string;
+  app\premium\ai-video\page.tsx:2161:            previewUrl?: string;
+  app\premium\ai-video\page.tsx:2162:            error?: string;
+  app\premium\ai-video\page.tsx:2163:          };
+  app\premium\ai-video\page.tsx:2164:
+  app\premium\ai-video\page.tsx:2165:        if (
+  app\premium\ai-video\page.tsx:2166:          !musicResponse.ok ||
+  app\premium\ai-video\page.tsx:2167:          !musicData.success ||
+  app\premium\ai-video\page.tsx:2168:          !musicData.mediaId
+  app\premium\ai-video\page.tsx:2169:        ) {
+  app\premium\ai-video\page.tsx:2170:          throw new Error(
+  app\premium\ai-video\page.tsx:2171:            musicData.error ||
+  app\premium\ai-video\page.tsx:2172:              "Song could not be added to the AI video."
+  app\premium\ai-video\page.tsx:2173:          );
+  app\premium\ai-video\page.tsx:2174:        }
+  app\premium\ai-video\page.tsx:2175:
+  app\premium\ai-video\page.tsx:2176:        if (
+  app\premium\ai-video\page.tsx:2177:          musicData.previewUrl
+  app\premium\ai-video\page.tsx:2178:        ) {
+  app\premium\ai-video\page.tsx:2179:          setOutputUrl(
+  app\premium\ai-video\page.tsx:2180:            musicData.previewUrl
+  app\premium\ai-video\page.tsx:2181:          );
+  app\premium\ai-video\page.tsx:2182:        }
+  app\premium\ai-video\page.tsx:2183:
+  app\premium\ai-video\page.tsx:2184:        setSavedVideoMediaId(
+  app\premium\ai-video\page.tsx:2185:          musicData.mediaId
+  app\premium\ai-video\page.tsx:2186:        );
+  app\premium\ai-video\page.tsx:2187:
+  app\premium\ai-video\page.tsx:2188:        window.localStorage.setItem(
+  app\premium\ai-video\page.tsx:2189:          `${AI_VIDEO_SAVED_MEDIA_KEY}:${user.uid}`,
+  app\premium\ai-video\page.tsx:2190:          musicData.mediaId
+  app\premium\ai-video\page.tsx:2191:        );
+  app\premium\ai-video\page.tsx:2192:
+  app\premium\ai-video\page.tsx:2193:        setSaveVideoMessage(
+  app\premium\ai-video\page.tsx:2194:          "Song + Cover music video saved permanently to Video Manager."
+  app\premium\ai-video\page.tsx:2744:                  }
+  app\premium\ai-video\page.tsx:2745:                  onChange={(
+  app\premium\ai-video\page.tsx:2746:                    event
+  app\premium\ai-video\page.tsx:2747:                  ) => {
+  app\premium\ai-video\page.tsx:2748:                    const file =
+  app\premium\ai-video\page.tsx:2749:                      event.target
+  app\premium\ai-video\page.tsx:2750:                        .files?.[0] ||
+  app\premium\ai-video\page.tsx:2751:                      null;
+  app\premium\ai-video\page.tsx:2752:
+  app\premium\ai-video\page.tsx:2753:                    const error =
+  app\premium\ai-video\page.tsx:2754:                      audioValidationError(
+  app\premium\ai-video\page.tsx:2755:                        file
+  app\premium\ai-video\page.tsx:2756:                      );
+  app\premium\ai-video\page.tsx:2757:
+  app\premium\ai-video\page.tsx:2758:                    if (error) {
+> app\premium\ai-video\page.tsx:2759:                      setAudioFile(
+  app\premium\ai-video\page.tsx:2760:                        null
+  app\premium\ai-video\page.tsx:2761:                      );
+  app\premium\ai-video\page.tsx:2762:
+  app\premium\ai-video\page.tsx:2763:                      setGenerationError(
+  app\premium\ai-video\page.tsx:2764:                        error
+  app\premium\ai-video\page.tsx:2765:                      );
+  app\premium\ai-video\page.tsx:2766:
+  app\premium\ai-video\page.tsx:2767:                      event.target.value =
+  app\premium\ai-video\page.tsx:2768:                        "";
+  app\premium\ai-video\page.tsx:2769:
+  app\premium\ai-video\page.tsx:2770:                      return;
+  app\premium\ai-video\page.tsx:2771:                    }
+  app\premium\ai-video\page.tsx:2772:
+> app\premium\ai-video\page.tsx:2773:                    setAudioFile(
+  app\premium\ai-video\page.tsx:2774:                      file
+  app\premium\ai-video\page.tsx:2775:                    );
+  app\premium\ai-video\page.tsx:2776:
+  app\premium\ai-video\page.tsx:2777:                    setGenerationError(
+  app\premium\ai-video\page.tsx:2778:                      null
+  app\premium\ai-video\page.tsx:2779:                    );
+  app\premium\ai-video\page.tsx:2780:                  }}
+  app\premium\ai-video\page.tsx:2781:                  className="mt-3 block w-full text-sm text-white/60 file:mr-4 file:rounded-xl file:border-0 file:bg-fuchsia-500/20 file:px-4 file:py-3 file:font-black file:text-fuchsia-200"
+  app\premium\ai-video\page.tsx:2782:                />
+  app\premium\ai-video\page.tsx:2783:
+> app\premium\ai-video\page.tsx:2784:                {audioFile ? (
+  app\premium\ai-video\page.tsx:2785:                  <p className="mt-3 break-all text-xs text-emerald-300">
+> app\premium\ai-video\page.tsx:2786:                    Selected song: {
+> app\premium\ai-video\page.tsx:2787:                      audioFile.name
+  app\premium\ai-video\page.tsx:2788:                    }
+  app\premium\ai-video\page.tsx:2789:                  </p>
+  app\premium\ai-video\page.tsx:2790:                ) : (
+  app\premium\ai-video\page.tsx:2791:                  <p className="mt-3 text-xs text-white/40">
+  app\premium\ai-video\page.tsx:2792:                    Choose an MP3, WAV, M4A, or AAC song.
+  app\premium\ai-video\page.tsx:2793:                  </p>
+  app\premium\ai-video\page.tsx:2794:                )}
+  app\premium\ai-video\page.tsx:2795:              </label>
+  app\premium\ai-video\page.tsx:2796:            ) : null}
+  app\premium\ai-video\page.tsx:2797:
+  app\premium\ai-video\page.tsx:2798:            <label className="mt-6 block">
+  app\premium\ai-video\page.tsx:2799:              <span className="text-sm font-black">
+  app\premium\ai-video\page.tsx:2800:                Prompt
+  app\premium\ai-video\page.tsx:2801:              </span>
+  app\premium\ai-video\page.tsx:2802:
+  app\premium\ai-video\page.tsx:2803:              <textarea
+  app\premium\ai-video\page.tsx:2804:                value={
+  app\premium\ai-video\page.tsx:2805:                  prompt
+  app\premium\ai-video\page.tsx:2806:                }
+  app\premium\ai-video\page.tsx:2807:                onChange={(
+  app\premium\ai-video\page.tsx:2808:                  event
+  app\premium\ai-video\page.tsx:2809:                ) =>
+  app\premium\ai-video\page.tsx:2810:                  setPrompt(
+  app\premium\ai-video\page.tsx:2811:                    event
+  app\premium\ai-video\page.tsx:2812:                      .target
+  app\premium\ai-video\page.tsx:2813:                      .value
+  app\premium\ai-video\page.tsx:2814:                  )
+  app\premium\ai-video\page.tsx:2815:                }
+  app\premium\ai-video\page.tsx:2816:                rows={7}
+  app\premium\ai-video\page.tsx:2817:                maxLength={2000}
+  app\premium\ai-video\page.tsx:2818:                placeholder="Describe the video you want to create..."
+  app\premium\ai-video\page.tsx:2819:                className="mt-3 w-full rounded-2xl border border-white/10 bg-[#080812] px-4 py-4 text-sm leading-6 text-white outline-none focus:border-violet-400/50"
+  app\premium\ai-video\page.tsx:2820:              />
+  app\premium\ai-video\page.tsx:2821:
+  app\premium\ai-video\page.tsx:2822:              <div className="mt-2 flex items-center justify-between gap-3 text-xs text-white/35">
+  app\premium\ai-video\page.tsx:2823:                <span>
+  app\premium\ai-video\page.tsx:2824:                  Be specific about camera movement, lighting, mood, and motion.
+  app\premium\ai-video\page.tsx:2825:                </span>
+  app\premium\ai-video\page.tsx:2826:
+  app\premium\ai-video\page.tsx:2827:                <span>
+  app\premium\ai-video\page.tsx:2828:                  {prompt.length}/2000
+  app\premium\ai-video\page.tsx:2829:                </span>
+  app\premium\ai-video\page.tsx:2830:              </div>
+  app\premium\ai-video\page.tsx:2831:            </label>
+  app\premium\ai-video\page.tsx:2832:
+  app\premium\ai-video\page.tsx:3011:                creating ||
+  app\premium\ai-video\page.tsx:3012:                !prompt.trim() ||
+  app\premium\ai-video\page.tsx:3013:                !hasEnoughCredits ||
+  app\premium\ai-video\page.tsx:3014:                (
+  app\premium\ai-video\page.tsx:3015:                  (
+  app\premium\ai-video\page.tsx:3016:                    generationMode ===
+  app\premium\ai-video\page.tsx:3017:                      "image" ||
+  app\premium\ai-video\page.tsx:3018:                    generationMode ===
+  app\premium\ai-video\page.tsx:3019:                      "music"
+  app\premium\ai-video\page.tsx:3020:                  ) &&
+  app\premium\ai-video\page.tsx:3021:                  !imageFile
+  app\premium\ai-video\page.tsx:3022:                ) ||
+  app\premium\ai-video\page.tsx:3023:                (
+  app\premium\ai-video\page.tsx:3024:                  generationMode ===
+  app\premium\ai-video\page.tsx:3025:                    "music" &&
+> app\premium\ai-video\page.tsx:3026:                  !audioFile
+  app\premium\ai-video\page.tsx:3027:                )
+  app\premium\ai-video\page.tsx:3028:              }
+  app\premium\ai-video\page.tsx:3029:              className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-4 font-black text-white shadow-lg shadow-violet-950/30 disabled:cursor-not-allowed disabled:opacity-40"
+  app\premium\ai-video\page.tsx:3030:            >
+  app\premium\ai-video\page.tsx:3031:              {creating
+  app\premium\ai-video\page.tsx:3032:                ? "Generating..."
+  app\premium\ai-video\page.tsx:3033:                : `Generate Video — ${selectedCreditCost} Credit${
+  app\premium\ai-video\page.tsx:3034:                    selectedCreditCost ===
+  app\premium\ai-video\page.tsx:3035:                    1
+  app\premium\ai-video\page.tsx:3036:                      ? ""
+  app\premium\ai-video\page.tsx:3037:                      : "s"
+  app\premium\ai-video\page.tsx:3038:                  }`}
+  app\premium\ai-video\page.tsx:3039:            </button>
+  app\premium\ai-video\page.tsx:3040:
+  app\premium\ai-video\page.tsx:3041:            {(
+  app\premium\ai-video\page.tsx:3042:              outputUrl ||
+  app\premium\ai-video\page.tsx:3043:              currentJobId ||
+  app\premium\ai-video\page.tsx:3044:              progress > 0
+  app\premium\ai-video\page.tsx:3045:            ) && !creating ? (
+  app\premium\ai-video\page.tsx:3046:              <button
+  app\premium\ai-video\page.tsx:3047:                type="button"
+  app\premium\ai-video\page.tsx:3048:                onClick={
+  app\premium\ai-video\page.tsx:3049:                  startAnotherGeneration
+  app\premium\ai-video\page.tsx:3050:                }
+  app\premium\ai-video\page.tsx:3051:                className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/65 transition hover:bg-white/10 hover:text-white"
+  app\premium\ai-video\page.tsx:3052:              >
+  app\premium\ai-video\page.tsx:3053:                Start Another Generation
+  app\premium\ai-video\page.tsx:3054:              </button>
+  app\premium\ai-video\page.tsx:3055:            ) : null}
+  app\premium\ai-video\page.tsx:3056:
+  app\premium\ai-video\page.tsx:3057:            {generationError ? (
+  app\premium\ai-video\page.tsx:3058:              <p className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm font-bold text-red-200">
+  app\premium\ai-video\page.tsx:3059:                {
+  app\premium\ai-video\page.tsx:3060:                  generationError
+  app\premium\ai-video\page.tsx:3061:                }
+  app\premium\ai-video\page.tsx:3062:              </p>
+  app\premium\ai-video\page.tsx:3063:            ) : null}
+  app\premium\ai-video\page.tsx:3064:          </section>
+  app\premium\ai-video\page.tsx:3065:
+  app\premium\ai-video\page.tsx:3066:          <section className="rounded-3xl border border-cyan-400/20 bg-cyan-500/5 p-6">
+  app\premium\ai-video\page.tsx:3067:            <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">
+  app\premium\ai-video\page.tsx:3068:              Generation Status
+  app\premium\ai-video\page.tsx:3069:            </p>
+  app\premium\ai-video\page.tsx:3070:
+  app\premium\ai-video\page.tsx:3071:            <div className="mt-5 rounded-2xl border border-white/10 bg-[#080812] p-5">
+
+
+
+
+
+===================================================
+9. AI VIDEO SOURCE AUDIO API
+FILE: .\app\api\owner\ai-video\source-audio\route.ts
+===================================================
+import { NextResponse } from "next/server";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+
+import {
+  adminBucket,
+  adminDb,
+  firebaseAdminApp,
+} from "../../../../../lib/firebaseAdmin";
+
+import {
+  requirePremiumAccess,
+} from "../../../../../lib/requirePremium";
+
+export const runtime = "nodejs";
+
+const OWNER_EMAIL =
+  "supe4.me@gmail.com";
+
+const MAX_AUDIO_BYTES =
+  250 * 1024 * 1024;
+
+function getBearerToken(
+  request: Request
+): string | null {
+  const authorization =
+    request.headers.get(
+      "authorization"
+    );
+
+  if (!authorization) {
+    return null;
+  }
+
+  const match =
+    authorization.match(
+      /^Bearer\s+(.+)$/i
+    );
+
+  return match?.[1]?.trim() || null;
+}
+
+async function verifyAuthenticatedUser(
+  request: Request
+) {
+  const idToken =
+    getBearerToken(request);
+
+  if (!idToken) {
+    throw new Error(
+      "UNAUTHORIZED"
+    );
+  }
+
+  try {
+    return await getAuth(
+      firebaseAdminApp
+    ).verifyIdToken(
+      idToken
+    );
+  } catch {
+    throw new Error(
+      "UNAUTHORIZED"
+    );
+  }
+}
+
+function safeFileName(
+  name: string
+) {
+  return (
+    name.replace(
+      /[^a-zA-Z0-9._-]+/g,
+      "-"
+    ) || "music"
+  );
+}
+
+function extensionFromName(
+  name: string
+) {
+  const match =
+    name
+      .toLowerCase()
+      .match(/\.([a-z0-9]+)$/);
+
+  return match?.[1] || "mp3";
+}
+
+export async function POST(
+  request: Request
+) {
+  try {
+    const decoded =
+      await verifyAuthenticatedUser(
+        request
+      );
+
+    const email =
+      typeof decoded.email ===
+      "string"
+        ? decoded.email
+            .toLowerCase()
+        : "";
+
+    const isOwner =
+      email === OWNER_EMAIL;
+
+    if (!isOwner) {
+      const premium =
+        await requirePremiumAccess(
+          request
+        );
+
+      if (!premium.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              premium.error,
+          },
+          {
+            status:
+              premium.statusCode,
+          }
+        );
+      }
+
+      if (
+        premium.uid !==
+        decoded.uid
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Premium account verification failed.",
+          },
+          {
+            status: 403,
+          }
+        );
+      }
+    }
+
+    const formData =
+      await request.formData();
+
+    const jobIdValue =
+      formData.get(
+        "jobId"
+      );
+
+    const audioValue =
+      formData.get(
+        "audio"
+      );
+
+    const jobId =
+      typeof jobIdValue ===
+      "string"
+        ? jobIdValue.trim()
+        : "";
+
+    if (!jobId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "AI video job ID is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      !(audioValue instanceof File)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Choose a song or audio file.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      audioValue.size <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The selected audio file is empty.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      audioValue.size >
+      MAX_AUDIO_BYTES
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The audio file must be 250 MB or smaller.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const jobReference =
+      adminDb
+        .collection(
+          "aiVideoJobs"
+        )
+        .doc(jobId);
+
+    const jobSnapshot =
+      await jobReference.get();
+
+    if (
+      !jobSnapshot.exists
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "AI video job was not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    const job =
+      jobSnapshot.data() || {};
+
+    if (
+      job.ownerUid !==
+      decoded.uid
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "You do not have access to this AI video job.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    if (
+      job.mode !== "music"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "This job is not a Song + Cover job.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const mediaReference =
+      adminDb
+        .collection(
+          "mediaLibrary"
+        )
+        .doc();
+
+    const audioMediaId =
+      mediaReference.id;
+
+    const originalName =
+      audioValue.name ||
+      "music.mp3";
+
+    const extension =
+      extensionFromName(
+        originalName
+      );
+
+    const storagePath =
+      `media/audio/${audioMediaId}/${safeFileName(
+        originalName
+      )}`;
+
+    const storageFile =
+      adminBucket.file(
+        storagePath
+      );
+
+    const buffer =
+      Buffer.from(
+        await audioValue.arrayBuffer()
+      );
+
+    await storageFile.save(
+      buffer,
+      {
+        resumable: false,
+        metadata: {
+          contentType:
+            audioValue.type ||
+            "audio/mpeg",
+          metadata: {
+            ownerUid:
+              decoded.uid,
+            aiVideoJobId:
+              jobId,
+            source:
+              "solo-beats-song-cover",
+          },
+        },
+      }
+    );
+
+    const title =
+      originalName.replace(
+        /\.[^.]+$/,
+        ""
+      );
+
+    await mediaReference.set({
+      kind:
+        "audio",
+      title,
+      originalName,
+      mimeType:
+        audioValue.type ||
+        "audio/mpeg",
+      extension,
+      sizeBytes:
+        audioValue.size,
+      storagePath,
+      status:
+        "active",
+      sourceType:
+        "solo-beats-song-cover",
+      ownerUid:
+        decoded.uid,
+      createdAt:
+        FieldValue.serverTimestamp(),
+      updatedAt:
+        FieldValue.serverTimestamp(),
+    });
+
+    await jobReference.set(
+      {
+        audioName:
+          originalName,
+        audioMediaId,
+        audioStoragePath:
+          storagePath,
+        audioUploadedAt:
+          FieldValue.serverTimestamp(),
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      },
+      {
+        merge: true,
+      }
+    );
+
+    return NextResponse.json({
+      success: true,
+      jobId,
+      audioMediaId,
+      audioName:
+        originalName,
+      storagePath,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message ===
+        "UNAUTHORIZED"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Authentication is required.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    console.error(
+      "Song + Cover audio upload error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Song upload failed.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+
+===================================================
+10. AI VIDEO ADD MUSIC MEDIA LOOKUP
+===================================================
+    }
+
+    const job =
+      jobSnapshot.data() || {};
+
+    if (
+      job.status !==
+      "completed"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The AI video must be completed first.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const outputUrl =
+      typeof job.outputUrl ===
+        "string"
+        ? job.outputUrl.trim()
+        : "";
+
+    if (
+      !outputUrl &&
+      !videoMediaId
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The completed AI video does not have a usable video source.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const audioReference =
+      adminDb
+        .collection(
+          "mediaLibrary"
+        )
+        .doc(
+          audioMediaId
+        );
+
+    const audioSnapshot =
+      await audioReference.get();
+
+    if (
+      !audioSnapshot.exists
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The selected music track was not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    const audio =
+      audioSnapshot.data() ||
+      {};
+
+    if (
+      audio.kind !== "audio"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The selected Media Library item is not audio.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const audioStoragePath =
+      typeof audio.storagePath ===
+        "string"
+        ? audio.storagePath
+        : "";
+
+    if (
+      !audioStoragePath
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The selected music track has no Storage file.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const audioFile =
+      adminBucket.file(
+        audioStoragePath
+      );
+
+    const [audioExists] =
+      await audioFile.exists();
+
+    if (!audioExists) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "The selected music file is missing from Firebase Storage.",
+        },
+        { status: 400 }
+      );
+    }
+
+    let videoBuffer:
+      Buffer | null = null;
+
+    if (videoMediaId) {
+      const savedVideoReference =
+        adminDb
+          .collection(
+            "mediaLibrary"
+          )
+          .doc(
+            videoMediaId
+          );
+
+      const savedVideoSnapshot =
+        await savedVideoReference.get();
+
+      if (savedVideoSnapshot.exists) {
+        const savedVideo =
+          savedVideoSnapshot.data() ||
+          {};
+
+        const savedVideoStoragePath =
+          typeof savedVideo.storagePath ===
+            "string"
+            ? savedVideo.storagePath.trim()
+            : "";
+
+        if (
+          savedVideo.kind === "video" &&
+          savedVideoStoragePath
+        ) {
+          const savedVideoFile =
+            adminBucket.file(
+              savedVideoStoragePath
+            );
+
+          const [savedVideoExists] =
+            await savedVideoFile.exists();
+
+          if (savedVideoExists) {
+            const [
+              savedVideoBuffer,
+            ] =
+              await savedVideoFile.download();
+
+            videoBuffer =
+              savedVideoBuffer;
+          }
+        }
+      }
+    }
+
+    if (
+      !videoBuffer &&
+      outputUrl
+    ) {
+      const videoResponse =
+        await fetch(
+          outputUrl,
+          {
+            cache:
+              "no-store",
+          }
+        );
+
+      if (
+        !videoResponse.ok
+      ) {
+        throw new Error(
+          `AI video download failed with status ${videoResponse.status}.`
+        );
+      }
+
+      videoBuffer =
+        Buffer.from(
+          await videoResponse.arrayBuffer()
+        );
+    }
+
+    if (!videoBuffer) {
+      throw new Error(
+        "The AI video could not be loaded from Firebase Storage or the provider."
+      );
+    }
+
+    const [
+      audioBuffer,
+    ] =
+      await audioFile.download();
+
+    workDirectory =
+      await mkdtemp(
+        join(
+          tmpdir(),
+          "solo-beats-ai-music-"
+        )
+      );
+
+    const inputVideo =
+      join(
+        workDirectory,
+        "input.mp4"
+      );
+
+    const audioExtension =
+      typeof audio.extension ===
+        "string" &&
+      audio.extension
+        ? audio.extension
+        : "mp3";
+
+    const inputAudio =
+      join(
+        workDirectory,
+        `music.${audioExtension}`
+      );
+
+    const outputVideo =
+      join(
+        workDirectory,
+        "output.mp4"
+      );
+
+    await writeFile(
+      inputVideo,
+      videoBuffer
+    );
+
+    await writeFile(
+      inputAudio,
+      audioBuffer
+    );
+
+    const args: string[] =
+      [
+        "-y",
+        "-i",
+        inputVideo,
+      ];
+
+    if (loopMusic) {
+      args.push(
+        "-stream_loop",
+        "-1"
+      );
+    }
+
+    if (
+      musicStart > 0
+    ) {
+      args.push(
+        "-ss",
+        String(
+          musicStart
+        )
+      );
+    }
+
+    args.push(
+      "-i",
+      inputAudio,
+
+      "-map",
+      "0:v:0",
+
+      "-map",
+      "1:a:0",
+
+      "-c:v",
+      "copy",
+
+      "-c:a",
+      "aac",
+
+      "-b:a",
+      "192k",
+
+      "-af",
+      `volume=${volume}`,
+
+      "-shortest",
+
+      "-movflags",
+      "+faststart",
+
+      outputVideo
+    );
+
+    await runFfmpeg(
+      args
+    );
+
+    const mergedBuffer =
+      await readFile(
+        outputVideo
+      );
+
+    if (
+      !mergedBuffer.length
+    ) {
+      throw new Error(
+        "FFmpeg produced an empty video."
+      );
+    }
+
+    const mediaReference =
+      adminDb
+        .collection(
+          "mediaLibrary"
+        )
+        .doc();
+
+    const mediaId =
+      mediaReference.id;
+
+    const fileName =
+      `ai-music-video-${randomUUID()}.mp4`;
+
+    const storagePath =
+      `media/video/${mediaId}/${fileName}`;
+
+    const storageFile =
+      adminBucket.file(
+        storagePath
+      );
+
+    await storageFile.save(
+      mergedBuffer,
+      {
+        resumable: false,
+        metadata: {
+          contentType:
+            "video/mp4",
+          metadata: {
+            source:
+              "solo-beats-ai-video-music",
+            aiVideoJobId:
+              jobId,
+            audioMediaId,
+          },
+        },
+      }
+    );
+
+    const [
+      previewUrl,
+    ] =
+      await storageFile.getSignedUrl(
+        {
+          action: "read",
+          expires:
+            Date.now() +
+            60 *
+              60 *
+              1000,
+        }
+      );
+
+    const audioTitle =
+      typeof audio.title ===
+        "string"
+        ? audio.title
+        : typeof audio.originalName ===
+            "string"
+          ? audio.originalName
+          : "SOLO BEATS Track";
+
+    const prompt =
+      typeof job.prompt ===
+        "string"
+        ? job.prompt
+
+
+===================================================
+11. TYPESCRIPT BASELINE
+===================================================
+TYPESCRIPT PASSED

@@ -54,18 +54,6 @@ type RecentJobFilter =
   | "failed"
   | "hidden";
 
-type RecentJobSort =
-  | "newest"
-  | "oldest"
-  | "completed"
-  | "failed";
-
-type RecentJobModeFilter =
-  | "all"
-  | "text"
-  | "image"
-  | "music";
-
 const OWNER_EMAIL =
   "supe4.me@gmail.com";
 
@@ -81,151 +69,6 @@ function creditCost(
   return duration === "5"
     ? 1
     : 2;
-}
-
-// AI_VIDEO_FINAL_WORKFLOW_QUALITY_V3
-const MAX_AI_VIDEO_IMAGE_BYTES =
-  20 * 1024 * 1024;
-
-const MAX_AI_VIDEO_AUDIO_BYTES =
-  200 * 1024 * 1024;
-
-function imageValidationError(
-  file: File | null
-) {
-  if (!file) {
-    return null;
-  }
-
-  const extension =
-    file.name
-      .split(".")
-      .pop()
-      ?.toLowerCase() || "";
-
-  const allowed =
-    file.type.startsWith(
-      "image/"
-    ) ||
-    [
-      "jpg",
-      "jpeg",
-      "png",
-      "webp",
-    ].includes(extension);
-
-  if (!allowed) {
-    return "Choose a JPG, JPEG, PNG, or WEBP image.";
-  }
-
-  if (
-    file.size >
-    MAX_AI_VIDEO_IMAGE_BYTES
-  ) {
-    return "Image is too large. Maximum image size is 20 MB.";
-  }
-
-  return null;
-}
-
-function audioValidationError(
-  file: File | null
-) {
-  if (!file) {
-    return null;
-  }
-
-  const extension =
-    file.name
-      .split(".")
-      .pop()
-      ?.toLowerCase() || "";
-
-  const allowed =
-    file.type.startsWith(
-      "audio/"
-    ) ||
-    [
-      "wav",
-      "mp3",
-      "m4a",
-      "aac",
-    ].includes(extension);
-
-  if (!allowed) {
-    return "Choose a WAV, MP3, M4A, or AAC audio file.";
-  }
-
-  if (
-    file.size >
-    MAX_AI_VIDEO_AUDIO_BYTES
-  ) {
-    return "Audio is too large. Maximum audio size is 200 MB.";
-  }
-
-  return null;
-}
-
-function promptPresetsForMode(
-  mode: GenerationMode
-) {
-  if (mode === "image") {
-    return [
-      {
-        label: "Cinematic Cover",
-        prompt:
-          "Bring this album cover to life with cinematic camera movement, atmospheric particles, dramatic lighting, subtle depth, smooth animation, and a polished premium music-video look. Keep the original artwork recognizable and avoid text distortion or extra logos.",
-      },
-      {
-        label: "Neon Motion",
-        prompt:
-          "Animate this artwork with glowing neon light, smooth camera movement, pulsing energy, atmospheric haze, cinematic depth, and futuristic blue and purple highlights while keeping the original cover recognizable.",
-      },
-      {
-        label: "Epic Trailer",
-        prompt:
-          "Transform this artwork into a dramatic album trailer with cinematic reveal, slow push-in camera motion, powerful lighting, atmospheric transitions, high detail, and premium release-promo energy.",
-      },
-    ];
-  }
-
-  if (mode === "music") {
-    return [
-      {
-        label: "Music Visual",
-        prompt:
-          "Create a cinematic electronic music visual using the album cover as the main visual identity. Bring the artwork to life with smooth camera movement, glowing atmospheric lighting, rhythmic visual energy, subtle motion synchronized to the music, dramatic depth, and polished music-video styling.",
-      },
-      {
-        label: "Performance Energy",
-        prompt:
-          "Create an energetic Song + Cover visual with rhythmic movement, dramatic lighting pulses, cinematic camera motion, atmospheric particles, deep contrast, and visual intensity that follows the music while preserving the original album artwork.",
-      },
-      {
-        label: "Ambient Visualizer",
-        prompt:
-          "Create a premium ambient music visualizer from this cover with slow cinematic motion, subtle pulsing light, floating particles, atmospheric depth, gentle movement synchronized to the song, and a clean professional music-video finish.",
-      },
-    ];
-  }
-
-  return [
-    {
-      label: "Neon City",
-      prompt:
-        "Futuristic neon city at night, cinematic camera movement, glowing blue and purple lights, atmospheric haze, dramatic lighting, high detail, energetic electronic music-video style.",
-    },
-    {
-      label: "Epic Trailer",
-      prompt:
-        "Cinematic album trailer with dramatic reveal, sweeping camera movement, atmospheric lighting, deep shadows, powerful transitions, premium release-promo energy, high detail, and polished visual effects.",
-    },
-    {
-      label: "Dark Cinematic",
-      prompt:
-        "Dark futuristic cinematic scene with moody lighting, slow dramatic camera movement, atmospheric fog, glowing highlights, deep contrast, mysterious energy, and polished music-video production quality.",
-    },
-  ];
 }
 
 export default function PremiumAiVideoPage() {
@@ -307,205 +150,11 @@ export default function PremiumAiVideoPage() {
       null
     );
 
-  // AI_VIDEO_MEDIA_LIBRARY_AUDIO_PICKER_V2
-  const [
-    mediaLibraryAudio,
-    setMediaLibraryAudio,
-  ] = useState<
-    Array<{
-      mediaId: string;
-      title: string;
-      kind: string | null;
-      mimeType: string | null;
-      previewUrl: string | null;
-      source: string | null;
-      aiMusicGenerationId:
-        string | null;
-    }>
-  >([]);
-
-  const [
-    selectedAudioMediaId,
-    setSelectedAudioMediaId,
-  ] = useState("");
-
-  const [
-    mediaLibraryAudioLoading,
-    setMediaLibraryAudioLoading,
-  ] = useState(false);
-
-  const [
-    mediaLibraryAudioError,
-    setMediaLibraryAudioError,
-  ] = useState<string | null>(
-    null
-  );
-
-  const selectedMediaAudio =
-    mediaLibraryAudio.find(
-      (item) =>
-        item.mediaId ===
-        selectedAudioMediaId
-    ) || null;
-
   const [
     prompt,
     setPrompt,
   ] =
     useState("");
-
-  useEffect(() => {
-    if (
-      !user ||
-      !isOwner ||
-      generationMode !== "music"
-    ) {
-      if (!isOwner) {
-        setMediaLibraryAudio([]);
-        setSelectedAudioMediaId("");
-      }
-
-      return;
-    }
-
-    const currentUser = user;
-
-    let cancelled = false;
-
-    async function loadMediaAudio() {
-      setMediaLibraryAudioLoading(
-        true
-      );
-
-      setMediaLibraryAudioError(
-        null
-      );
-
-      try {
-        const token =
-          await currentUser.getIdToken();
-
-        const response =
-          await fetch(
-            "/api/owner/media",
-            {
-              headers: {
-                Authorization:
-                  `Bearer ${token}`,
-              },
-              cache:
-                "no-store",
-            }
-          );
-
-        const data =
-          (await response.json()) as {
-            success?: boolean;
-            error?: string;
-            media?: Array<{
-              mediaId?: string;
-              title?: string;
-              kind?: string | null;
-              mimeType?:
-                string | null;
-              previewUrl?:
-                string | null;
-              source?:
-                string | null;
-              aiMusicGenerationId?:
-                string | null;
-            }>;
-          };
-
-        if (
-          !response.ok ||
-          !data.success
-        ) {
-          throw new Error(
-            data.error ||
-              "Media Library audio could not be loaded."
-          );
-        }
-
-        const audioItems =
-          (
-            Array.isArray(data.media)
-              ? data.media
-              : []
-          )
-            .filter(
-              (item) =>
-                item.mediaId &&
-                (
-                  item.kind ===
-                    "audio" ||
-                  (
-                    typeof item
-                      .mimeType ===
-                      "string" &&
-                    item.mimeType
-                      .toLowerCase()
-                      .startsWith(
-                        "audio/"
-                      )
-                  )
-                )
-            )
-            .map((item) => ({
-              mediaId:
-                item.mediaId || "",
-              title:
-                item.title ||
-                "Untitled Audio",
-              kind:
-                item.kind || null,
-              mimeType:
-                item.mimeType ||
-                null,
-              previewUrl:
-                item.previewUrl ||
-                null,
-              source:
-                item.source ||
-                null,
-              aiMusicGenerationId:
-                item
-                  .aiMusicGenerationId ||
-                null,
-            }));
-
-        if (!cancelled) {
-          setMediaLibraryAudio(
-            audioItems
-          );
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setMediaLibraryAudioError(
-            error instanceof Error
-              ? error.message
-              : "Media Library audio could not be loaded."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setMediaLibraryAudioLoading(
-            false
-          );
-        }
-      }
-    }
-
-    void loadMediaAudio();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    user,
-    isOwner,
-    generationMode,
-  ]);
 
   const [
     aspectRatio,
@@ -605,38 +254,6 @@ export default function PremiumAiVideoPage() {
       "all"
     );
 
-  // RECENT_JOBS_SEARCH_V1
-  const [
-    recentJobsSearch,
-    setRecentJobsSearch,
-  ] = useState("");
-
-  // RECENT_JOBS_SORT_V1
-  const [
-    recentJobsSort,
-    setRecentJobsSort,
-  ] =
-    useState<RecentJobSort>(
-      "newest"
-    );
-
-  // RECENT_JOBS_COMPLETE_UX_V2
-  const [
-    recentJobModeFilter,
-    setRecentJobModeFilter,
-  ] =
-    useState<RecentJobModeFilter>(
-      "all"
-    );
-
-  const [
-    recentJobsActionMessage,
-    setRecentJobsActionMessage,
-  ] =
-    useState<string | null>(
-      null
-    );
-
   // RECENT_JOBS_LOAD_MORE_V1
   const [
     recentJobsVisibleCount,
@@ -695,196 +312,6 @@ export default function PremiumAiVideoPage() {
         recentJobs,
         recentJobFilter,
         hiddenRecentJobIds,
-      ]
-    );
-
-  const modeFilteredRecentJobs =
-    useMemo(
-      () => {
-        if (
-          recentJobModeFilter ===
-          "all"
-        ) {
-          return filteredRecentJobs;
-        }
-
-        return filteredRecentJobs.filter(
-          (job) =>
-            (
-              job.mode || ""
-            ).toLowerCase() ===
-            recentJobModeFilter
-        );
-      },
-      [
-        filteredRecentJobs,
-        recentJobModeFilter,
-      ]
-    );
-
-  const searchedRecentJobs =
-    useMemo(
-      () => {
-        const query =
-          recentJobsSearch
-            .trim()
-            .toLowerCase();
-
-        if (!query) {
-          return modeFilteredRecentJobs;
-        }
-
-        return modeFilteredRecentJobs.filter(
-          (job) => {
-            const searchable =
-              [
-                job.id,
-                job.prompt,
-                job.mode,
-                job.status,
-                job.providerJobId,
-              ]
-                .filter(Boolean)
-                .join(" ")
-                .toLowerCase();
-
-            return searchable.includes(
-              query
-            );
-          }
-        );
-      },
-      [
-        modeFilteredRecentJobs,
-        recentJobsSearch,
-      ]
-    );
-
-  const sortedRecentJobs =
-    useMemo(
-      () => {
-        const jobs =
-          [...searchedRecentJobs];
-
-        const createdTime = (
-          job: RecentJob
-        ) => {
-          if (!job.createdAt) {
-            return 0;
-          }
-
-          const time =
-            new Date(
-              job.createdAt
-            ).getTime();
-
-          return Number.isFinite(time)
-            ? time
-            : 0;
-        };
-
-        const isFailedStatus = (
-          job: RecentJob
-        ) =>
-          [
-            "failed",
-            "canceled",
-            "submission_unknown",
-            "ready_for_provider",
-          ].includes(
-            job.status || ""
-          );
-
-        if (
-          recentJobsSort ===
-          "oldest"
-        ) {
-          return jobs.sort(
-            (a, b) =>
-              createdTime(a) -
-              createdTime(b)
-          );
-        }
-
-        if (
-          recentJobsSort ===
-          "completed"
-        ) {
-          return jobs.sort(
-            (a, b) => {
-              const aCompleted =
-                a.status ===
-                "completed"
-                  ? 1
-                  : 0;
-
-              const bCompleted =
-                b.status ===
-                "completed"
-                  ? 1
-                  : 0;
-
-              if (
-                aCompleted !==
-                bCompleted
-              ) {
-                return (
-                  bCompleted -
-                  aCompleted
-                );
-              }
-
-              return (
-                createdTime(b) -
-                createdTime(a)
-              );
-            }
-          );
-        }
-
-        if (
-          recentJobsSort ===
-          "failed"
-        ) {
-          return jobs.sort(
-            (a, b) => {
-              const aFailed =
-                isFailedStatus(a)
-                  ? 1
-                  : 0;
-
-              const bFailed =
-                isFailedStatus(b)
-                  ? 1
-                  : 0;
-
-              if (
-                aFailed !==
-                bFailed
-              ) {
-                return (
-                  bFailed -
-                  aFailed
-                );
-              }
-
-              return (
-                createdTime(b) -
-                createdTime(a)
-              );
-            }
-          );
-        }
-
-        return jobs.sort(
-          (a, b) =>
-            createdTime(b) -
-            createdTime(a)
-        );
-      },
-      [
-        searchedRecentJobs,
-        recentJobsSort,
       ]
     );
 
@@ -1092,129 +519,6 @@ export default function PremiumAiVideoPage() {
     );
 
     setHiddenRecentJobIds([]);
-  }
-
-  // BULK_HIDE_FAILED_JOBS_V1
-  function hideAllFailedRecentJobs() {
-    if (!user) {
-      return;
-    }
-
-    const failedIds =
-      recentJobs
-        .filter((job) =>
-          [
-            "failed",
-            "canceled",
-            "submission_unknown",
-            "ready_for_provider",
-          ].includes(
-            job.status || ""
-          )
-        )
-        .map((job) => job.id);
-
-    if (failedIds.length === 0) {
-      return;
-    }
-
-    setHiddenRecentJobIds(
-      (current) => {
-        const next =
-          Array.from(
-            new Set([
-              ...current,
-              ...failedIds,
-            ])
-          );
-
-        window.localStorage.setItem(
-          `${HIDDEN_RECENT_JOBS_KEY}:${user.uid}`,
-          JSON.stringify(next)
-        );
-
-        return next;
-      }
-    );
-
-    setRecentJobsVisibleCount(6);
-  }
-
-  function resetRecentJobsView() {
-    setRecentJobFilter("all");
-    setRecentJobModeFilter("all");
-    setRecentJobsSearch("");
-    setRecentJobsSort("newest");
-    setRecentJobsVisibleCount(6);
-    setRecentJobsActionMessage(null);
-  }
-
-  async function copyRecentJobText(
-    value: string,
-    label: string
-  ) {
-    try {
-      await navigator.clipboard.writeText(
-        value
-      );
-
-      setRecentJobsActionMessage(
-        `${label} copied.`
-      );
-    } catch {
-      setRecentJobsActionMessage(
-        `${label} could not be copied.`
-      );
-    }
-  }
-
-  function reuseRecentJob(
-    job: RecentJob
-  ) {
-    if (job.prompt) {
-      setPrompt(job.prompt);
-    }
-
-    if (
-      job.mode === "text" ||
-      job.mode === "image" ||
-      job.mode === "music"
-    ) {
-      setGenerationMode(job.mode);
-    }
-
-    if (
-      job.aspectRatio === "16:9" ||
-      job.aspectRatio === "9:16"
-    ) {
-      setAspectRatio(job.aspectRatio);
-    }
-
-    if (
-      job.duration === 5 ||
-      job.duration === 10
-    ) {
-      setDuration(
-        String(job.duration) as Duration
-      );
-    }
-
-    setImageFile(null);
-    setAudioFile(null);
-    setSelectedAudioMediaId("");
-    setGenerationError(null);
-
-    setRecentJobsActionMessage(
-      job.mode === "image" ||
-      job.mode === "music"
-        ? "Prompt and settings loaded. Re-select the source files before generating."
-        : "Prompt and settings loaded into the generator."
-    );
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
   }
 
   const loadRecentJobs =
@@ -1777,119 +1081,6 @@ export default function PremiumAiVideoPage() {
     user,
     loadCredits,
   ]);
-  function startAnotherGeneration() {
-    if (creating) {
-      return;
-    }
-
-    setPrompt("");
-    setImageFile(null);
-    setAudioFile(null);
-    setSelectedAudioMediaId("");
-
-    setCurrentJobId(null);
-    setProgress(0);
-    setOutputUrl(null);
-
-    setSavedVideoMediaId(null);
-    setSaveVideoMessage(null);
-    setSaveVideoError(null);
-
-    setGenerationError(null);
-    setGenerationMessage(
-      "Ready for another generation."
-    );
-
-    if (user) {
-      window.localStorage.removeItem(
-        AI_VIDEO_ACTIVE_JOB_KEY
-      );
-
-      window.localStorage.removeItem(
-        AI_VIDEO_LAST_OUTPUT_KEY +
-          ":" +
-          user.uid
-      );
-
-      window.localStorage.removeItem(
-        AI_VIDEO_LAST_JOB_KEY +
-          ":" +
-          user.uid
-      );
-
-      window.localStorage.removeItem(
-        AI_VIDEO_SAVED_MEDIA_KEY +
-          ":" +
-          user.uid
-      );
-    }
-  }
-
-  function useLastRecentPrompt() {
-    const previous =
-      recentJobs.find(
-        (job) =>
-          typeof job.prompt ===
-            "string" &&
-          job.prompt.trim()
-      );
-
-    if (!previous?.prompt) {
-      setGenerationError(
-        "No previous prompt is available yet."
-      );
-      return;
-    }
-
-    setPrompt(
-      previous.prompt
-    );
-
-    if (
-      previous.mode === "text" ||
-      previous.mode === "image" ||
-      previous.mode === "music"
-    ) {
-      setGenerationMode(
-        previous.mode
-      );
-    }
-
-    if (
-      previous.aspectRatio === "16:9" ||
-      previous.aspectRatio === "9:16"
-    ) {
-      setAspectRatio(
-        previous.aspectRatio
-      );
-    }
-
-    if (
-      previous.duration === 5 ||
-      previous.duration === 10
-    ) {
-      setDuration(
-        String(
-          previous.duration
-        ) as Duration
-      );
-    }
-
-    setImageFile(null);
-    setAudioFile(null);
-    setSelectedAudioMediaId("");
-    setGenerationError(null);
-
-    setGenerationMessage(
-      "Previous prompt and settings loaded."
-    );
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
-
   async function handleGenerate() {
     if (
       !user ||
@@ -1900,67 +1091,6 @@ export default function PremiumAiVideoPage() {
 
     const cleanPrompt =
       prompt.trim();
-
-    if (
-      cleanPrompt.length >
-      2000
-    ) {
-      setGenerationError(
-        "Prompt is too long. Keep it under 2,000 characters."
-      );
-      return;
-    }
-
-    if (
-      generationMode === "image" ||
-      generationMode === "music"
-    ) {
-      if (!imageFile) {
-        setGenerationError(
-          "Choose an image or album cover first."
-        );
-        return;
-      }
-
-      const imageError =
-        imageValidationError(
-          imageFile
-        );
-
-      if (imageError) {
-        setGenerationError(
-          imageError
-        );
-        return;
-      }
-    }
-
-    if (
-      generationMode ===
-      "music"
-    ) {
-      if (
-        !audioFile &&
-        !selectedAudioMediaId
-      ) {
-        setGenerationError(
-          "Choose a song or audio file first."
-        );
-        return;
-      }
-
-      const audioError =
-        audioValidationError(
-          audioFile
-        );
-
-      if (audioError) {
-        setGenerationError(
-          audioError
-        );
-        return;
-      }
-    }
 
     if (!cleanPrompt) {
       setGenerationError(
@@ -1987,8 +1117,7 @@ export default function PremiumAiVideoPage() {
     if (
       generationMode ===
         "music" &&
-      !audioFile &&
-      !selectedAudioMediaId
+      !audioFile
     ) {
       setGenerationError(
         "Choose a song or audio file first."
@@ -2038,11 +1167,7 @@ export default function PremiumAiVideoPage() {
         await user.getIdToken();
 
       setGenerationMessage(
-        generationMode === "music"
-          ? "Step 1 - Creating Song + Cover job..."
-          : generationMode === "image"
-            ? "Step 1 - Creating Image to Video job..."
-            : "Step 1 - Creating Text to Video job..."
+        "Creating your AI video job..."
       );
 
       const jobResponse =
@@ -2081,9 +1206,7 @@ export default function PremiumAiVideoPage() {
                 audioName:
                   generationMode ===
                     "music"
-                    ? selectedMediaAudio
-                        ?.title ||
-                      audioFile
+                    ? audioFile
                         ?.name ||
                       null
                     : null,
@@ -2137,9 +1260,7 @@ export default function PremiumAiVideoPage() {
         }
 
         setGenerationMessage(
-          generationMode === "music"
-            ? "Step 2 - Uploading album cover..."
-            : "Step 2 - Uploading source image..."
+          "Uploading source image..."
         );
 
         const imageFormData =
@@ -2187,14 +1308,11 @@ export default function PremiumAiVideoPage() {
       }
 
       let uploadedAudioMediaId:
-        string | null =
-          selectedAudioMediaId ||
-          null;
+        string | null = null;
 
       if (
         generationMode ===
-          "music" &&
-        !uploadedAudioMediaId
+          "music"
       ) {
         if (!audioFile) {
           throw new Error(
@@ -2890,32 +2008,8 @@ export default function PremiumAiVideoPage() {
                         .files?.[0] ||
                       null;
 
-                    const error =
-                      imageValidationError(
-                        file
-                      );
-
-                    if (error) {
-                      setImageFile(
-                        null
-                      );
-
-                      setGenerationError(
-                        error
-                      );
-
-                      event.target.value =
-                        "";
-
-                      return;
-                    }
-
                     setImageFile(
                       file
-                    );
-
-                    setGenerationError(
-                      null
                     );
                   }}
                   className="mt-3 block w-full text-sm text-white/60 file:mr-4 file:rounded-xl file:border-0 file:bg-cyan-500/20 file:px-4 file:py-3 file:font-black file:text-cyan-200"
@@ -2929,7 +2023,7 @@ export default function PremiumAiVideoPage() {
                   </p>
                 ) : (
                   <p className="mt-3 text-xs text-white/40">
-                    Choose a JPG, JPEG, PNG, or WEBP image up to 20 MB.
+                    Choose a JPG, PNG, WEBP, or other supported image.
                   </p>
                 )}
               </label>
@@ -2941,125 +2035,6 @@ export default function PremiumAiVideoPage() {
                 <span className="text-sm font-black">
                   Song / Audio
                 </span>
-
-                {isOwner ? (
-                  <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.15em] text-fuchsia-300">
-                      Use Existing Media Library Song
-                    </p>
-
-                    <select
-                      value={
-                        selectedAudioMediaId
-                      }
-                      disabled={
-                        creating ||
-                        mediaLibraryAudioLoading
-                      }
-                      onChange={(event) => {
-                        const nextId =
-                          event.target
-                            .value;
-
-                        setSelectedAudioMediaId(
-                          nextId
-                        );
-
-                        if (nextId) {
-                          setAudioFile(
-                            null
-                          );
-
-                          setGenerationError(
-                            null
-                          );
-                        }
-                      }}
-                      className="mt-3 w-full rounded-xl border border-white/10 bg-[#080812] px-4 py-3 text-sm text-white outline-none focus:border-fuchsia-400/50"
-                    >
-                      <option value="">
-                        {mediaLibraryAudioLoading
-                          ? "Loading Media Library..."
-                          : "Upload a new song instead"}
-                      </option>
-
-                      {mediaLibraryAudio.map(
-                        (item) => (
-                          <option
-                            key={
-                              item.mediaId
-                            }
-                            value={
-                              item.mediaId
-                            }
-                          >
-                            {item.title}
-                            {item.aiMusicGenerationId
-                              ? " — AI MUSIC"
-                              : ""}
-                          </option>
-                        )
-                      )}
-                    </select>
-
-                    {selectedMediaAudio ? (
-                      <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-3">
-                        <p className="text-xs font-black text-emerald-300">
-                          Selected from Media Library:
-                        </p>
-
-                        <p className="mt-1 text-sm font-bold text-white">
-                          {
-                            selectedMediaAudio.title
-                          }
-                        </p>
-
-                        {selectedMediaAudio
-                          .aiMusicGenerationId ? (
-                          <p className="mt-1 text-xs font-black text-cyan-300">
-                            AI MUSIC
-                          </p>
-                        ) : null}
-
-                        {selectedMediaAudio
-                          .previewUrl ? (
-                          <audio
-                            controls
-                            preload="none"
-                            src={
-                              selectedMediaAudio
-                                .previewUrl
-                            }
-                            className="mt-3 w-full"
-                          />
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    {mediaLibraryAudioError ? (
-                      <p className="mt-3 text-xs font-bold text-amber-300">
-                        {
-                          mediaLibraryAudioError
-                        }
-                      </p>
-                    ) : null}
-
-                    {!mediaLibraryAudioLoading &&
-                    !mediaLibraryAudioError &&
-                    mediaLibraryAudio.length ===
-                      0 ? (
-                      <p className="mt-3 text-xs text-white/40">
-                        No audio tracks are currently available in Media Library.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <p className="mt-4 text-xs font-black uppercase tracking-[0.15em] text-white/40">
-                  {isOwner
-                    ? "OR UPLOAD A NEW SONG"
-                    : "UPLOAD SONG"}
-                </p>
 
                 <input
                   type="file"
@@ -3075,58 +2050,22 @@ export default function PremiumAiVideoPage() {
                         .files?.[0] ||
                       null;
 
-                    const error =
-                      audioValidationError(
-                        file
-                      );
-
-                    if (error) {
-                      setAudioFile(
-                        null
-                      );
-
-                      setGenerationError(
-                        error
-                      );
-
-                      event.target.value =
-                        "";
-
-                      return;
-                    }
-
                     setAudioFile(
                       file
-                    );
-
-                    if (file) {
-                      setSelectedAudioMediaId(
-                        ""
-                      );
-                    }
-
-                    setGenerationError(
-                      null
                     );
                   }}
                   className="mt-3 block w-full text-sm text-white/60 file:mr-4 file:rounded-xl file:border-0 file:bg-fuchsia-500/20 file:px-4 file:py-3 file:font-black file:text-fuchsia-200"
                 />
 
-                {selectedMediaAudio ? (
+                {audioFile ? (
                   <p className="mt-3 break-all text-xs text-emerald-300">
-                    Existing song ready: {
-                      selectedMediaAudio.title
-                    }
-                  </p>
-                ) : audioFile ? (
-                  <p className="mt-3 break-all text-xs text-emerald-300">
-                    Selected upload: {
+                    Selected song: {
                       audioFile.name
                     }
                   </p>
                 ) : (
                   <p className="mt-3 text-xs text-white/40">
-                    Choose an existing Media Library song or upload an MP3, WAV, M4A, or AAC file.
+                    Choose an MP3, WAV, M4A, or AAC song.
                   </p>
                 )}
               </label>
@@ -3151,86 +2090,10 @@ export default function PremiumAiVideoPage() {
                   )
                 }
                 rows={7}
-                maxLength={2000}
                 placeholder="Describe the video you want to create..."
                 className="mt-3 w-full rounded-2xl border border-white/10 bg-[#080812] px-4 py-4 text-sm leading-6 text-white outline-none focus:border-violet-400/50"
               />
-
-              <div className="mt-2 flex items-center justify-between gap-3 text-xs text-white/35">
-                <span>
-                  Be specific about camera movement, lighting, mood, and motion.
-                </span>
-
-                <span>
-                  {prompt.length}/2000
-                </span>
-              </div>
             </label>
-
-            <div className="mt-4 rounded-2xl border border-violet-400/15 bg-violet-500/5 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-black">
-                    Quick Prompt Presets
-                  </p>
-
-                  <p className="mt-1 text-xs text-white/40">
-                    Load a preset and customize it before generating.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={
-                    creating ||
-                    recentJobs.length === 0
-                  }
-                  onClick={
-                    useLastRecentPrompt
-                  }
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black text-white/60 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
-                >
-                  Use Last Prompt
-                </button>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                {promptPresetsForMode(
-                  generationMode
-                ).map(
-                  (preset) => (
-                    <button
-                      key={
-                        preset.label
-                      }
-                      type="button"
-                      disabled={
-                        creating
-                      }
-                      onClick={() => {
-                        setPrompt(
-                          preset.prompt
-                        );
-
-                        setGenerationError(
-                          null
-                        );
-
-                        setGenerationMessage(
-                          preset.label +
-                            " preset loaded."
-                        );
-                      }}
-                      className="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-xs font-black text-violet-100 transition hover:bg-violet-500/20 disabled:opacity-40"
-                    >
-                      {
-                        preset.label
-                      }
-                    </button>
-                  )
-                )}
-              </div>
-            </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label>
@@ -3346,7 +2209,6 @@ export default function PremiumAiVideoPage() {
               }
               disabled={
                 creating ||
-                !prompt.trim() ||
                 !hasEnoughCredits ||
                 (
                   (
@@ -3359,9 +2221,8 @@ export default function PremiumAiVideoPage() {
                 ) ||
                 (
                   generationMode ===
-        "music" &&
-      !audioFile &&
-      !selectedAudioMediaId
+                    "music" &&
+                  !audioFile
                 )
               }
               className="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-4 font-black text-white shadow-lg shadow-violet-950/30 disabled:cursor-not-allowed disabled:opacity-40"
@@ -3375,22 +2236,6 @@ export default function PremiumAiVideoPage() {
                       : "s"
                   }`}
             </button>
-
-            {(
-              outputUrl ||
-              currentJobId ||
-              progress > 0
-            ) && !creating ? (
-              <button
-                type="button"
-                onClick={
-                  startAnotherGeneration
-                }
-                className="mt-3 w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/65 transition hover:bg-white/10 hover:text-white"
-              >
-                Start Another Generation
-              </button>
-            ) : null}
 
             {generationError ? (
               <p className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 p-4 text-sm font-bold text-red-200">
@@ -3613,10 +2458,6 @@ export default function PremiumAiVideoPage() {
                     setRecentJobsVisibleCount(
                       6
                     );
-
-                    setRecentJobsActionMessage(
-                      null
-                    );
                   }}
                   className={`rounded-xl border px-4 py-2 text-xs font-black transition ${
                     recentJobFilter ===
@@ -3631,187 +2472,7 @@ export default function PremiumAiVideoPage() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-3">
-            <select
-              value={recentJobModeFilter}
-              onChange={(event) => {
-                setRecentJobModeFilter(
-                  event.target.value as RecentJobModeFilter
-                );
-                setRecentJobsVisibleCount(6);
-                setRecentJobsActionMessage(null);
-              }}
-              className="rounded-xl border border-white/10 bg-[#080812] px-4 py-2 text-xs font-black text-white/70 outline-none focus:border-violet-400/40"
-              aria-label="Filter recent jobs by generation mode"
-            >
-              <option value="all">
-                All Modes
-              </option>
-              <option value="text">
-                Text to Video
-              </option>
-              <option value="image">
-                Image / Album Cover
-              </option>
-              <option value="music">
-                Song + Cover
-              </option>
-            </select>
-
-            <button
-              type="button"
-              onClick={resetRecentJobsView}
-              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white/60 transition hover:bg-white/10 hover:text-white"
-            >
-              Reset View
-            </button>
-          </div>
-
-          <div className="mt-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_220px]">
-              <input
-                type="search"
-                value={recentJobsSearch}
-              onChange={(event) => {
-                setRecentJobsSearch(
-                  event.target.value
-                );
-                setRecentJobsVisibleCount(
-                  6
-                );
-
-                setRecentJobsActionMessage(
-                  null
-                );
-              }}
-              placeholder="Search by Job ID, prompt, mode, or status..."
-              className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-white outline-none placeholder:text-white/30 focus:border-violet-400/40"
-              />
-
-              <select
-                value={recentJobsSort}
-                onChange={(event) => {
-                  setRecentJobsSort(
-                    event.target
-                      .value as RecentJobSort
-                  );
-
-                  setRecentJobsVisibleCount(
-                    6
-                  );
-
-                  setRecentJobsActionMessage(
-                    null
-                  );
-                }}
-                className="w-full rounded-xl border border-white/10 bg-[#080812] px-4 py-3 text-sm font-black text-white/75 outline-none focus:border-violet-400/40"
-                aria-label="Sort recent jobs"
-              >
-                <option value="newest">
-                  Newest First
-                </option>
-
-                <option value="oldest">
-                  Oldest First
-                </option>
-
-                <option value="completed">
-                  Completed First
-                </option>
-
-                <option value="failed">
-                  Failed / Stale First
-                </option>
-              </select>
-            </div>
-
-            {recentJobsSearch.trim() ? (
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <p className="text-xs font-bold text-white/35">
-                  {
-                    searchedRecentJobs.length
-                  }{" "}
-                  matching job
-                  {
-                    searchedRecentJobs.length ===
-                    1
-                      ? ""
-                      : "s"
-                  }
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRecentJobsSearch("");
-                    setRecentJobsVisibleCount(
-                      6
-                    );
-
-                    setRecentJobsActionMessage(
-                      null
-                    );
-                  }}
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-white/60 transition hover:bg-white/10 hover:text-white"
-                >
-                  Clear Search
-                </button>
-              </div>
-            ) : null}
-
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-white/35">
-              <span>
-                {recentJobFilter === "all"
-                  ? "All"
-                  : recentJobFilter === "completed"
-                    ? "Completed"
-                    : recentJobFilter === "failed"
-                      ? "Failed"
-                      : "Hidden"}
-              </span>
-
-              <span>•</span>
-
-              <span>
-                {recentJobModeFilter === "all"
-                  ? "All Modes"
-                  : recentJobModeFilter === "text"
-                    ? "Text to Video"
-                    : recentJobModeFilter === "image"
-                      ? "Image / Album Cover"
-                      : "Song + Cover"}
-              </span>
-
-              <span>•</span>
-
-              <span>
-                {sortedRecentJobs.length}{" "}
-                {sortedRecentJobs.length === 1
-                  ? "job"
-                  : "jobs"}
-              </span>
-
-              <span>•</span>
-
-              <span>
-                {recentJobsSort === "newest"
-                  ? "Newest First"
-                  : recentJobsSort === "oldest"
-                    ? "Oldest First"
-                    : recentJobsSort === "completed"
-                      ? "Completed First"
-                      : "Failed / Stale First"}
-              </span>
-            </div>
-
-            {recentJobsActionMessage ? (
-              <p className="mt-3 rounded-xl border border-cyan-400/15 bg-cyan-500/10 px-3 py-2 text-xs font-bold text-cyan-200">
-                {recentJobsActionMessage}
-              </p>
-            ) : null}
-          </div>
-
-          {searchedRecentJobs.length >
+          {filteredRecentJobs.length >
           6 ? (
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
@@ -3820,22 +2481,22 @@ export default function PremiumAiVideoPage() {
                   setRecentJobsVisibleCount(
                     (current) =>
                       current >=
-                      searchedRecentJobs.length
+                      filteredRecentJobs.length
                         ? 6
                         : Math.min(
                             current + 6,
-                            searchedRecentJobs.length
+                            filteredRecentJobs.length
                           )
                   )
                 }
                 className="rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-xs font-black text-violet-100 transition hover:bg-violet-500/20"
               >
                 {recentJobsVisibleCount >=
-                searchedRecentJobs.length
+                filteredRecentJobs.length
                   ? "Show Less"
                   : `Load More (${Math.min(
                       6,
-                      searchedRecentJobs.length -
+                      filteredRecentJobs.length -
                         recentJobsVisibleCount
                     )})`}
               </button>
@@ -3844,28 +2505,12 @@ export default function PremiumAiVideoPage() {
                 Showing{" "}
                 {Math.min(
                   recentJobsVisibleCount,
-                  searchedRecentJobs.length
+                  filteredRecentJobs.length
                 )}{" "}
                 of{" "}
-                {searchedRecentJobs.length}
+                {filteredRecentJobs.length}
               </span>
             </div>
-          ) : null}
-
-          {recentJobFilter ===
-            "failed" &&
-          filteredRecentJobs.length >
-            0 ? (
-            <button
-              type="button"
-              onClick={
-                hideAllFailedRecentJobs
-              }
-              className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-2 text-xs font-black text-amber-200 transition hover:bg-amber-500/20"
-            >
-              Hide All Failed (
-              {filteredRecentJobs.length})
-            </button>
           ) : null}
 
           {recentJobFilter ===
@@ -3897,32 +2542,9 @@ export default function PremiumAiVideoPage() {
             </div>
           ) : null}
 
-          {!recentJobsLoading &&
-          !recentJobsError &&
-          recentJobs.length > 0 &&
-          sortedRecentJobs.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-6 text-center">
-              <p className="font-black text-white/70">
-                No matching jobs found.
-              </p>
-
-              <p className="mt-2 text-sm text-white/40">
-                Try another search or filter, or reset the view.
-              </p>
-
-              <button
-                type="button"
-                onClick={resetRecentJobsView}
-                className="mt-4 rounded-xl border border-violet-400/20 bg-violet-500/10 px-4 py-2 text-xs font-black text-violet-100"
-              >
-                Reset View
-              </button>
-            </div>
-          ) : null}
-
-          {sortedRecentJobs.length > 0 ? (
+          {recentJobs.length > 0 ? (
             <div className="mt-5 grid gap-4">
-              {sortedRecentJobs
+              {filteredRecentJobs
                 .slice(
                   0,
                   recentJobsVisibleCount
@@ -3950,48 +2572,6 @@ export default function PremiumAiVideoPage() {
                         <p className="mt-3 break-all text-xs text-white/40">
                           Job ID: {job.id}
                         </p>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void copyRecentJobText(
-                                job.id,
-                                "Job ID"
-                              )
-                            }
-                            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-white/55 transition hover:bg-white/10 hover:text-white"
-                          >
-                            Copy Job ID
-                          </button>
-
-                          {job.prompt ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void copyRecentJobText(
-                                  job.prompt || "",
-                                  "Prompt"
-                                )
-                              }
-                              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-white/55 transition hover:bg-white/10 hover:text-white"
-                            >
-                              Copy Prompt
-                            </button>
-                          ) : null}
-
-                          {job.prompt ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                reuseRecentJob(job)
-                              }
-                              className="rounded-lg border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-xs font-black text-violet-200 transition hover:bg-violet-500/20"
-                            >
-                              Reuse Prompt + Settings
-                            </button>
-                          ) : null}
-                        </div>
                       </div>
 
                       <div className="text-right text-xs text-white/40">

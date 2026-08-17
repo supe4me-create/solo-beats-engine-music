@@ -1,0 +1,2145 @@
+﻿===================================================
+1. RADIO AI MUSIC MERGE
+===================================================
+                  ? albumMetadata?.title ||
+                    selected.playlist.name ||
+                    "SOLO BEATS RADIO"
+                  : storedAlbumTitle,
+              artist:
+                item.artist ||
+                albumMetadata?.artist ||
+                "Solo Beats",
+              cover:
+                resolvedStoredCover ||
+                albumMetadata?.cover ||
+                "",
+              src,
+              order:
+                Number(item.order) || 0,
+            };
+          }
+        )
+      )
+    ).filter(
+      (
+        track
+      ): track is NonNullable<
+        typeof track
+      > => Boolean(track)
+    );
+
+    const aiRadioSnapshot =
+      await adminDb
+        .collection("mediaLibrary")
+        .where(
+          "radioAssigned",
+          "==",
+          true
+        )
+        .get();
+
+    const existingTrackIds =
+      new Set(
+        playlistTracks
+          .filter(Boolean)
+          .map(
+            (track) =>
+              track!.id
+          )
+      );
+
+    const aiRadioTracks = (
+      await Promise.all(
+        aiRadioSnapshot.docs.map(
+          async (mediaDoc) => {
+            const media =
+              mediaDoc.data();
+
+            if (
+              media.kind !== "audio" ||
+              media.status === "deleted" ||
+              media.published !== true ||
+              media.radioAssigned !== true ||
+              media.source !== "ai-music"
+            ) {
+              return null;
+            }
+
+            if (
+              existingTrackIds.has(
+                mediaDoc.id
+              )
+            ) {
+              return null;
+            }
+
+            const src =
+              await signedReadUrl(
+                media.storagePath
+              );
+
+            if (!src) {
+              return null;
+            }
+
+            return {
+              id:
+                mediaDoc.id,
+
+              title:
+                typeof media.title ===
+                  "string" &&
+                media.title.trim()
+                  ? media.title.trim()
+                  : "AI Music",
+
+              albumTitle:
+                "AI Music",
+
+              artist:
+                "Solo Beats",
+
+              cover:
+                "",
+
+              src,
+
+              order:
+                1000000,
+            };
+          }
+        )
+      )
+    ).filter(
+      (
+        track
+      ): track is NonNullable<
+        typeof track
+      > => Boolean(track)
+    );
+
+    const tracks = [
+      ...playlistTracks.filter(Boolean),
+      ...aiRadioTracks,
+    ];
+
+    return NextResponse.json(
+      {
+        success: true,
+        source: selected.source,
+        playlist: {
+          playlistId:
+            selected.playlist.id,
+          name:
+            selected.playlist.name ||
+            "SOLO BEATS RADIO",
+          description:
+            selected.playlist.description ||
+            "",
+        },
+        tracks,
+      },
+      {
+        headers: {
+          "Cache-Control":
+            "no-store, max-age=0",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Radio playlist GET error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        playlist: null,
+        tracks: [],
+        error:
+          "Radio playlist could not be loaded.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+
+
+
+===================================================
+2. OWNER MEDIA UPDATE API
+===================================================
+
+      const title =
+        clean(payload.title, 200);
+
+      const file =
+        payload.file as UploadFile;
+
+      const error =
+        validateFile(file);
+
+      if (error) {
+        return NextResponse.json(
+          {
+            success: false,
+            error,
+          },
+          { status: 400 }
+        );
+      }
+
+      const kind = getMediaKind(file)!;
+
+      if (
+        !mediaId ||
+        !storagePath ||
+        !storagePath.startsWith(
+          `media/${kind}/${mediaId}/`
+        )
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid Media Library upload.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const storageFile =
+        adminBucket.file(storagePath);
+
+      const [exists] =
+        await storageFile.exists();
+
+      if (!exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Uploaded file was not found.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const [metadata] =
+        await storageFile.getMetadata();
+
+      await adminDb
+        .collection("mediaLibrary")
+        .doc(mediaId)
+        .set(
+          {
+            title:
+              title ||
+              file.name.replace(
+                /\.[^.]+$/,
+                ""
+              ),
+            kind,
+            mimeType:
+              metadata.contentType ||
+              file.type,
+            originalName:
+              file.name,
+            extension:
+              extension(file.name),
+            sizeBytes:
+              Number(metadata.size) ||
+              file.size,
+            storagePath,
+            status: "active",
+            uploadedBy:
+              owner.email ||
+              OWNER_EMAIL,
+            createdAt:
+              FieldValue.serverTimestamp(),
+            updatedAt:
+              FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+      return NextResponse.json({
+        success: true,
+        mediaId,
+        kind,
+        storagePath,
+        message:
+          "Media added to the Central Media Library.",
+      });
+    }
+
+    if (payload.action === "assign") {
+      const mediaId =
+        clean(payload.mediaId, 100);
+
+      const field =
+        clean(payload.field, 50);
+
+      const allowedFields =
+        new Set([
+          "published",
+          "premiumAssigned",
+          "radioAssigned",
+        ]);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!allowedFields.has(field)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Invalid assignment field.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (
+        typeof payload.value !==
+        "boolean"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Assignment value must be true or false.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const mediaRef =
+        adminDb
+          .collection("mediaLibrary")
+          .doc(mediaId);
+
+      const mediaSnapshot =
+        await mediaRef.get();
+
+      if (!mediaSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Media item was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      await mediaRef.set(
+        {
+          [field]: payload.value,
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        mediaId,
+        field,
+        value: payload.value,
+        message:
+          "Media assignment updated.",
+      });
+    }
+
+    if (payload.action === "delete") {
+      const mediaId =
+        clean(payload.mediaId, 100);
+
+      if (!mediaId) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const mediaRef = adminDb
+        .collection("mediaLibrary")
+        .doc(mediaId);
+
+      const mediaSnapshot =
+        await mediaRef.get();
+
+      if (!mediaSnapshot.exists) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Media item was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      await mediaRef.set(
+        {
+          status: "deleted",
+          deletedAt:
+            FieldValue.serverTimestamp(),
+          deletedBy:
+            owner.email || OWNER_EMAIL,
+          updatedAt:
+            FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        success: true,
+        mediaId,
+        message:
+          "Media removed from the Media Library.",
+      });
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          'Use action "prepare", "finalize", "assign", or "delete".',
+      },
+      { status: 400 }
+    );
+  } catch (error) {
+    const response = authError(error);
+
+    if (response) {
+      return response;
+    }
+
+    console.error(
+      "Media Library POST error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Media upload could not be completed.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+
+===================================================
+3. MEDIA MANAGER AI MUSIC CONTROLS
+===================================================
+
+  app\developer\media\page.tsx:18:type MediaItem = {
+  app\developer\media\page.tsx:19:  mediaId: string;
+  app\developer\media\page.tsx:20:  title: string;
+  app\developer\media\page.tsx:21:  kind: MediaKind;
+  app\developer\media\page.tsx:22:  mimeType: string | null;
+  app\developer\media\page.tsx:23:  originalName: string | null;
+  app\developer\media\page.tsx:24:  extension: string | null;
+  app\developer\media\page.tsx:25:  sizeBytes: number;
+  app\developer\media\page.tsx:26:  storagePath: string | null;
+  app\developer\media\page.tsx:27:  status: string;
+  app\developer\media\page.tsx:28:  createdAt: string | null;
+  app\developer\media\page.tsx:29:  updatedAt: string | null;
+  app\developer\media\page.tsx:30:  previewUrl: string | null;
+  app\developer\media\page.tsx:31:  source?: string | null;
+  app\developer\media\page.tsx:32:  aiMusicGenerationId?: string | null;
+> app\developer\media\page.tsx:33:  published?: boolean;
+> app\developer\media\page.tsx:34:  premiumAssigned?: boolean;
+> app\developer\media\page.tsx:35:  radioAssigned?: boolean;
+  app\developer\media\page.tsx:36:};
+  app\developer\media\page.tsx:37:
+  app\developer\media\page.tsx:38:type MediaResponse = {
+  app\developer\media\page.tsx:39:  success: boolean;
+  app\developer\media\page.tsx:40:  media?: MediaItem[];
+  app\developer\media\page.tsx:41:  error?: string;
+  app\developer\media\page.tsx:42:};
+  app\developer\media\page.tsx:43:
+  app\developer\media\page.tsx:44:type UploadState =
+  app\developer\media\page.tsx:45:  | "idle"
+  app\developer\media\page.tsx:46:  | "preparing"
+  app\developer\media\page.tsx:47:  | "uploading"
+  app\developer\media\page.tsx:48:  | "finalizing"
+  app\developer\media\page.tsx:49:  | "done"
+  app\developer\media\page.tsx:50:  | "error";
+  app\developer\media\page.tsx:51:
+  app\developer\media\page.tsx:52:function formatBytes(value: number) {
+  app\developer\media\page.tsx:53:  if (!value || value <= 0) return "0 B";
+  app\developer\media\page.tsx:54:
+  app\developer\media\page.tsx:55:  const units = ["B", "KB", "MB", "GB"];
+  app\developer\media\page.tsx:56:  const index = Math.min(
+  app\developer\media\page.tsx:57:    Math.floor(Math.log(value) / Math.log(1024)),
+  app\developer\media\page.tsx:58:    units.length - 1
+  app\developer\media\page.tsx:59:  );
+  app\developer\media\page.tsx:60:
+  app\developer\media\page.tsx:61:  return `${(
+  app\developer\media\page.tsx:62:    value / Math.pow(1024, index)
+  app\developer\media\page.tsx:63:  ).toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+  app\developer\media\page.tsx:64:}
+  app\developer\media\page.tsx:65:
+  app\developer\media\page.tsx:66:function formatDate(value: string | null) {
+  app\developer\media\page.tsx:67:  if (!value) return "Unknown";
+  app\developer\media\page.tsx:68:
+  app\developer\media\page.tsx:69:  const date = new Date(value);
+  app\developer\media\page.tsx:70:
+  app\developer\media\page.tsx:71:  if (Number.isNaN(date.getTime())) {
+  app\developer\media\page.tsx:72:    return "Unknown";
+  app\developer\media\page.tsx:73:  }
+  app\developer\media\page.tsx:74:
+  app\developer\media\page.tsx:75:  return new Intl.DateTimeFormat("en-US", {
+  app\developer\media\page.tsx:76:    dateStyle: "medium",
+  app\developer\media\page.tsx:77:    timeStyle: "short",
+  app\developer\media\page.tsx:78:  }).format(date);
+  app\developer\media\page.tsx:79:}
+  app\developer\media\page.tsx:80:
+  app\developer\media\page.tsx:120:      if (
+  app\developer\media\page.tsx:121:        !currentUser ||
+  app\developer\media\page.tsx:122:        currentUser.email?.toLowerCase() !== OWNER_EMAIL
+  app\developer\media\page.tsx:123:      ) {
+  app\developer\media\page.tsx:124:        return;
+  app\developer\media\page.tsx:125:      }
+  app\developer\media\page.tsx:126:
+  app\developer\media\page.tsx:127:      setLoadingMedia(true);
+  app\developer\media\page.tsx:128:      setError("");
+  app\developer\media\page.tsx:129:
+  app\developer\media\page.tsx:130:      try {
+  app\developer\media\page.tsx:131:        const token =
+  app\developer\media\page.tsx:132:          await currentUser.getIdToken();
+  app\developer\media\page.tsx:133:
+  app\developer\media\page.tsx:134:        const response = await fetch(
+> app\developer\media\page.tsx:135:          "/api/owner/media",
+  app\developer\media\page.tsx:136:          {
+  app\developer\media\page.tsx:137:            headers: {
+  app\developer\media\page.tsx:138:              Authorization: `Bearer ${token}`,
+  app\developer\media\page.tsx:139:            },
+  app\developer\media\page.tsx:140:            cache: "no-store",
+  app\developer\media\page.tsx:141:          }
+  app\developer\media\page.tsx:142:        );
+  app\developer\media\page.tsx:143:
+  app\developer\media\page.tsx:144:        const data =
+  app\developer\media\page.tsx:145:          (await response.json()) as MediaResponse;
+  app\developer\media\page.tsx:146:
+  app\developer\media\page.tsx:147:        if (!response.ok || !data.success) {
+  app\developer\media\page.tsx:148:          throw new Error(
+  app\developer\media\page.tsx:149:            data.error ||
+  app\developer\media\page.tsx:150:              "Media Library could not be loaded."
+  app\developer\media\page.tsx:151:          );
+  app\developer\media\page.tsx:152:        }
+  app\developer\media\page.tsx:153:
+  app\developer\media\page.tsx:154:        setMedia(data.media || []);
+  app\developer\media\page.tsx:155:      } catch (err) {
+  app\developer\media\page.tsx:156:        setError(
+  app\developer\media\page.tsx:157:          err instanceof Error
+  app\developer\media\page.tsx:158:            ? err.message
+  app\developer\media\page.tsx:159:            : "Media Library could not be loaded."
+  app\developer\media\page.tsx:160:        );
+  app\developer\media\page.tsx:161:      } finally {
+  app\developer\media\page.tsx:162:        setLoadingMedia(false);
+  app\developer\media\page.tsx:163:      }
+  app\developer\media\page.tsx:164:    },
+  app\developer\media\page.tsx:165:    [user]
+  app\developer\media\page.tsx:166:  );
+  app\developer\media\page.tsx:167:
+  app\developer\media\page.tsx:168:  useEffect(() => {
+  app\developer\media\page.tsx:169:    if (!loading && isOwner && user) {
+  app\developer\media\page.tsx:170:      void loadMedia(user);
+  app\developer\media\page.tsx:171:    }
+  app\developer\media\page.tsx:172:  }, [loading, isOwner, user, loadMedia]);
+  app\developer\media\page.tsx:173:
+  app\developer\media\page.tsx:174:  const stats = useMemo(
+  app\developer\media\page.tsx:175:    () => ({
+  app\developer\media\page.tsx:176:      total: media.length,
+  app\developer\media\page.tsx:177:      audio: media.filter(
+  app\developer\media\page.tsx:178:        (item) => item.kind === "audio"
+  app\developer\media\page.tsx:179:      ).length,
+  app\developer\media\page.tsx:180:      video: media.filter(
+  app\developer\media\page.tsx:229:    if (nextFiles.length === 1) {
+  app\developer\media\page.tsx:230:      setTitle(
+  app\developer\media\page.tsx:231:        nextFiles[0].name.replace(
+  app\developer\media\page.tsx:232:          /\.[^.]+$/,
+  app\developer\media\page.tsx:233:          ""
+  app\developer\media\page.tsx:234:        )
+  app\developer\media\page.tsx:235:      );
+  app\developer\media\page.tsx:236:    } else {
+  app\developer\media\page.tsx:237:      setTitle("");
+  app\developer\media\page.tsx:238:    }
+  app\developer\media\page.tsx:239:  }
+  app\developer\media\page.tsx:240:
+  app\developer\media\page.tsx:241:  async function updateMediaAssignment(
+  app\developer\media\page.tsx:242:    item: MediaItem,
+  app\developer\media\page.tsx:243:    field:
+> app\developer\media\page.tsx:244:      | "published"
+> app\developer\media\page.tsx:245:      | "premiumAssigned"
+> app\developer\media\page.tsx:246:      | "radioAssigned",
+  app\developer\media\page.tsx:247:    value: boolean
+  app\developer\media\page.tsx:248:  ) {
+  app\developer\media\page.tsx:249:    if (!user || updatingMediaId) {
+  app\developer\media\page.tsx:250:      return;
+  app\developer\media\page.tsx:251:    }
+  app\developer\media\page.tsx:252:
+  app\developer\media\page.tsx:253:    setUpdatingMediaId(item.mediaId);
+  app\developer\media\page.tsx:254:    setError("");
+  app\developer\media\page.tsx:255:    setNotice("");
+  app\developer\media\page.tsx:256:
+  app\developer\media\page.tsx:257:    try {
+  app\developer\media\page.tsx:258:      const token =
+  app\developer\media\page.tsx:259:        await user.getIdToken();
+  app\developer\media\page.tsx:260:
+  app\developer\media\page.tsx:261:      const response =
+  app\developer\media\page.tsx:262:        await fetch(
+> app\developer\media\page.tsx:263:          "/api/owner/media",
+  app\developer\media\page.tsx:264:          {
+  app\developer\media\page.tsx:265:            method: "POST",
+  app\developer\media\page.tsx:266:            headers: {
+  app\developer\media\page.tsx:267:              "Content-Type":
+  app\developer\media\page.tsx:268:                "application/json",
+  app\developer\media\page.tsx:269:              Authorization:
+  app\developer\media\page.tsx:270:                `Bearer ${token}`,
+  app\developer\media\page.tsx:271:            },
+  app\developer\media\page.tsx:272:            body: JSON.stringify({
+  app\developer\media\page.tsx:273:              action: "assign",
+  app\developer\media\page.tsx:274:              mediaId: item.mediaId,
+  app\developer\media\page.tsx:275:              field,
+  app\developer\media\page.tsx:276:              value,
+  app\developer\media\page.tsx:277:            }),
+  app\developer\media\page.tsx:278:          }
+  app\developer\media\page.tsx:279:        );
+  app\developer\media\page.tsx:280:
+  app\developer\media\page.tsx:281:      const data =
+  app\developer\media\page.tsx:282:        await response.json();
+  app\developer\media\page.tsx:283:
+  app\developer\media\page.tsx:284:      if (
+  app\developer\media\page.tsx:285:        !response.ok ||
+  app\developer\media\page.tsx:286:        !data.success
+  app\developer\media\page.tsx:287:      ) {
+  app\developer\media\page.tsx:288:        throw new Error(
+  app\developer\media\page.tsx:289:          data.error ||
+  app\developer\media\page.tsx:290:            "Media assignment could not be updated."
+  app\developer\media\page.tsx:291:        );
+  app\developer\media\page.tsx:292:      }
+  app\developer\media\page.tsx:293:
+  app\developer\media\page.tsx:294:      setMedia((current) =>
+  app\developer\media\page.tsx:295:        current.map((mediaItem) =>
+  app\developer\media\page.tsx:296:          mediaItem.mediaId ===
+  app\developer\media\page.tsx:297:          item.mediaId
+  app\developer\media\page.tsx:298:            ? {
+  app\developer\media\page.tsx:299:                ...mediaItem,
+  app\developer\media\page.tsx:300:                [field]: value,
+  app\developer\media\page.tsx:301:              }
+  app\developer\media\page.tsx:302:            : mediaItem
+  app\developer\media\page.tsx:303:        )
+  app\developer\media\page.tsx:304:      );
+  app\developer\media\page.tsx:305:
+  app\developer\media\page.tsx:306:      setNotice(
+  app\developer\media\page.tsx:307:        data.message ||
+  app\developer\media\page.tsx:308:          "Media assignment updated."
+  app\developer\media\page.tsx:327:      `Delete "${item.originalName || item.title}" from the Media Library?`
+  app\developer\media\page.tsx:328:    );
+  app\developer\media\page.tsx:329:
+  app\developer\media\page.tsx:330:    if (!confirmed) {
+  app\developer\media\page.tsx:331:      return;
+  app\developer\media\page.tsx:332:    }
+  app\developer\media\page.tsx:333:
+  app\developer\media\page.tsx:334:    setDeletingMediaId(item.mediaId);
+  app\developer\media\page.tsx:335:    setError("");
+  app\developer\media\page.tsx:336:    setNotice("");
+  app\developer\media\page.tsx:337:
+  app\developer\media\page.tsx:338:    try {
+  app\developer\media\page.tsx:339:      const token = await user.getIdToken();
+  app\developer\media\page.tsx:340:
+  app\developer\media\page.tsx:341:      const response = await fetch(
+> app\developer\media\page.tsx:342:        "/api/owner/media",
+  app\developer\media\page.tsx:343:        {
+  app\developer\media\page.tsx:344:          method: "POST",
+  app\developer\media\page.tsx:345:          headers: {
+  app\developer\media\page.tsx:346:            "Content-Type": "application/json",
+  app\developer\media\page.tsx:347:            Authorization: `Bearer ${token}`,
+  app\developer\media\page.tsx:348:          },
+  app\developer\media\page.tsx:349:          body: JSON.stringify({
+  app\developer\media\page.tsx:350:            action: "delete",
+  app\developer\media\page.tsx:351:            mediaId: item.mediaId,
+  app\developer\media\page.tsx:352:          }),
+  app\developer\media\page.tsx:353:        }
+  app\developer\media\page.tsx:354:      );
+  app\developer\media\page.tsx:355:
+  app\developer\media\page.tsx:356:      const data = await response.json();
+  app\developer\media\page.tsx:357:
+  app\developer\media\page.tsx:358:      if (!response.ok || !data.success) {
+  app\developer\media\page.tsx:359:        throw new Error(
+  app\developer\media\page.tsx:360:          data.error ||
+  app\developer\media\page.tsx:361:            "Media could not be deleted."
+  app\developer\media\page.tsx:362:        );
+  app\developer\media\page.tsx:363:      }
+  app\developer\media\page.tsx:364:
+  app\developer\media\page.tsx:365:      setMedia((current) =>
+  app\developer\media\page.tsx:366:        current.filter(
+  app\developer\media\page.tsx:367:          (mediaItem) =>
+  app\developer\media\page.tsx:368:            mediaItem.mediaId !== item.mediaId
+  app\developer\media\page.tsx:369:        )
+  app\developer\media\page.tsx:370:      );
+  app\developer\media\page.tsx:371:
+  app\developer\media\page.tsx:372:      setNotice(
+  app\developer\media\page.tsx:373:        `${item.originalName || item.title} removed from the Media Library.`
+  app\developer\media\page.tsx:374:      );
+  app\developer\media\page.tsx:375:    } catch (deleteError) {
+  app\developer\media\page.tsx:376:      setError(
+  app\developer\media\page.tsx:377:        deleteError instanceof Error
+  app\developer\media\page.tsx:378:          ? deleteError.message
+  app\developer\media\page.tsx:379:          : "Media could not be deleted."
+  app\developer\media\page.tsx:380:      );
+  app\developer\media\page.tsx:381:    } finally {
+  app\developer\media\page.tsx:382:      setDeletingMediaId("");
+  app\developer\media\page.tsx:383:    }
+  app\developer\media\page.tsx:384:  }
+  app\developer\media\page.tsx:385:
+  app\developer\media\page.tsx:386:  async function uploadMedia() {
+  app\developer\media\page.tsx:387:    if (!user || !isOwner) return;
+  app\developer\media\page.tsx:429:            currentFile.type ||
+  app\developer\media\page.tsx:430:            "application/octet-stream",
+  app\developer\media\page.tsx:431:          size: currentFile.size,
+  app\developer\media\page.tsx:432:        };
+  app\developer\media\page.tsx:433:
+  app\developer\media\page.tsx:434:        setUploadState(
+  app\developer\media\page.tsx:435:          "preparing"
+  app\developer\media\page.tsx:436:        );
+  app\developer\media\page.tsx:437:
+  app\developer\media\page.tsx:438:        setNotice(
+  app\developer\media\page.tsx:439:          `Preparing ${index + 1} of ${totalFiles}: ${currentFile.name}`
+  app\developer\media\page.tsx:440:        );
+  app\developer\media\page.tsx:441:
+  app\developer\media\page.tsx:442:        const prepareResponse =
+  app\developer\media\page.tsx:443:          await fetch(
+> app\developer\media\page.tsx:444:            "/api/owner/media",
+  app\developer\media\page.tsx:445:            {
+  app\developer\media\page.tsx:446:              method: "POST",
+  app\developer\media\page.tsx:447:              headers: {
+  app\developer\media\page.tsx:448:                "Content-Type":
+  app\developer\media\page.tsx:449:                  "application/json",
+  app\developer\media\page.tsx:450:                Authorization:
+  app\developer\media\page.tsx:451:                  `Bearer ${token}`,
+  app\developer\media\page.tsx:452:              },
+  app\developer\media\page.tsx:453:              body: JSON.stringify({
+  app\developer\media\page.tsx:454:                action: "prepare",
+  app\developer\media\page.tsx:455:                file: fileInfo,
+  app\developer\media\page.tsx:456:              }),
+  app\developer\media\page.tsx:457:            }
+  app\developer\media\page.tsx:458:          );
+  app\developer\media\page.tsx:459:
+  app\developer\media\page.tsx:460:        const prepareData =
+  app\developer\media\page.tsx:461:          await prepareResponse.json();
+  app\developer\media\page.tsx:462:
+  app\developer\media\page.tsx:463:        if (
+  app\developer\media\page.tsx:464:          !prepareResponse.ok ||
+  app\developer\media\page.tsx:465:          !prepareData.success
+  app\developer\media\page.tsx:466:        ) {
+  app\developer\media\page.tsx:467:          throw new Error(
+  app\developer\media\page.tsx:468:            prepareData.error ||
+  app\developer\media\page.tsx:469:              `Could not prepare ${currentFile.name}.`
+  app\developer\media\page.tsx:470:          );
+  app\developer\media\page.tsx:471:        }
+  app\developer\media\page.tsx:472:
+  app\developer\media\page.tsx:473:        setUploadState(
+  app\developer\media\page.tsx:474:          "uploading"
+  app\developer\media\page.tsx:475:        );
+  app\developer\media\page.tsx:476:
+  app\developer\media\page.tsx:477:        setNotice(
+  app\developer\media\page.tsx:478:          `Uploading ${index + 1} of ${totalFiles}: ${currentFile.name}`
+  app\developer\media\page.tsx:479:        );
+  app\developer\media\page.tsx:480:
+  app\developer\media\page.tsx:481:        const uploadResponse =
+  app\developer\media\page.tsx:482:          await fetch(
+  app\developer\media\page.tsx:483:            prepareData.uploadUrl,
+  app\developer\media\page.tsx:484:            {
+  app\developer\media\page.tsx:485:              method: "PUT",
+  app\developer\media\page.tsx:486:              headers: {
+  app\developer\media\page.tsx:487:                "Content-Type":
+  app\developer\media\page.tsx:488:                  currentFile.type ||
+  app\developer\media\page.tsx:489:                  "application/octet-stream",
+  app\developer\media\page.tsx:496:          throw new Error(
+  app\developer\media\page.tsx:497:            `Firebase upload failed for ${currentFile.name} (${uploadResponse.status}).`
+  app\developer\media\page.tsx:498:          );
+  app\developer\media\page.tsx:499:        }
+  app\developer\media\page.tsx:500:
+  app\developer\media\page.tsx:501:        setUploadState(
+  app\developer\media\page.tsx:502:          "finalizing"
+  app\developer\media\page.tsx:503:        );
+  app\developer\media\page.tsx:504:
+  app\developer\media\page.tsx:505:        setNotice(
+  app\developer\media\page.tsx:506:          `Saving ${index + 1} of ${totalFiles}: ${currentFile.name}`
+  app\developer\media\page.tsx:507:        );
+  app\developer\media\page.tsx:508:
+  app\developer\media\page.tsx:509:        const finalizeResponse =
+  app\developer\media\page.tsx:510:          await fetch(
+> app\developer\media\page.tsx:511:            "/api/owner/media",
+  app\developer\media\page.tsx:512:            {
+  app\developer\media\page.tsx:513:              method: "POST",
+  app\developer\media\page.tsx:514:              headers: {
+  app\developer\media\page.tsx:515:                "Content-Type":
+  app\developer\media\page.tsx:516:                  "application/json",
+  app\developer\media\page.tsx:517:                Authorization:
+  app\developer\media\page.tsx:518:                  `Bearer ${token}`,
+  app\developer\media\page.tsx:519:              },
+  app\developer\media\page.tsx:520:              body: JSON.stringify({
+  app\developer\media\page.tsx:521:                action: "finalize",
+  app\developer\media\page.tsx:522:                mediaId:
+  app\developer\media\page.tsx:523:                  prepareData.mediaId,
+  app\developer\media\page.tsx:524:                storagePath:
+  app\developer\media\page.tsx:525:                  prepareData.storagePath,
+  app\developer\media\page.tsx:526:                title:
+  app\developer\media\page.tsx:527:                  currentTitle,
+  app\developer\media\page.tsx:528:                file:
+  app\developer\media\page.tsx:529:                  fileInfo,
+  app\developer\media\page.tsx:530:              }),
+  app\developer\media\page.tsx:531:            }
+  app\developer\media\page.tsx:532:          );
+  app\developer\media\page.tsx:533:
+  app\developer\media\page.tsx:534:        const finalizeData =
+  app\developer\media\page.tsx:535:          await finalizeResponse.json();
+  app\developer\media\page.tsx:536:
+  app\developer\media\page.tsx:537:        if (
+  app\developer\media\page.tsx:538:          !finalizeResponse.ok ||
+  app\developer\media\page.tsx:539:          !finalizeData.success
+  app\developer\media\page.tsx:540:        ) {
+  app\developer\media\page.tsx:541:          throw new Error(
+  app\developer\media\page.tsx:542:            finalizeData.error ||
+  app\developer\media\page.tsx:543:              `Could not finalize ${currentFile.name}.`
+  app\developer\media\page.tsx:544:          );
+  app\developer\media\page.tsx:545:        }
+  app\developer\media\page.tsx:546:
+  app\developer\media\page.tsx:547:        completedFiles += 1;
+  app\developer\media\page.tsx:548:
+  app\developer\media\page.tsx:549:        setUploadPercent(
+  app\developer\media\page.tsx:550:          Math.round(
+  app\developer\media\page.tsx:551:            (
+  app\developer\media\page.tsx:552:              completedFiles /
+  app\developer\media\page.tsx:553:              totalFiles
+  app\developer\media\page.tsx:554:            ) * 100
+  app\developer\media\page.tsx:555:          )
+  app\developer\media\page.tsx:556:        );
+  app\developer\media\page.tsx:903:                      ) : (
+  app\developer\media\page.tsx:904:                        <p className="text-white/40">
+  app\developer\media\page.tsx:905:                          Preview unavailable
+  app\developer\media\page.tsx:906:                        </p>
+  app\developer\media\page.tsx:907:                      )}
+  app\developer\media\page.tsx:908:                    </div>
+  app\developer\media\page.tsx:909:
+  app\developer\media\page.tsx:910:                    <div className="p-6">
+  app\developer\media\page.tsx:911:                      <div className="flex gap-2">
+  app\developer\media\page.tsx:912:                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase">
+  app\developer\media\page.tsx:913:                          {item.kind}
+  app\developer\media\page.tsx:914:                        </span>
+  app\developer\media\page.tsx:915:
+  app\developer\media\page.tsx:916:                        {item.source === "ai-music" && (
+  app\developer\media\page.tsx:917:                          <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase text-cyan-200">
+> app\developer\media\page.tsx:918:                            AI MUSIC
+  app\developer\media\page.tsx:919:                          </span>
+  app\developer\media\page.tsx:920:                        )}
+  app\developer\media\page.tsx:921:
+  app\developer\media\page.tsx:922:                        {item.extension && (
+  app\developer\media\page.tsx:923:                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black uppercase text-white/50">
+  app\developer\media\page.tsx:924:                            {
+  app\developer\media\page.tsx:925:                              item.extension
+  app\developer\media\page.tsx:926:                            }
+  app\developer\media\page.tsx:927:                          </span>
+  app\developer\media\page.tsx:928:                        )}
+  app\developer\media\page.tsx:929:                      </div>
+  app\developer\media\page.tsx:930:
+  app\developer\media\page.tsx:931:                      <h3 className="mt-4 text-2xl font-black">
+  app\developer\media\page.tsx:932:                        {item.title}
+  app\developer\media\page.tsx:933:                      </h3>
+  app\developer\media\page.tsx:934:
+  app\developer\media\page.tsx:935:                      <p className="mt-2 break-all text-xs text-white/40">
+  app\developer\media\page.tsx:936:                        {item.originalName}
+  app\developer\media\page.tsx:937:                      </p>
+  app\developer\media\page.tsx:938:
+  app\developer\media\page.tsx:939:                      <div className="mt-5 grid grid-cols-2 gap-3">
+  app\developer\media\page.tsx:940:                        <Info
+  app\developer\media\page.tsx:941:                          label="Size"
+  app\developer\media\page.tsx:942:                          value={formatBytes(
+  app\developer\media\page.tsx:943:                            item.sizeBytes
+  app\developer\media\page.tsx:944:                          )}
+  app\developer\media\page.tsx:945:                        />
+  app\developer\media\page.tsx:946:
+  app\developer\media\page.tsx:947:                        <Info
+  app\developer\media\page.tsx:948:                          label="Status"
+  app\developer\media\page.tsx:949:                          value={
+  app\developer\media\page.tsx:950:                            item.status
+  app\developer\media\page.tsx:951:                          }
+  app\developer\media\page.tsx:952:                        />
+  app\developer\media\page.tsx:953:                      </div>
+  app\developer\media\page.tsx:954:
+  app\developer\media\page.tsx:955:                      <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+  app\developer\media\page.tsx:956:                        <p className="text-xs font-black uppercase text-white/35">
+  app\developer\media\page.tsx:957:                          Media ID
+  app\developer\media\page.tsx:958:                        </p>
+  app\developer\media\page.tsx:959:
+  app\developer\media\page.tsx:960:                        <p className="mt-2 break-all text-xs">
+  app\developer\media\page.tsx:961:                          {item.mediaId}
+  app\developer\media\page.tsx:962:                        </p>
+  app\developer\media\page.tsx:963:                      </div>
+  app\developer\media\page.tsx:972:                            item.storagePath
+  app\developer\media\page.tsx:973:                          }
+  app\developer\media\page.tsx:974:                        </p>
+  app\developer\media\page.tsx:975:                      </div>
+  app\developer\media\page.tsx:976:
+  app\developer\media\page.tsx:977:                      <p className="mt-4 text-xs text-white/30">
+  app\developer\media\page.tsx:978:                        Uploaded{" "}
+  app\developer\media\page.tsx:979:                        {formatDate(
+  app\developer\media\page.tsx:980:                          item.createdAt
+  app\developer\media\page.tsx:981:                        )}
+  app\developer\media\page.tsx:982:                      </p>
+  app\developer\media\page.tsx:983:                      {item.kind === "audio" &&
+  app\developer\media\page.tsx:984:                      item.source === "ai-music" ? (
+  app\developer\media\page.tsx:985:                        <div className="mt-5 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.04] p-4">
+  app\developer\media\page.tsx:986:                          <p className="text-xs font-black uppercase tracking-[0.15em] text-cyan-200">
+> app\developer\media\page.tsx:987:                            AI Music Publishing
+  app\developer\media\page.tsx:988:                          </p>
+  app\developer\media\page.tsx:989:
+  app\developer\media\page.tsx:990:                          <div className="mt-4 space-y-3">
+  app\developer\media\page.tsx:991:
+  app\developer\media\page.tsx:992:                            <button
+  app\developer\media\page.tsx:993:                              type="button"
+  app\developer\media\page.tsx:994:                              disabled={
+  app\developer\media\page.tsx:995:                                updatingMediaId ===
+  app\developer\media\page.tsx:996:                                item.mediaId
+  app\developer\media\page.tsx:997:                              }
+  app\developer\media\page.tsx:998:                              onClick={() =>
+  app\developer\media\page.tsx:999:                                void updateMediaAssignment(
+  app\developer\media\page.tsx:1000:                                  item,
+> app\developer\media\page.tsx:1001:                                  "published",
+> app\developer\media\page.tsx:1002:                                  !item.published
+  app\developer\media\page.tsx:1003:                                )
+  app\developer\media\page.tsx:1004:                              }
+  app\developer\media\page.tsx:1005:                              className={
+> app\developer\media\page.tsx:1006:                                item.published
+  app\developer\media\page.tsx:1007:                                  ? "w-full rounded-xl bg-emerald-500/20 px-4 py-3 text-sm font-black text-emerald-200 disabled:opacity-50"
+  app\developer\media\page.tsx:1008:                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
+  app\developer\media\page.tsx:1009:                              }
+  app\developer\media\page.tsx:1010:                            >
+> app\developer\media\page.tsx:1011:                              {item.published
+> app\developer\media\page.tsx:1012:                                ? "PUBLISHED"
+  app\developer\media\page.tsx:1013:                                : "PRIVATE"}
+  app\developer\media\page.tsx:1014:                            </button>
+  app\developer\media\page.tsx:1015:
+  app\developer\media\page.tsx:1016:                            <button
+  app\developer\media\page.tsx:1017:                              type="button"
+  app\developer\media\page.tsx:1018:                              disabled={
+  app\developer\media\page.tsx:1019:                                updatingMediaId ===
+  app\developer\media\page.tsx:1020:                                item.mediaId
+  app\developer\media\page.tsx:1021:                              }
+  app\developer\media\page.tsx:1022:                              onClick={() =>
+  app\developer\media\page.tsx:1023:                                void updateMediaAssignment(
+  app\developer\media\page.tsx:1024:                                  item,
+> app\developer\media\page.tsx:1025:                                  "premiumAssigned",
+> app\developer\media\page.tsx:1026:                                  !item.premiumAssigned
+  app\developer\media\page.tsx:1027:                                )
+  app\developer\media\page.tsx:1028:                              }
+  app\developer\media\page.tsx:1029:                              className={
+> app\developer\media\page.tsx:1030:                                item.premiumAssigned
+  app\developer\media\page.tsx:1031:                                  ? "w-full rounded-xl bg-violet-500/20 px-4 py-3 text-sm font-black text-violet-200 disabled:opacity-50"
+  app\developer\media\page.tsx:1032:                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
+  app\developer\media\page.tsx:1033:                              }
+  app\developer\media\page.tsx:1034:                            >
+  app\developer\media\page.tsx:1035:                              Premium Library:{" "}
+> app\developer\media\page.tsx:1036:                              {item.premiumAssigned
+  app\developer\media\page.tsx:1037:                                ? "ON"
+  app\developer\media\page.tsx:1038:                                : "OFF"}
+  app\developer\media\page.tsx:1039:                            </button>
+  app\developer\media\page.tsx:1040:
+  app\developer\media\page.tsx:1041:                            <button
+  app\developer\media\page.tsx:1042:                              type="button"
+  app\developer\media\page.tsx:1043:                              disabled={
+  app\developer\media\page.tsx:1044:                                updatingMediaId ===
+  app\developer\media\page.tsx:1045:                                item.mediaId
+  app\developer\media\page.tsx:1046:                              }
+  app\developer\media\page.tsx:1047:                              onClick={() =>
+  app\developer\media\page.tsx:1048:                                void updateMediaAssignment(
+  app\developer\media\page.tsx:1049:                                  item,
+> app\developer\media\page.tsx:1050:                                  "radioAssigned",
+> app\developer\media\page.tsx:1051:                                  !item.radioAssigned
+  app\developer\media\page.tsx:1052:                                )
+  app\developer\media\page.tsx:1053:                              }
+  app\developer\media\page.tsx:1054:                              className={
+> app\developer\media\page.tsx:1055:                                item.radioAssigned
+  app\developer\media\page.tsx:1056:                                  ? "w-full rounded-xl bg-cyan-500/20 px-4 py-3 text-sm font-black text-cyan-200 disabled:opacity-50"
+  app\developer\media\page.tsx:1057:                                  : "w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-black text-white/70 disabled:opacity-50"
+  app\developer\media\page.tsx:1058:                              }
+  app\developer\media\page.tsx:1059:                            >
+  app\developer\media\page.tsx:1060:                              Radio:{" "}
+> app\developer\media\page.tsx:1061:                              {item.radioAssigned
+  app\developer\media\page.tsx:1062:                                ? "ON"
+  app\developer\media\page.tsx:1063:                                : "OFF"}
+  app\developer\media\page.tsx:1064:                            </button>
+  app\developer\media\page.tsx:1065:
+  app\developer\media\page.tsx:1066:                          </div>
+  app\developer\media\page.tsx:1067:                        </div>
+  app\developer\media\page.tsx:1068:                      ) : null}
+  app\developer\media\page.tsx:1069:
+  app\developer\media\page.tsx:1070:                  <button
+  app\developer\media\page.tsx:1071:                    type="button"
+  app\developer\media\page.tsx:1072:                    onClick={() =>
+  app\developer\media\page.tsx:1073:                      void deleteMedia(item)
+  app\developer\media\page.tsx:1074:                    }
+  app\developer\media\page.tsx:1075:                    disabled={
+  app\developer\media\page.tsx:1076:                      deletingMediaId ===
+  app\developer\media\page.tsx:1077:                      item.mediaId
+  app\developer\media\page.tsx:1078:                    }
+  app\developer\media\page.tsx:1079:                    className="mt-5 w-full rounded-2xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-black text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+  app\developer\media\page.tsx:1080:                  >
+  app\developer\media\page.tsx:1081:                    {deletingMediaId ===
+  app\developer\media\page.tsx:1082:                    item.mediaId
+  app\developer\media\page.tsx:1083:                      ? "Deleting..."
+  app\developer\media\page.tsx:1084:                      : "Delete Media"}
+  app\developer\media\page.tsx:1085:                  </button>
+  app\developer\media\page.tsx:1086:                    </div>
+  app\developer\media\page.tsx:1087:                  </article>
+  app\developer\media\page.tsx:1088:                )
+  app\developer\media\page.tsx:1089:              )}
+  app\developer\media\page.tsx:1090:            </div>
+  app\developer\media\page.tsx:1091:          )}
+  app\developer\media\page.tsx:1092:        </section>
+  app\developer\media\page.tsx:1093:      </div>
+  app\developer\media\page.tsx:1094:    </main>
+  app\developer\media\page.tsx:1095:  );
+  app\developer\media\page.tsx:1096:}
+  app\developer\media\page.tsx:1097:
+  app\developer\media\page.tsx:1098:function Stat({
+  app\developer\media\page.tsx:1099:  label,
+  app\developer\media\page.tsx:1100:  value,
+  app\developer\media\page.tsx:1101:}: {
+  app\developer\media\page.tsx:1102:  label: string;
+  app\developer\media\page.tsx:1103:  value: number;
+  app\developer\media\page.tsx:1104:}) {
+  app\developer\media\page.tsx:1105:  return (
+  app\developer\media\page.tsx:1106:    <div className="rounded-[1.7rem] border border-white/10 bg-white/[0.035] p-5">
+
+
+
+
+===================================================
+4. PREMIUM RADIO PLAYER/API TARGETS
+===================================================
+
+  app\business-advertising\payment\page.tsx:252:                      : placement === "store"
+  app\business-advertising\payment\page.tsx:253:                        ? "Store"
+  app\business-advertising\payment\page.tsx:254:                        : placement === "radio"
+> app\business-advertising\payment\page.tsx:255:                          ? "Premium Radio"
+  app\business-advertising\payment\page.tsx:256:                          : "Premium TV"
+  app\business-advertising\payment\page.tsx:257:                  )
+  app\business-advertising\payment\page.tsx:258:                  .join(", ")}
+  app\business-advertising\payment\page.tsx:259:              />
+  app\business-advertising\payment\page.tsx:260:              <Info
+  app\business-advertising\payment\page.tsx:261:                label="Total"
+  app\business-advertising\payment\page.tsx:262:                value={`$${submission.price} ${submission.currency}`}
+  app\business-advertising\payment\page.tsx:263:              />
+  app\business-advertising\payment\page.tsx:264:            </div>
+  app\business-advertising\payment\page.tsx:265:
+  app\business-advertising\payment\page.tsx:266:            <label className="mt-8 flex cursor-pointer items-start gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-5">
+  app\business-advertising\payment\page.tsx:267:              <input
+  app\business-advertising\payment\page.tsx:268:                type="checkbox"
+  app\business-advertising\payment\page.tsx:269:                checked={savePaymentMethod}
+  app\business-advertising\payment\page.tsx:270:                onChange={(event) =>
+  app\business-advertising\layout.tsx:3:export const metadata: Metadata = {
+  app\business-advertising\layout.tsx:4:  title: "Business and Video Advertising",
+  app\business-advertising\layout.tsx:5:  description:
+> app\business-advertising\layout.tsx:6:    "Advertise your business, brand, product, or promotional video across the SOLO BEATS homepage, Store, Premium Radio, and Premium TV.",
+  app\business-advertising\layout.tsx:7:  keywords: [
+  app\business-advertising\layout.tsx:8:    "business advertising",
+  app\business-advertising\layout.tsx:9:    "video advertising",
+  app\business-advertising\layout.tsx:10:    "brand promotion",
+  app\business-advertising\layout.tsx:11:    "music platform advertising",
+  app\business-advertising\layout.tsx:12:    "sponsored business campaign",
+  app\business-advertising\layout.tsx:13:    "homepage advertising",
+  app\business-advertising\layout.tsx:14:    "radio and TV advertising",
+  app\business-advertising\layout.tsx:15:  ],
+  app\business-advertising\layout.tsx:16:  alternates: {
+  app\business-advertising\layout.tsx:17:    canonical: "/business-advertising",
+  app\business-advertising\layout.tsx:18:  },
+  app\business-advertising\layout.tsx:19:  openGraph: {
+  app\business-advertising\layout.tsx:20:    type: "website",
+  app\business-advertising\layout.tsx:21:    title: "Business and Video Advertising",
+  app\business-advertising\page.tsx:485:            {[
+  app\business-advertising\page.tsx:486:              "Homepage",
+  app\business-advertising\page.tsx:487:              "Store",
+> app\business-advertising\page.tsx:488:              "Premium Radio",
+  app\business-advertising\page.tsx:489:              "Premium TV",
+  app\business-advertising\page.tsx:490:              "YouTube Video Links",
+  app\business-advertising\page.tsx:491:              "Uploaded Video Ads",
+  app\business-advertising\page.tsx:492:            ].map((label) => (
+  app\business-advertising\page.tsx:493:              <span
+  app\business-advertising\page.tsx:494:                key={label}
+  app\business-advertising\page.tsx:495:                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white/70"
+  app\business-advertising\page.tsx:496:              >
+  app\business-advertising\page.tsx:497:                {label}
+  app\business-advertising\page.tsx:498:              </span>
+  app\business-advertising\page.tsx:499:            ))}
+  app\business-advertising\page.tsx:500:          </div>
+  app\business-advertising\page.tsx:501:        </section>
+  app\business-advertising\page.tsx:502:
+  app\business-advertising\page.tsx:503:        <section className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
+  app\business-advertising\page.tsx:752:                  ],
+  app\business-advertising\page.tsx:753:                  [
+  app\business-advertising\page.tsx:754:                    "radio",
+> app\business-advertising\page.tsx:755:                    "Premium Radio",
+  app\business-advertising\page.tsx:756:                  ],
+  app\business-advertising\page.tsx:757:                  [
+  app\business-advertising\page.tsx:758:                    "tv",
+  app\business-advertising\page.tsx:759:                    "Premium TV",
+  app\business-advertising\page.tsx:760:                  ],
+  app\business-advertising\page.tsx:761:                ].map(
+  app\business-advertising\page.tsx:762:                  ([value, label]) => {
+  app\business-advertising\page.tsx:763:                    const placement =
+  app\business-advertising\page.tsx:764:                      value as Placement;
+  app\business-advertising\page.tsx:765:                    const selected =
+  app\business-advertising\page.tsx:766:                      placements.includes(
+  app\business-advertising\page.tsx:767:                        placement
+  app\business-advertising\page.tsx:768:                      );
+  app\business-advertising\page.tsx:769:
+  app\business-advertising\page.tsx:770:                    return (
+  app\components\AlbumStorePage.tsx:359:            {[
+  app\components\AlbumStorePage.tsx:360:              "Homepage",
+  app\components\AlbumStorePage.tsx:361:              "Store",
+> app\components\AlbumStorePage.tsx:362:              "Premium Radio",
+  app\components\AlbumStorePage.tsx:363:              "Premium TV",
+  app\components\AlbumStorePage.tsx:364:              "YouTube Video Links",
+  app\components\AlbumStorePage.tsx:365:              "Uploaded Video Ads",
+  app\components\AlbumStorePage.tsx:366:            ].map((label) => (
+  app\components\AlbumStorePage.tsx:367:              <span
+  app\components\AlbumStorePage.tsx:368:                key={label}
+  app\components\AlbumStorePage.tsx:369:                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-white/70"
+  app\components\AlbumStorePage.tsx:370:              >
+  app\components\AlbumStorePage.tsx:371:                {label}
+  app\components\AlbumStorePage.tsx:372:              </span>
+  app\components\AlbumStorePage.tsx:373:            ))}
+  app\components\AlbumStorePage.tsx:374:          </div>
+  app\components\AlbumStorePage.tsx:375:        </section>
+  app\components\AlbumStorePage.tsx:376:
+  app\components\AlbumStorePage.tsx:377:        <section className="mt-8 grid gap-8 lg:grid-cols-[1fr_360px]">
+  app\components\AlbumStorePage.tsx:611:                  ],
+  app\components\AlbumStorePage.tsx:612:                  [
+  app\components\AlbumStorePage.tsx:613:                    "radio",
+> app\components\AlbumStorePage.tsx:614:                    "Premium Radio",
+  app\components\AlbumStorePage.tsx:615:                  ],
+  app\components\AlbumStorePage.tsx:616:                  [
+  app\components\AlbumStorePage.tsx:617:                    "tv",
+  app\components\AlbumStorePage.tsx:618:                    "Premium TV",
+  app\components\AlbumStorePage.tsx:619:                  ],
+  app\components\AlbumStorePage.tsx:620:                ].map(
+  app\components\AlbumStorePage.tsx:621:                  ([value, label]) => {
+  app\components\AlbumStorePage.tsx:622:                    const placement =
+  app\components\AlbumStorePage.tsx:623:                      value as Placement;
+  app\components\AlbumStorePage.tsx:624:                    const selected =
+  app\components\AlbumStorePage.tsx:625:                      placements.includes(
+  app\components\AlbumStorePage.tsx:626:                        placement
+  app\components\AlbumStorePage.tsx:627:                      );
+  app\components\AlbumStorePage.tsx:628:
+  app\components\AlbumStorePage.tsx:629:                    return (
+  app\developer\artist-promotions\page.tsx:1096:                                  Store
+  app\developer\artist-promotions\page.tsx:1097:                                </option>
+  app\developer\artist-promotions\page.tsx:1098:                                <option value="radio">
+> app\developer\artist-promotions\page.tsx:1099:                                  Premium Radio
+  app\developer\artist-promotions\page.tsx:1100:                                </option>
+  app\developer\artist-promotions\page.tsx:1101:                                <option value="tv">
+  app\developer\artist-promotions\page.tsx:1102:                                  Premium TV
+  app\developer\artist-promotions\page.tsx:1103:                                </option>
+  app\developer\artist-promotions\page.tsx:1104:                              </select>
+  app\developer\artist-promotions\page.tsx:1105:                            </label>
+  app\developer\artist-promotions\page.tsx:1106:                          </div>
+  app\developer\artist-promotions\page.tsx:1107:
+  app\developer\artist-promotions\page.tsx:1108:                          <button
+  app\developer\artist-promotions\page.tsx:1109:                            type="button"
+  app\developer\artist-promotions\page.tsx:1110:                            disabled={
+  app\developer\artist-promotions\page.tsx:1111:                              reviewingId ===
+  app\developer\artist-promotions\page.tsx:1112:                              submission
+  app\developer\artist-promotions\page.tsx:1113:                                .submissionId
+  app\developer\artist-promotions\page.tsx:1114:                            }
+  app\developer\business-advertising\page.tsx:707:                                      : placement === "store"
+  app\developer\business-advertising\page.tsx:708:                                        ? "Store"
+  app\developer\business-advertising\page.tsx:709:                                        : placement === "radio"
+> app\developer\business-advertising\page.tsx:710:                                          ? "Premium Radio"
+  app\developer\business-advertising\page.tsx:711:                                          : "Premium TV"}
+  app\developer\business-advertising\page.tsx:712:                                  </span>
+  app\developer\business-advertising\page.tsx:713:                                ))}
+  app\developer\business-advertising\page.tsx:714:                              </div>
+  app\developer\business-advertising\page.tsx:715:                              <p className="mt-3 text-sm text-white/60">
+  app\developer\business-advertising\page.tsx:716:                                One approved ad will run across all selected placements.
+  app\developer\business-advertising\page.tsx:717:                              </p>
+  app\developer\business-advertising\page.tsx:718:                            </div>
+  app\developer\business-advertising\page.tsx:719:                          </div>
+  app\developer\business-advertising\page.tsx:720:
+  app\developer\business-advertising\page.tsx:721:                          <button
+  app\developer\business-advertising\page.tsx:722:                            type="button"
+  app\developer\business-advertising\page.tsx:723:                            disabled={reviewingId === submission.submissionId}
+  app\developer\business-advertising\page.tsx:724:                            onClick={() =>
+  app\developer\business-advertising\page.tsx:725:                              scheduleSubmission(submission.submissionId)
+  app\developer\business-advertising\page.tsx:749:                                  : placement === "store"
+  app\developer\business-advertising\page.tsx:750:                                    ? "Store"
+  app\developer\business-advertising\page.tsx:751:                                    : placement === "radio"
+> app\developer\business-advertising\page.tsx:752:                                      ? "Premium Radio"
+  app\developer\business-advertising\page.tsx:753:                                      : "Premium TV"
+  app\developer\business-advertising\page.tsx:754:                              )
+  app\developer\business-advertising\page.tsx:755:                              .join(", ") || "placements"}{" "}
+  app\developer\business-advertising\page.tsx:756:                            • {submission.scheduleStartDate || "start date"} to{" "}
+  app\developer\business-advertising\page.tsx:757:                            {submission.scheduleEndDate || "end date"}
+  app\developer\business-advertising\page.tsx:758:                          </p>
+  app\developer\business-advertising\page.tsx:759:                          <p className="mt-2 text-xs uppercase tracking-[0.14em] text-emerald-200">
+  app\developer\business-advertising\page.tsx:760:                            Label: Sponsored
+  app\developer\business-advertising\page.tsx:761:                          </p>
+  app\developer\business-advertising\page.tsx:762:                        </div>
+  app\developer\business-advertising\page.tsx:763:                      ) : null}
+  app\developer\business-advertising\page.tsx:764:
+  app\developer\business-advertising\page.tsx:765:                      {submission.reviewStatus === "approved" ? (<button type="button" disabled={reviewingId === submission.submissionId} onClick={() => review(submission.submissionId, "deactivate")} className="mt-6 rounded-2xl border 
+border-red-300/20 bg-red-300/10 px-5 py-4 font-black text-red-200 disabled:opacity-50">{reviewingId === submission.submissionId ? "Deactivating..." : "Deactivate Campaign"}</button>) : null}
+  app\developer\business-advertising\page.tsx:766:
+  app\developer\business-advertising\page.tsx:767:{submission.rejectionReason ? (
+  app\developer\radio\page.tsx:899:          </h1>
+  app\developer\radio\page.tsx:900:
+  app\developer\radio\page.tsx:901:          <p className="mt-3 text-white/60">
+> app\developer\radio\page.tsx:902:            Sign in with the owner account to manage Premium Radio programming.
+  app\developer\radio\page.tsx:903:          </p>
+  app\developer\radio\page.tsx:904:
+  app\developer\radio\page.tsx:905:          <Link
+  app\developer\radio\page.tsx:906:            href="/account"
+  app\developer\radio\page.tsx:907:            className="mt-6 inline-flex rounded-xl bg-white px-5 py-3 font-black text-black"
+  app\developer\radio\page.tsx:908:          >
+  app\developer\radio\page.tsx:909:            Open Account
+  app\developer\radio\page.tsx:910:          </Link>
+  app\developer\radio\page.tsx:911:        </div>
+  app\developer\radio\page.tsx:912:      </main>
+  app\developer\radio\page.tsx:913:    );
+  app\developer\radio\page.tsx:914:  }
+  app\developer\radio\page.tsx:915:
+  app\developer\radio\page.tsx:916:  if (!isOwner) {
+  app\developer\radio\page.tsx:917:    return (
+  app\developer\radio\page.tsx:939:            </p>
+  app\developer\radio\page.tsx:940:
+  app\developer\radio\page.tsx:941:            <h1 className="mt-3 text-4xl font-black sm:text-5xl">
+> app\developer\radio\page.tsx:942:              Premium Radio Manager
+  app\developer\radio\page.tsx:943:            </h1>
+  app\developer\radio\page.tsx:944:
+  app\developer\radio\page.tsx:945:            <p className="mt-4 max-w-3xl text-white/60">
+  app\developer\radio\page.tsx:946:              Build multiple Radio playlists, switch the live playlist, schedule programming, and reuse MP3/WAV files from Central Media Library.
+  app\developer\radio\page.tsx:947:            </p>
+  app\developer\radio\page.tsx:948:          </div>
+  app\developer\radio\page.tsx:949:
+  app\developer\radio\page.tsx:950:          <div className="flex flex-wrap gap-3">
+  app\developer\radio\page.tsx:951:            <Link
+  app\developer\radio\page.tsx:952:              href="/developer"
+  app\developer\radio\page.tsx:953:              className="rounded-xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-black"
+  app\developer\radio\page.tsx:954:            >
+  app\developer\radio\page.tsx:955:              Control Center
+  app\developer\radio\page.tsx:956:            </Link>
+  app\developer\radio\page.tsx:957:
+  app\developer\page.tsx:930:
+  app\developer\page.tsx:931:              <ManagementLink
+  app\developer\page.tsx:932:                title="Radio Manager"
+> app\developer\page.tsx:933:                description="Manage Premium Radio playlists, tracks, metadata, ordering, enabling, and programming."
+  app\developer\page.tsx:934:                href="/developer/radio"
+  app\developer\page.tsx:935:                action="Open Radio Manager"
+  app\developer\page.tsx:936:                badge="Radio"
+  app\developer\page.tsx:937:              />
+  app\developer\page.tsx:938:
+  app\developer\page.tsx:939:              <ManagementLink
+  app\developer\page.tsx:940:                title="Premium TV"
+  app\developer\page.tsx:941:                description="Manage Premium TV programming, publishing, scheduling, ordering, and assignments."
+  app\developer\page.tsx:942:                href="/developer/videos"
+  app\developer\page.tsx:943:                action="Manage Premium TV"
+  app\developer\page.tsx:944:                badge="TV"
+  app\developer\page.tsx:945:              />
+  app\developer\page.tsx:946:
+  app\developer\page.tsx:947:              <ManagementLink
+  app\developer\page.tsx:948:                title="Video Manager"
+  app\developer\page.tsx:1184:            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+  app\developer\page.tsx:1185:              <ManagementLink
+  app\developer\page.tsx:1186:                title="Radio Manager"
+> app\developer\page.tsx:1187:                description="Program Premium Radio from the Central Media Library. Add MP3/WAV tracks, edit metadata, reorder programming, enable or disable tracks, and remove tracks from Radio."
+  app\developer\page.tsx:1188:                href="/developer/radio"
+  app\developer\page.tsx:1189:                action="Manage Radio"
+  app\developer\page.tsx:1190:                badge="Radio Control"
+  app\developer\page.tsx:1191:              />
+  app\developer\page.tsx:1192:              <ManagementLink
+  app\developer\page.tsx:1193:                title="TV Programming"
+  app\developer\page.tsx:1194:                description="Manage Premium TV programming from Video Manager. Assign videos to Premium TV, publish or unpublish content, set Featured status, control ordering, and schedule TV start and end times."
+  app\developer\page.tsx:1195:                href="/developer/videos"
+  app\developer\page.tsx:1196:                action="Manage TV Programming"
+  app\developer\page.tsx:1197:                badge="TV Control"
+  app\developer\page.tsx:1198:              />
+  app\developer\page.tsx:1199:            </div>
+  app\developer\page.tsx:1200:
+  app\developer\page.tsx:1201:            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+  app\developer\page.tsx:1202:              <div className="rounded-[1.5rem] border border-emerald-300/15 bg-black/20 p-5">
+  app\developer\page.tsx:1203:                <div className="flex flex-wrap items-start justify-between gap-3">
+  app\developer\page.tsx:1204:                  <div>
+  app\developer\page.tsx:1205:                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">
+> app\developer\page.tsx:1206:                      Premium Radio
+  app\developer\page.tsx:1207:                    </p>
+  app\developer\page.tsx:1208:                    <h4 className="mt-2 text-xl font-black">
+  app\developer\page.tsx:1209:                      Radio Broadcast Control
+  app\developer\page.tsx:1210:                    </h4>
+  app\developer\page.tsx:1211:                  </div>
+  app\developer\page.tsx:1212:
+  app\developer\page.tsx:1213:                  <span
+  app\developer\page.tsx:1214:                    className={`rounded-full border px-3 py-1 text-xs font-black ${
+  app\developer\page.tsx:1215:                      broadcastStatus?.radioOnAir
+  app\developer\page.tsx:1216:                        ? "border-emerald-300/30 bg-emerald-400/15 text-emerald-200"
+  app\developer\page.tsx:1217:                        : "border-red-300/30 bg-red-400/15 text-red-200"
+  app\developer\page.tsx:1218:                    }`}
+  app\developer\page.tsx:1219:                  >
+  app\developer\page.tsx:1220:                    {loadingBroadcast || !broadcastStatus
+  app\developer\page.tsx:1221:                      ? "LOADING"
+  app\developer\page.tsx:1226:                </div>
+  app\developer\page.tsx:1227:
+  app\developer\page.tsx:1228:                <p className="mt-3 text-sm text-white/50">
+> app\developer\page.tsx:1229:                  Master owner switch for Premium Radio availability.
+  app\developer\page.tsx:1230:                </p>
+  app\developer\page.tsx:1231:
+  app\developer\page.tsx:1232:                <div className="mt-5 grid grid-cols-2 gap-3">
+  app\developer\page.tsx:1233:                  <button
+  app\developer\page.tsx:1234:                    type="button"
+  app\developer\page.tsx:1235:                    onClick={() =>
+  app\developer\page.tsx:1236:                      void updateBroadcastStatus("radio", true)
+  app\developer\page.tsx:1237:                    }
+  app\developer\page.tsx:1238:                    disabled={
+  app\developer\page.tsx:1239:                      loadingBroadcast ||
+  app\developer\page.tsx:1240:                      !broadcastStatus ||
+  app\developer\page.tsx:1241:                      savingBroadcast !== null ||
+  app\developer\page.tsx:1242:                      broadcastStatus.radioOnAir
+  app\developer\page.tsx:1243:                    }
+  app\developer\page.tsx:1244:                    className="rounded-xl bg-emerald-400 px-4 py-3 font-black text-black disabled:cursor-not-allowed disabled:opacity-40"
+  app\developer\page.tsx:1925:          />
+  app\developer\page.tsx:1926:          <RoadmapCard
+  app\developer\page.tsx:1927:            title="Radio"
+> app\developer\page.tsx:1928:            text="Premium Radio is active with music playback, artist promotions, and sponsored business campaigns."
+  app\developer\page.tsx:1929:          />
+  app\developer\page.tsx:1930:          <RoadmapCard
+  app\developer\page.tsx:1931:            title="TV"
+  app\developer\page.tsx:1932:            text="Premium TV is active with continuous programming, visualizers, promotions, and sponsored campaigns."
+  app\developer\page.tsx:1933:          />
+  app\developer\page.tsx:1934:          <RoadmapCard
+  app\developer\page.tsx:1935:            title="Promotion & Ads"
+  app\developer\page.tsx:1936:            text="Artist Promotion and Business Advertising are active from submission through payment and scheduling."
+  app\developer\page.tsx:1937:          />
+  app\developer\page.tsx:1938:        </section>
+  app\developer\page.tsx:1939:      </div>
+  app\developer\page.tsx:1940:    </main>
+  app\developer\page.tsx:1941:  );
+  app\developer\page.tsx:1942:}
+  app\developer\page.tsx:1943:
+  app\player\GlobalPlayer.tsx:109:            <p className="premium-preview-copy">
+  app\player\GlobalPlayer.tsx:110:              You received three free song previews and
+  app\player\GlobalPlayer.tsx:111:              a 60-second preview of Track 4. Subscribe
+> app\player\GlobalPlayer.tsx:112:              to unlock full albums, Premium Radio,
+  app\player\GlobalPlayer.tsx:113:              Premium TV, early releases, and monthly
+  app\player\GlobalPlayer.tsx:114:              downloads.
+  app\player\GlobalPlayer.tsx:115:            </p>
+  app\player\GlobalPlayer.tsx:116:
+  app\player\GlobalPlayer.tsx:117:            <div className="premium-preview-actions">
+  app\player\GlobalPlayer.tsx:118:              <Link
+  app\player\GlobalPlayer.tsx:119:                href="/premium"
+  app\player\GlobalPlayer.tsx:120:                className="premium-preview-primary"
+  app\player\GlobalPlayer.tsx:121:                onClick={clearQueue}
+  app\player\GlobalPlayer.tsx:122:              >
+  app\player\GlobalPlayer.tsx:123:                Subscribe to Premium
+  app\player\GlobalPlayer.tsx:124:              </Link>
+  app\player\GlobalPlayer.tsx:125:
+  app\player\GlobalPlayer.tsx:126:              <Link
+  app\player\GlobalPlayer.tsx:127:                href="/premium"
+  app\player\GlobalPlayer.tsx:154:            />
+  app\player\GlobalPlayer.tsx:155:
+  app\player\GlobalPlayer.tsx:156:            <div className="expanded-details">
+> app\player\GlobalPlayer.tsx:157:              <p className="expanded-label">NOW PLAYING</p>
+  app\player\GlobalPlayer.tsx:158:
+  app\player\GlobalPlayer.tsx:159:              <h2>{currentTrack.title}</h2>
+  app\player\GlobalPlayer.tsx:160:
+  app\player\GlobalPlayer.tsx:161:              <p className="expanded-artist">
+  app\player\GlobalPlayer.tsx:162:                {currentTrack.artist}
+  app\player\GlobalPlayer.tsx:163:              </p>
+  app\player\GlobalPlayer.tsx:164:
+  app\player\GlobalPlayer.tsx:165:              <p className="expanded-album">
+  app\player\GlobalPlayer.tsx:166:                {currentTrack.albumTitle}
+  app\player\GlobalPlayer.tsx:167:              </p>
+  app\player\GlobalPlayer.tsx:168:
+  app\player\GlobalPlayer.tsx:169:              <div className="expanded-progress">
+  app\player\GlobalPlayer.tsx:170:                <input
+  app\player\GlobalPlayer.tsx:171:                  type="range"
+  app\player\GlobalPlayer.tsx:172:                  min={0}
+  app\player\GlobalPlayer.tsx:335:          </button>
+  app\player\GlobalPlayer.tsx:336:
+  app\player\GlobalPlayer.tsx:337:          <div className="track-text">
+> app\player\GlobalPlayer.tsx:338:            <span className="compact-label">NOW PLAYING</span>
+  app\player\GlobalPlayer.tsx:339:            <strong>{currentTrack.title}</strong>
+  app\player\GlobalPlayer.tsx:340:            <span>{currentTrack.artist}</span>
+  app\player\GlobalPlayer.tsx:341:            <small>{currentTrack.albumTitle}</small>
+  app\player\GlobalPlayer.tsx:342:          </div>
+  app\player\GlobalPlayer.tsx:343:        </div>
+  app\player\GlobalPlayer.tsx:344:
+  app\player\GlobalPlayer.tsx:345:        <div className="main-controls">
+  app\player\GlobalPlayer.tsx:346:          <div className="button-row">
+  app\player\GlobalPlayer.tsx:347:            <button
+  app\player\GlobalPlayer.tsx:348:              type="button"
+  app\player\GlobalPlayer.tsx:349:              className={
+  app\player\GlobalPlayer.tsx:350:                isShuffleOn
+  app\player\GlobalPlayer.tsx:351:                  ? "icon-button active"
+  app\player\GlobalPlayer.tsx:352:                  : "icon-button"
+  app\player\GlobalPlayer.tsx:353:              }
+  app\premium\game\page.tsx:657:                    letterSpacing: 2,
+  app\premium\game\page.tsx:658:                  }}
+  app\premium\game\page.tsx:659:                >
+> app\premium\game\page.tsx:660:                  NOW PLAYING
+  app\premium\game\page.tsx:661:                </div>
+  app\premium\game\page.tsx:662:
+  app\premium\game\page.tsx:663:                <div
+  app\premium\game\page.tsx:664:                  style={{
+  app\premium\game\page.tsx:665:                    fontWeight: 900,
+  app\premium\game\page.tsx:666:                    fontSize: 18,
+  app\premium\game\page.tsx:667:                    marginTop: 5,
+  app\premium\game\page.tsx:668:                  }}
+  app\premium\game\page.tsx:669:                >
+  app\premium\game\page.tsx:670:                  {localAudioName ||
+  app\premium\game\page.tsx:671:                    "SOLO BEATS Training Beat"}
+  app\premium\game\page.tsx:672:                </div>
+  app\premium\game\page.tsx:673:              </div>
+  app\premium\game\page.tsx:674:
+  app\premium\game\page.tsx:675:              <div
+  app\premium\radio\layout.tsx:1:import type { Metadata } from "next";
+  app\premium\radio\layout.tsx:2:
+  app\premium\radio\layout.tsx:3:export const metadata: Metadata = {
+> app\premium\radio\layout.tsx:4:  title: "Premium Radio",
+  app\premium\radio\layout.tsx:5:  description:
+> app\premium\radio\layout.tsx:6:    "Listen to SOLO BEATS PREMIUM RADIO with continuous electronic music programming and a two-song public preview.",
+  app\premium\radio\layout.tsx:7:  alternates: {
+  app\premium\radio\layout.tsx:8:    canonical: "/premium/radio",
+  app\premium\radio\layout.tsx:9:  },
+  app\premium\radio\layout.tsx:10:  openGraph: {
+> app\premium\radio\layout.tsx:11:    title: "SOLO BEATS PREMIUM RADIO",
+  app\premium\radio\layout.tsx:12:    description:
+  app\premium\radio\layout.tsx:13:      "Continuous Solo Beats music programming with a free two-song preview.",
+  app\premium\radio\layout.tsx:14:    url: "/premium/radio",
+  app\premium\radio\layout.tsx:15:  },
+  app\premium\radio\layout.tsx:16:};
+  app\premium\radio\layout.tsx:17:
+  app\premium\radio\layout.tsx:18:export default function RadioLayout({
+  app\premium\radio\layout.tsx:19:  children,
+  app\premium\radio\layout.tsx:20:}: Readonly<{
+  app\premium\radio\layout.tsx:21:  children: React.ReactNode;
+  app\premium\radio\layout.tsx:22:}>) {
+  app\premium\radio\layout.tsx:23:  return children;
+  app\premium\radio\layout.tsx:24:}
+  app\premium\radio\page.backup.tsx:461:        }
+  app\premium\radio\page.backup.tsx:462:      } catch (error) {
+  app\premium\radio\page.backup.tsx:463:        console.error(
+> app\premium\radio\page.backup.tsx:464:          "Featured on Premium Radio promotions could not be loaded:",
+  app\premium\radio\page.backup.tsx:465:          error
+  app\premium\radio\page.backup.tsx:466:        );
+  app\premium\radio\page.backup.tsx:467:      }
+  app\premium\radio\page.backup.tsx:468:    }
+  app\premium\radio\page.backup.tsx:469:
+  app\premium\radio\page.backup.tsx:470:    void loadPromotedCampaigns();
+  app\premium\radio\page.backup.tsx:471:
+  app\premium\radio\page.backup.tsx:472:    return () => {
+  app\premium\radio\page.backup.tsx:473:      cancelled = true;
+  app\premium\radio\page.backup.tsx:474:    };
+  app\premium\radio\page.backup.tsx:475:  }, []);
+  app\premium\radio\page.backup.tsx:476:
+  app\premium\radio\page.backup.tsx:477:
+  app\premium\radio\page.backup.tsx:478:  useEffect(() => {
+  app\premium\radio\page.backup.tsx:479:    let cancelled = false;
+  app\premium\radio\page.backup.tsx:508:        }
+  app\premium\radio\page.backup.tsx:509:      } catch (error) {
+  app\premium\radio\page.backup.tsx:510:        console.error(
+> app\premium\radio\page.backup.tsx:511:          "Sponsored Premium Radio campaigns could not be loaded:",
+  app\premium\radio\page.backup.tsx:512:          error
+  app\premium\radio\page.backup.tsx:513:        );
+  app\premium\radio\page.backup.tsx:514:      }
+  app\premium\radio\page.backup.tsx:515:    }
+  app\premium\radio\page.backup.tsx:516:
+  app\premium\radio\page.backup.tsx:517:    void loadSponsoredBusinessCampaigns();
+  app\premium\radio\page.backup.tsx:518:
+  app\premium\radio\page.backup.tsx:519:    return () => {
+  app\premium\radio\page.backup.tsx:520:      cancelled = true;
+  app\premium\radio\page.backup.tsx:521:    };
+  app\premium\radio\page.backup.tsx:522:  }, []);
+  app\premium\radio\page.backup.tsx:523:
+  app\premium\radio\page.backup.tsx:524:  useEffect(() => {
+  app\premium\radio\page.backup.tsx:525:    setQueue(shuffleTracks(stationTracks));
+  app\premium\radio\page.backup.tsx:526:  }, [stationTracks]);
+  app\premium\radio\page.backup.tsx:582:            );
+  app\premium\radio\page.backup.tsx:583:          } catch (error) {
+  app\premium\radio\page.backup.tsx:584:            console.error(
+> app\premium\radio\page.backup.tsx:585:              "Premium Radio access error:",
+  app\premium\radio\page.backup.tsx:586:              error
+  app\premium\radio\page.backup.tsx:587:            );
+  app\premium\radio\page.backup.tsx:588:
+  app\premium\radio\page.backup.tsx:589:            setMessage(
+  app\premium\radio\page.backup.tsx:590:              error instanceof Error
+  app\premium\radio\page.backup.tsx:591:                ? error.message
+> app\premium\radio\page.backup.tsx:592:                : "Premium Radio access could not be checked."
+  app\premium\radio\page.backup.tsx:593:            );
+  app\premium\radio\page.backup.tsx:594:
+  app\premium\radio\page.backup.tsx:595:            setAccessState("error");
+  app\premium\radio\page.backup.tsx:596:          }
+  app\premium\radio\page.backup.tsx:597:        }
+  app\premium\radio\page.backup.tsx:598:      );
+  app\premium\radio\page.backup.tsx:599:
+  app\premium\radio\page.backup.tsx:600:    return () => {
+  app\premium\radio\page.backup.tsx:601:      cancelled = true;
+  app\premium\radio\page.backup.tsx:602:      unsubscribe();
+  app\premium\radio\page.backup.tsx:603:    };
+  app\premium\radio\page.backup.tsx:604:  }, []);
+  app\premium\radio\page.backup.tsx:605:
+  app\premium\radio\page.backup.tsx:606:  useEffect(() => {
+  app\premium\radio\page.backup.tsx:607:    const audio = audioRef.current;
+  app\premium\radio\page.backup.tsx:737:      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+  app\premium\radio\page.backup.tsx:738:        <section className="mx-auto max-w-5xl rounded-[2rem] border border-white/10 bg-white/[0.035] p-10 text-center">
+  app\premium\radio\page.backup.tsx:739:          <p className="text-sm font-black uppercase tracking-[0.2em] text-violet-300">
+> app\premium\radio\page.backup.tsx:740:            SOLO BEATS PREMIUM RADIO
+  app\premium\radio\page.backup.tsx:741:          </p>
+  app\premium\radio\page.backup.tsx:742:          <h1 className="mt-3 text-4xl font-black">
+  app\premium\radio\page.backup.tsx:743:            Checking membership...
+  app\premium\radio\page.backup.tsx:744:          </h1>
+  app\premium\radio\page.backup.tsx:745:        </section>
+  app\premium\radio\page.backup.tsx:746:      </main>
+  app\premium\radio\page.backup.tsx:747:    );
+  app\premium\radio\page.backup.tsx:748:  }
+  app\premium\radio\page.backup.tsx:749:
+  app\premium\radio\page.backup.tsx:750:  if (accessState === "signed-out") {
+  app\premium\radio\page.backup.tsx:751:    return (
+  app\premium\radio\page.backup.tsx:752:      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+  app\premium\radio\page.backup.tsx:753:        <section className="mx-auto max-w-5xl rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-500/20 via-white/[0.04] to-cyan-400/10 p-10 text-center">
+  app\premium\radio\page.backup.tsx:754:          <p className="text-sm font-black uppercase tracking-[0.2em] text-violet-300">
+> app\premium\radio\page.backup.tsx:755:            Premium Radio Locked
+  app\premium\radio\page.backup.tsx:756:          </p>
+  app\premium\radio\page.backup.tsx:757:          <h1 className="mt-3 text-5xl font-black">
+  app\premium\radio\page.backup.tsx:758:            Sign in to listen
+  app\premium\radio\page.backup.tsx:759:          </h1>
+  app\premium\radio\page.backup.tsx:760:          <Link
+  app\premium\radio\page.backup.tsx:761:            href="/account"
+  app\premium\radio\page.backup.tsx:762:            className="mt-7 inline-flex rounded-2xl bg-white px-6 py-4 font-black text-black"
+  app\premium\radio\page.backup.tsx:763:          >
+  app\premium\radio\page.backup.tsx:764:            Open Account
+  app\premium\radio\page.backup.tsx:765:          </Link>
+  app\premium\radio\page.backup.tsx:766:        </section>
+  app\premium\radio\page.backup.tsx:767:      </main>
+  app\premium\radio\page.backup.tsx:768:    );
+  app\premium\radio\page.backup.tsx:769:  }
+  app\premium\radio\page.backup.tsx:770:
+  app\premium\radio\page.backup.tsx:779:            Premium Access Required
+  app\premium\radio\page.backup.tsx:780:          </p>
+  app\premium\radio\page.backup.tsx:781:          <h1 className="mt-3 text-5xl font-black">
+> app\premium\radio\page.backup.tsx:782:            Premium Radio is locked
+  app\premium\radio\page.backup.tsx:783:          </h1>
+  app\premium\radio\page.backup.tsx:784:          <p className="mx-auto mt-4 max-w-2xl text-white/55">
+  app\premium\radio\page.backup.tsx:785:            {message ||
+  app\premium\radio\page.backup.tsx:786:              "An active SOLO BEATS PREMIUM membership is required."}
+  app\premium\radio\page.backup.tsx:787:          </p>
+  app\premium\radio\page.backup.tsx:788:          <div className="mt-7 flex flex-wrap justify-center gap-3">
+  app\premium\radio\page.backup.tsx:789:            <Link
+  app\premium\radio\page.backup.tsx:790:              href="/premium"
+  app\premium\radio\page.backup.tsx:791:              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+  app\premium\radio\page.backup.tsx:792:            >
+  app\premium\radio\page.backup.tsx:793:              Join Premium
+  app\premium\radio\page.backup.tsx:794:            </Link>
+  app\premium\radio\page.backup.tsx:795:            <Link
+  app\premium\radio\page.backup.tsx:796:              href="/account"
+  app\premium\radio\page.backup.tsx:797:              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+  app\premium\radio\page.backup.tsx:838:              <h1 className="mt-4 text-5xl font-black sm:text-7xl">
+  app\premium\radio\page.backup.tsx:839:                SOLO BEATS
+  app\premium\radio\page.backup.tsx:840:                <span className="block text-violet-300">
+> app\premium\radio\page.backup.tsx:841:                  PREMIUM RADIO
+  app\premium\radio\page.backup.tsx:842:                </span>
+  app\premium\radio\page.backup.tsx:843:              </h1>
+  app\premium\radio\page.backup.tsx:844:
+  app\premium\radio\page.backup.tsx:845:              <p className="mt-5 max-w-3xl text-lg leading-8 text-white/60">
+  app\premium\radio\page.backup.tsx:846:                A continuous member station powered by {premiumAlbums.length} selected albums and {stationTracks.length} tracks.
+  app\premium\radio\page.backup.tsx:847:              </p>
+  app\premium\radio\page.backup.tsx:848:
+  app\premium\radio\page.backup.tsx:849:              <div className="mt-7 flex flex-wrap gap-3">
+  app\premium\radio\page.backup.tsx:850:                <button
+  app\premium\radio\page.backup.tsx:851:                  type="button"
+  app\premium\radio\page.backup.tsx:852:                  onClick={startRadio}
+  app\premium\radio\page.backup.tsx:853:                  className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+  app\premium\radio\page.backup.tsx:854:                >
+  app\premium\radio\page.backup.tsx:855:                  Start Radio
+  app\premium\radio\page.backup.tsx:856:                </button>
+  app\premium\radio\page.backup.tsx:889:                  />
+  app\premium\radio\page.backup.tsx:890:
+  app\premium\radio\page.backup.tsx:891:                  <p className="mt-5 text-sm font-black uppercase tracking-[0.14em] text-white/40">
+> app\premium\radio\page.backup.tsx:892:                    Now Playing
+  app\premium\radio\page.backup.tsx:893:                  </p>
+  app\premium\radio\page.backup.tsx:894:
+  app\premium\radio\page.backup.tsx:895:                  <h2 className="mt-2 text-3xl font-black">
+  app\premium\radio\page.backup.tsx:896:                    {currentTrack.title}
+  app\premium\radio\page.backup.tsx:897:                  </h2>
+  app\premium\radio\page.backup.tsx:898:
+  app\premium\radio\page.backup.tsx:899:                  <p className="mt-1 text-white/50">
+  app\premium\radio\page.backup.tsx:900:                    {currentTrack.artist} • {currentTrack.albumTitle}
+  app\premium\radio\page.backup.tsx:901:                  </p>
+  app\premium\radio\page.backup.tsx:902:                </>
+  app\premium\radio\page.backup.tsx:903:              ) : (
+  app\premium\radio\page.backup.tsx:904:                <p className="mt-5 text-white/50">
+  app\premium\radio\page.backup.tsx:905:                  No tracks are available.
+  app\premium\radio\page.backup.tsx:906:                </p>
+  app\premium\radio\page.backup.tsx:907:              )}
+  app\premium\radio\page.backup.tsx:910:        </section>
+  app\premium\radio\page.backup.tsx:911:
+  app\premium\radio\page.backup.tsx:912:        <SponsoredBusinessPlacement
+> app\premium\radio\page.backup.tsx:913:          title="Sponsored on Premium Radio"
+  app\premium\radio\page.backup.tsx:914:          campaigns={businessCampaigns}
+  app\premium\radio\page.backup.tsx:915:        />
+  app\premium\radio\page.backup.tsx:916:
+  app\premium\radio\page.backup.tsx:917:        <PromotedPlacement
+> app\premium\radio\page.backup.tsx:918:          title="Featured on Premium Radio"
+  app\premium\radio\page.backup.tsx:919:          campaigns={promotedCampaigns}
+  app\premium\radio\page.backup.tsx:920:        />
+  app\premium\radio\page.backup.tsx:921:
+  app\premium\radio\page.backup.tsx:922:        <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
+  app\premium\radio\page.backup.tsx:923:          <article className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 sm:p-8">
+  app\premium\radio\page.backup.tsx:924:            <p className="text-sm font-black uppercase tracking-[0.18em] text-violet-300">
+  app\premium\radio\page.backup.tsx:925:              Station Controls
+  app\premium\radio\page.backup.tsx:926:            </p>
+  app\premium\radio\page.backup.tsx:927:
+  app\premium\radio\page.backup.tsx:928:            <div className="mt-6 flex flex-wrap gap-3">
+  app\premium\radio\page.backup.tsx:929:              <button
+  app\premium\radio\page.backup.tsx:930:                type="button"
+  app\premium\radio\page.backup.tsx:931:                onClick={previousTrack}
+  app\premium\radio\page.backup.tsx:932:                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 font-black"
+  app\premium\radio\page.backup.tsx:933:              >
+  app\premium\radio\page.tsx:466:        }
+  app\premium\radio\page.tsx:467:      } catch (error) {
+  app\premium\radio\page.tsx:468:        console.error(
+> app\premium\radio\page.tsx:469:          "Premium Radio broadcast status error:",
+  app\premium\radio\page.tsx:470:          error
+  app\premium\radio\page.tsx:471:        );
+  app\premium\radio\page.tsx:472:
+  app\premium\radio\page.tsx:473:        if (!cancelled) {
+  app\premium\radio\page.tsx:474:          setRadioOnAir(null);
+  app\premium\radio\page.tsx:475:          setBroadcastError(
+  app\premium\radio\page.tsx:476:            error instanceof Error
+  app\premium\radio\page.tsx:477:              ? error.message
+  app\premium\radio\page.tsx:478:              : "Radio broadcast status could not be loaded."
+  app\premium\radio\page.tsx:479:          );
+  app\premium\radio\page.tsx:480:        }
+  app\premium\radio\page.tsx:481:      }
+  app\premium\radio\page.tsx:482:    }
+  app\premium\radio\page.tsx:483:
+  app\premium\radio\page.tsx:484:    void loadRadioBroadcastStatus();
+  app\premium\radio\page.tsx:576:        }
+  app\premium\radio\page.tsx:577:      } catch (error) {
+  app\premium\radio\page.tsx:578:        console.error(
+> app\premium\radio\page.tsx:579:          "Featured on Premium Radio promotions could not be loaded:",
+  app\premium\radio\page.tsx:580:          error
+  app\premium\radio\page.tsx:581:        );
+  app\premium\radio\page.tsx:582:      }
+  app\premium\radio\page.tsx:583:    }
+  app\premium\radio\page.tsx:584:
+  app\premium\radio\page.tsx:585:    void loadPromotedCampaigns();
+  app\premium\radio\page.tsx:586:
+  app\premium\radio\page.tsx:587:    return () => {
+  app\premium\radio\page.tsx:588:      cancelled = true;
+  app\premium\radio\page.tsx:589:    };
+  app\premium\radio\page.tsx:590:  }, []);
+  app\premium\radio\page.tsx:591:
+  app\premium\radio\page.tsx:592:
+  app\premium\radio\page.tsx:593:  useEffect(() => {
+  app\premium\radio\page.tsx:594:    let cancelled = false;
+  app\premium\radio\page.tsx:623:        }
+  app\premium\radio\page.tsx:624:      } catch (error) {
+  app\premium\radio\page.tsx:625:        console.error(
+> app\premium\radio\page.tsx:626:          "Sponsored Premium Radio campaigns could not be loaded:",
+  app\premium\radio\page.tsx:627:          error
+  app\premium\radio\page.tsx:628:        );
+  app\premium\radio\page.tsx:629:      }
+  app\premium\radio\page.tsx:630:    }
+  app\premium\radio\page.tsx:631:
+  app\premium\radio\page.tsx:632:    void loadSponsoredBusinessCampaigns();
+  app\premium\radio\page.tsx:633:
+  app\premium\radio\page.tsx:634:    return () => {
+  app\premium\radio\page.tsx:635:      cancelled = true;
+  app\premium\radio\page.tsx:636:    };
+  app\premium\radio\page.tsx:637:  }, []);
+  app\premium\radio\page.tsx:638:
+  app\premium\radio\page.tsx:639:  useEffect(() => {
+  app\premium\radio\page.tsx:640:    let cancelled = false;
+  app\premium\radio\page.tsx:641:    let lastPlaylistKey = "";
+  app\premium\radio\page.tsx:643:    async function loadRadioPlaylist() {
+  app\premium\radio\page.tsx:644:      try {
+  app\premium\radio\page.tsx:645:        const response = await fetch(
+> app\premium\radio\page.tsx:646:          `/api/radio/playlist?t=${Date.now()}`,
+  app\premium\radio\page.tsx:647:          { cache: "no-store" }
+  app\premium\radio\page.tsx:648:        );
+  app\premium\radio\page.tsx:649:
+  app\premium\radio\page.tsx:650:        const data = (await response.json()) as {
+  app\premium\radio\page.tsx:651:          success?: boolean;
+  app\premium\radio\page.tsx:652:          source?: string;
+  app\premium\radio\page.tsx:653:          playlist?: {
+  app\premium\radio\page.tsx:654:            playlistId?: string;
+  app\premium\radio\page.tsx:655:            name?: string;
+  app\premium\radio\page.tsx:656:            description?: string;
+  app\premium\radio\page.tsx:657:          } | null;
+  app\premium\radio\page.tsx:658:          tracks?: RadioTrack[];
+  app\premium\radio\page.tsx:659:          error?: string;
+  app\premium\radio\page.tsx:660:        };
+  app\premium\radio\page.tsx:661:
+  app\premium\radio\page.tsx:694:        }
+  app\premium\radio\page.tsx:695:      } catch (error) {
+  app\premium\radio\page.tsx:696:        console.error(
+> app\premium\radio\page.tsx:697:          "Premium Radio playlist refresh error:",
+  app\premium\radio\page.tsx:698:          error
+  app\premium\radio\page.tsx:699:        );
+  app\premium\radio\page.tsx:700:      }
+  app\premium\radio\page.tsx:701:    }
+  app\premium\radio\page.tsx:702:
+  app\premium\radio\page.tsx:703:    void loadRadioPlaylist();
+  app\premium\radio\page.tsx:704:
+  app\premium\radio\page.tsx:705:    const intervalId = window.setInterval(() => {
+  app\premium\radio\page.tsx:706:      void loadRadioPlaylist();
+  app\premium\radio\page.tsx:707:    }, 5000);
+  app\premium\radio\page.tsx:708:
+  app\premium\radio\page.tsx:709:    const handleFocus = () => {
+  app\premium\radio\page.tsx:710:      void loadRadioPlaylist();
+  app\premium\radio\page.tsx:711:    };
+  app\premium\radio\page.tsx:712:
+  app\premium\radio\page.tsx:786:            );
+  app\premium\radio\page.tsx:787:          } catch (error) {
+  app\premium\radio\page.tsx:788:            console.error(
+> app\premium\radio\page.tsx:789:              "Premium Radio access error:",
+  app\premium\radio\page.tsx:790:              error
+  app\premium\radio\page.tsx:791:            );
+  app\premium\radio\page.tsx:792:
+  app\premium\radio\page.tsx:793:            setMessage(
+  app\premium\radio\page.tsx:794:              error instanceof Error
+  app\premium\radio\page.tsx:795:                ? error.message
+> app\premium\radio\page.tsx:796:                : "Premium Radio access could not be checked."
+  app\premium\radio\page.tsx:797:            );
+  app\premium\radio\page.tsx:798:
+  app\premium\radio\page.tsx:799:            setAccessState("error");
+  app\premium\radio\page.tsx:800:          }
+  app\premium\radio\page.tsx:801:        }
+  app\premium\radio\page.tsx:802:      );
+  app\premium\radio\page.tsx:803:
+  app\premium\radio\page.tsx:804:    return () => {
+  app\premium\radio\page.tsx:805:      cancelled = true;
+  app\premium\radio\page.tsx:806:      unsubscribe();
+  app\premium\radio\page.tsx:807:    };
+  app\premium\radio\page.tsx:808:  }, []);
+  app\premium\radio\page.tsx:809:
+  app\premium\radio\page.tsx:810:  useEffect(() => {
+  app\premium\radio\page.tsx:811:    const audio = audioRef.current;
+  app\premium\radio\page.tsx:1010:      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+  app\premium\radio\page.tsx:1011:        <section className="mx-auto max-w-5xl rounded-[2rem] border border-cyan-300/15 bg-gradient-to-br from-cyan-500/10 via-white/[0.035] to-violet-500/10 p-10 text-center shadow-2xl">
+  app\premium\radio\page.tsx:1012:          <p className="text-sm font-black uppercase tracking-[0.2em] text-cyan-300">
+> app\premium\radio\page.tsx:1013:            SOLO BEATS PREMIUM RADIO
+  app\premium\radio\page.tsx:1014:          </p>
+  app\premium\radio\page.tsx:1015:          <h1 className="mt-3 text-4xl font-black">
+  app\premium\radio\page.tsx:1016:            Checking station status...
+  app\premium\radio\page.tsx:1017:          </h1>
+  app\premium\radio\page.tsx:1018:          <p className="mt-4 text-white/55">
+> app\premium\radio\page.tsx:1019:            Confirming whether Premium Radio is currently on air.
+  app\premium\radio\page.tsx:1020:          </p>
+  app\premium\radio\page.tsx:1021:        </section>
+  app\premium\radio\page.tsx:1022:      </main>
+  app\premium\radio\page.tsx:1023:    );
+  app\premium\radio\page.tsx:1024:  }
+  app\premium\radio\page.tsx:1025:
+  app\premium\radio\page.tsx:1026:  if (broadcastError) {
+  app\premium\radio\page.tsx:1027:    return (
+  app\premium\radio\page.tsx:1028:      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+  app\premium\radio\page.tsx:1029:        <section className="mx-auto max-w-5xl rounded-[2rem] border border-amber-300/20 bg-gradient-to-br from-amber-500/15 via-white/[0.035] to-red-500/10 p-10 text-center shadow-2xl">
+  app\premium\radio\page.tsx:1030:          <p className="text-sm font-black uppercase tracking-[0.2em] text-amber-300">
+> app\premium\radio\page.tsx:1031:            PREMIUM RADIO STATUS
+  app\premium\radio\page.tsx:1032:          </p>
+  app\premium\radio\page.tsx:1033:          <h1 className="mt-3 text-4xl font-black">
+  app\premium\radio\page.tsx:1034:            Station status unavailable
+  app\premium\radio\page.tsx:1035:          </h1>
+  app\premium\radio\page.tsx:1036:          <p className="mx-auto mt-4 max-w-2xl text-white/60">
+> app\premium\radio\page.tsx:1037:            Premium Radio cannot start until the broadcast status can be confirmed.
+  app\premium\radio\page.tsx:1038:          </p>
+  app\premium\radio\page.tsx:1039:          <p className="mx-auto mt-3 max-w-2xl text-sm text-red-200/80">
+  app\premium\radio\page.tsx:1040:            {broadcastError}
+  app\premium\radio\page.tsx:1041:          </p>
+  app\premium\radio\page.tsx:1042:          <div className="mt-7 flex flex-wrap justify-center gap-3">
+  app\premium\radio\page.tsx:1043:            <Link
+  app\premium\radio\page.tsx:1044:              href="/premium"
+  app\premium\radio\page.tsx:1045:              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+  app\premium\radio\page.tsx:1046:            >
+  app\premium\radio\page.tsx:1047:              Premium Home
+  app\premium\radio\page.tsx:1048:            </Link>
+  app\premium\radio\page.tsx:1049:            <Link
+  app\premium\radio\page.tsx:1050:              href="/"
+  app\premium\radio\page.tsx:1051:              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+  app\premium\radio\page.tsx:1052:            >
+  app\premium\radio\page.tsx:1074:          </p>
+  app\premium\radio\page.tsx:1075:
+  app\premium\radio\page.tsx:1076:          <h1 className="mt-3 text-4xl font-black sm:text-6xl">
+> app\premium\radio\page.tsx:1077:            PREMIUM RADIO IS OFF AIR
+  app\premium\radio\page.tsx:1078:          </h1>
+  app\premium\radio\page.tsx:1079:
+  app\premium\radio\page.tsx:1080:          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-white/60">
+> app\premium\radio\page.tsx:1081:            Premium Radio is temporarily unavailable. Please check back when the station is back on air.
+  app\premium\radio\page.tsx:1082:          </p>
+  app\premium\radio\page.tsx:1083:
+  app\premium\radio\page.tsx:1084:          <div className="mt-8 flex flex-wrap justify-center gap-3">
+  app\premium\radio\page.tsx:1085:            <Link
+  app\premium\radio\page.tsx:1086:              href="/premium"
+  app\premium\radio\page.tsx:1087:              className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+  app\premium\radio\page.tsx:1088:            >
+  app\premium\radio\page.tsx:1089:              Premium Home
+  app\premium\radio\page.tsx:1090:            </Link>
+  app\premium\radio\page.tsx:1091:            <Link
+  app\premium\radio\page.tsx:1092:              href="/"
+  app\premium\radio\page.tsx:1093:              className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+  app\premium\radio\page.tsx:1094:            >
+  app\premium\radio\page.tsx:1095:              Home
+  app\premium\radio\page.tsx:1096:            </Link>
+  app\premium\radio\page.tsx:1109:      <main className="min-h-screen px-5 pb-32 pt-52 sm:px-8">
+  app\premium\radio\page.tsx:1110:        <section className="mx-auto max-w-5xl rounded-[2rem] border border-white/10 bg-white/[0.035] p-10 text-center">
+  app\premium\radio\page.tsx:1111:          <p className="text-sm font-black uppercase tracking-[0.2em] text-violet-300">
+> app\premium\radio\page.tsx:1112:            SOLO BEATS PREMIUM RADIO
+  app\premium\radio\page.tsx:1113:          </p>
+  app\premium\radio\page.tsx:1114:          <h1 className="mt-3 text-4xl font-black">
+  app\premium\radio\page.tsx:1115:            Checking membership...
+  app\premium\radio\page.tsx:1116:          </h1>
+  app\premium\radio\page.tsx:1117:        </section>
+  app\premium\radio\page.tsx:1118:      </main>
+  app\premium\radio\page.tsx:1119:    );
+  app\premium\radio\page.tsx:1120:  }
+  app\premium\radio\page.tsx:1121:  return (
+  app\premium\radio\page.tsx:1122:    <main className="min-h-screen overflow-x-hidden px-5 pb-48 pt-52 sm:px-8">
+  app\premium\radio\page.tsx:1123:      <audio
+  app\premium\radio\page.tsx:1124:        ref={audioRef}
+  app\premium\radio\page.tsx:1125:        onPlay={() => {
+  app\premium\radio\page.tsx:1126:          setIsPlaying(true);
+  app\premium\radio\page.tsx:1127:          registerRadioPreviewStart();
+  app\premium\radio\page.tsx:1197:              <h1 className="mt-4 text-5xl font-black sm:text-7xl">
+  app\premium\radio\page.tsx:1198:                SOLO BEATS
+  app\premium\radio\page.tsx:1199:                <span className="block text-violet-300">
+> app\premium\radio\page.tsx:1200:                  PREMIUM RADIO
+  app\premium\radio\page.tsx:1201:                </span>
+  app\premium\radio\page.tsx:1202:              </h1>
+  app\premium\radio\page.tsx:1203:
+  app\premium\radio\page.tsx:1204:              <p className="mt-5 max-w-3xl text-lg leading-8 text-white/60">
+  app\premium\radio\page.tsx:1205:                {hasPremiumAccess
+  app\premium\radio\page.tsx:1206:                  ? `A continuous member station powered by ${stationTracks.length} dashboard-managed tracks.`
+  app\premium\radio\page.tsx:1207:                  : "Preview two songs, then subscribe for unlimited Radio and TV."}
+  app\premium\radio\page.tsx:1208:              </p>
+  app\premium\radio\page.tsx:1209:
+  app\premium\radio\page.tsx:1210:              <div className="mt-7 flex flex-wrap gap-3">
+  app\premium\radio\page.tsx:1211:                <button
+  app\premium\radio\page.tsx:1212:                  type="button"
+  app\premium\radio\page.tsx:1213:                  onClick={togglePlayPause}
+  app\premium\radio\page.tsx:1214:                  disabled={
+  app\premium\radio\page.tsx:1215:                    !previewLoaded ||
+  app\premium\radio\page.tsx:1290:                  ) : null}
+  app\premium\radio\page.tsx:1291:
+  app\premium\radio\page.tsx:1292:                  <p className="mt-5 text-sm font-black uppercase tracking-[0.14em] text-white/40">
+> app\premium\radio\page.tsx:1293:                    Now Playing
+  app\premium\radio\page.tsx:1294:                  </p>
+  app\premium\radio\page.tsx:1295:
+  app\premium\radio\page.tsx:1296:                  <h2 className="mt-2 text-3xl font-black">
+  app\premium\radio\page.tsx:1297:                    {currentTrack.title}
+  app\premium\radio\page.tsx:1298:                  </h2>
+  app\premium\radio\page.tsx:1299:
+  app\premium\radio\page.tsx:1300:                  <p className="mt-1 text-white/50">
+  app\premium\radio\page.tsx:1301:                    {currentTrack.artist} &bull; {currentTrack.albumTitle}
+  app\premium\radio\page.tsx:1302:                  </p>
+  app\premium\radio\page.tsx:1303:                </>
+  app\premium\radio\page.tsx:1304:              ) : (
+  app\premium\radio\page.tsx:1305:                <p className="mt-5 text-white/50">
+  app\premium\radio\page.tsx:1306:                  No tracks are available.
+  app\premium\radio\page.tsx:1307:                </p>
+  app\premium\radio\page.tsx:1308:              )}
+  app\premium\radio\page.tsx:1311:        </section>
+  app\premium\radio\page.tsx:1312:
+  app\premium\radio\page.tsx:1313:        <SponsoredBusinessPlacement
+> app\premium\radio\page.tsx:1314:          title="Sponsored on Premium Radio"
+  app\premium\radio\page.tsx:1315:          campaigns={businessCampaigns}
+  app\premium\radio\page.tsx:1316:        />
+  app\premium\radio\page.tsx:1317:
+  app\premium\radio\page.tsx:1318:        <PromotedPlacement
+> app\premium\radio\page.tsx:1319:          title="Featured on Premium Radio"
+  app\premium\radio\page.tsx:1320:          campaigns={promotedCampaigns}
+  app\premium\radio\page.tsx:1321:        />
+  app\premium\radio\page.tsx:1322:
+  app\premium\radio\page.tsx:1323:        <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_340px]">
+  app\premium\radio\page.tsx:1324:          <article className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-6 sm:p-8">
+  app\premium\radio\page.tsx:1325:            <p className="text-sm font-black uppercase tracking-[0.18em] text-violet-300">
+  app\premium\radio\page.tsx:1326:              Station Controls
+  app\premium\radio\page.tsx:1327:            </p>
+  app\premium\radio\page.tsx:1328:
+  app\premium\radio\page.tsx:1329:            <div className="mt-6 flex flex-wrap gap-3">
+  app\premium\radio\page.tsx:1330:              <button
+  app\premium\radio\page.tsx:1331:                type="button"
+  app\premium\radio\page.tsx:1332:                onClick={previousTrack}
+  app\premium\radio\page.tsx:1333:                className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 font-black"
+  app\premium\radio\page.tsx:1334:              >
+  app\premium\layout.tsx:3:export const metadata: Metadata = {
+  app\premium\layout.tsx:4:  title: "SOLO BEATS PREMIUM Music, Radio and TV",
+  app\premium\layout.tsx:5:  description:
+> app\premium\layout.tsx:6:    "Join SOLO BEATS PREMIUM for exclusive music, Premium Radio, Premium TV, monthly track downloads, early access, and full member playback.",
+  app\premium\layout.tsx:7:  keywords: [
+  app\premium\layout.tsx:8:    "Solo Beats Premium",
+  app\premium\layout.tsx:9:    "premium electronic music",
+  app\premium\layout.tsx:10:    "music subscription",
+  app\premium\layout.tsx:11:    "electronic music radio",
+  app\premium\layout.tsx:12:    "music TV",
+  app\premium\layout.tsx:13:    "exclusive music access",
+  app\premium\layout.tsx:14:    "monthly music downloads",
+  app\premium\layout.tsx:15:  ],
+  app\premium\layout.tsx:16:  alternates: {
+  app\premium\layout.tsx:17:    canonical: "/premium",
+  app\premium\layout.tsx:18:  },
+  app\premium\layout.tsx:19:  openGraph: {
+  app\premium\layout.tsx:20:    type: "website",
+  app\premium\layout.tsx:21:    title: "SOLO BEATS PREMIUM Music, Radio and TV",
+  app\premium\layout.tsx:22:    description:
+> app\premium\layout.tsx:23:      "Get exclusive music, Premium Radio, Premium TV, monthly downloads, and full member access.",
+  app\premium\layout.tsx:24:    url: "/premium",
+  app\premium\layout.tsx:25:    images: [
+  app\premium\layout.tsx:26:      {
+  app\premium\layout.tsx:27:        url: "/covers/hero-home-final.png",
+  app\premium\layout.tsx:28:        width: 1200,
+  app\premium\layout.tsx:29:        height: 630,
+  app\premium\layout.tsx:30:        alt: "SOLO BEATS PREMIUM",
+  app\premium\layout.tsx:31:      },
+  app\premium\layout.tsx:32:    ],
+  app\premium\layout.tsx:33:  },
+  app\premium\layout.tsx:34:  twitter: {
+  app\premium\layout.tsx:35:    card: "summary_large_image",
+  app\premium\layout.tsx:36:    title: "SOLO BEATS PREMIUM Music, Radio and TV",
+  app\premium\layout.tsx:37:    description:
+> app\premium\layout.tsx:38:      "Exclusive music, Premium Radio, Premium TV, monthly downloads, and member-only access.",
+  app\premium\layout.tsx:39:    images: ["/covers/hero-home-final.png"],
+  app\premium\layout.tsx:40:  },
+  app\premium\layout.tsx:41:};
+  app\premium\layout.tsx:42:
+  app\premium\layout.tsx:43:export default function PremiumLayout({
+  app\premium\layout.tsx:44:  children,
+  app\premium\layout.tsx:45:}: Readonly<{
+  app\premium\layout.tsx:46:  children: React.ReactNode;
+  app\premium\layout.tsx:47:}>) {
+  app\premium\layout.tsx:48:  return children;
+  app\premium\layout.tsx:49:}
+  app\store\page.backup.tsx:1302:                    {albumIsCurrent && (
+  app\store\page.backup.tsx:1303:                      <span className="active-album-badge">
+  app\store\page.backup.tsx:1304:                        {isPlaying
+> app\store\page.backup.tsx:1305:                          ? "Now Playing"
+  app\store\page.backup.tsx:1306:                          : "Paused"}
+  app\store\page.backup.tsx:1307:                      </span>
+  app\store\page.backup.tsx:1308:                    )}
+  app\store\page.backup.tsx:1309:                  </div>
+  app\store\page.backup.tsx:1310:
+  app\store\page.backup.tsx:1311:                  <div className="album-content">
+  app\store\page.backup.tsx:1312:                    <div className="album-meta">
+  app\store\page.backup.tsx:1313:                      <span>{album.genre}</span>
+  app\store\page.backup.tsx:1314:                      <span>{album.year}</span>
+  app\store\page.backup.tsx:1315:
+  app\store\page.backup.tsx:1316:                      <span>
+  app\store\page.backup.tsx:1317:                        {album.tracks.length} Tracks
+  app\store\page.backup.tsx:1318:                      </span>
+  app\store\page.backup.tsx:1319:                    </div>
+  app\store\page.backup.tsx:1320:
+  app\store\page.backup.tsx:1376:                          <div className="now-playing-album">
+  app\store\page.backup.tsx:1377:                            <span className="playing-indicator">
+  app\store\page.backup.tsx:1378:                              {isPlaying
+> app\store\page.backup.tsx:1379:                                ? "NOW PLAYING"
+  app\store\page.backup.tsx:1380:                                : "PAUSED"}
+  app\store\page.backup.tsx:1381:                            </span>
+  app\store\page.backup.tsx:1382:
+  app\store\page.backup.tsx:1383:                            <strong>
+  app\store\page.backup.tsx:1384:                              {currentTrack.title}
+  app\store\page.backup.tsx:1385:                            </strong>
+  app\store\page.backup.tsx:1386:
+  app\store\page.backup.tsx:1387:                            <small>
+  app\store\page.backup.tsx:1388:                              Track{" "}
+  app\store\page.backup.tsx:1389:                              {currentTrackIndex + 1}{" "}
+  app\store\page.backup.tsx:1390:                              of {playerQueue.length}
+  app\store\page.backup.tsx:1391:                            </small>
+  app\store\page.backup.tsx:1392:                          </div>
+  app\store\page.backup.tsx:1393:                        )}
+  app\store\page.backup.tsx:1394:                    </div>
+  app\store\page.favorites-backup.tsx:1276:                    {albumIsCurrent && (
+  app\store\page.favorites-backup.tsx:1277:                      <span className="active-album-badge">
+  app\store\page.favorites-backup.tsx:1278:                        {isPlaying
+> app\store\page.favorites-backup.tsx:1279:                          ? "Now Playing"
+  app\store\page.favorites-backup.tsx:1280:                          : "Paused"}
+  app\store\page.favorites-backup.tsx:1281:                      </span>
+  app\store\page.favorites-backup.tsx:1282:                    )}
+  app\store\page.favorites-backup.tsx:1283:                  </div>
+  app\store\page.favorites-backup.tsx:1284:
+  app\store\page.favorites-backup.tsx:1285:                  <div className="album-content">
+  app\store\page.favorites-backup.tsx:1286:                    <div className="album-meta">
+  app\store\page.favorites-backup.tsx:1287:                      <span>{album.genre}</span>
+  app\store\page.favorites-backup.tsx:1288:                      <span>{album.year}</span>
+  app\store\page.favorites-backup.tsx:1289:
+  app\store\page.favorites-backup.tsx:1290:                      <span>
+  app\store\page.favorites-backup.tsx:1291:                        {album.tracks.length} Tracks
+  app\store\page.favorites-backup.tsx:1292:                      </span>
+  app\store\page.favorites-backup.tsx:1293:                    </div>
+  app\store\page.favorites-backup.tsx:1294:
+  app\store\page.favorites-backup.tsx:1350:                          <div className="now-playing-album">
+  app\store\page.favorites-backup.tsx:1351:                            <span className="playing-indicator">
+  app\store\page.favorites-backup.tsx:1352:                              {isPlaying
+> app\store\page.favorites-backup.tsx:1353:                                ? "NOW PLAYING"
+  app\store\page.favorites-backup.tsx:1354:                                : "PAUSED"}
+  app\store\page.favorites-backup.tsx:1355:                            </span>
+  app\store\page.favorites-backup.tsx:1356:
+  app\store\page.favorites-backup.tsx:1357:                            <strong>
+  app\store\page.favorites-backup.tsx:1358:                              {currentTrack.title}
+  app\store\page.favorites-backup.tsx:1359:                            </strong>
+  app\store\page.favorites-backup.tsx:1360:
+  app\store\page.favorites-backup.tsx:1361:                            <small>
+  app\store\page.favorites-backup.tsx:1362:                              Track{" "}
+  app\store\page.favorites-backup.tsx:1363:                              {currentTrackIndex + 1}{" "}
+  app\store\page.favorites-backup.tsx:1364:                              of {playerQueue.length}
+  app\store\page.favorites-backup.tsx:1365:                            </small>
+  app\store\page.favorites-backup.tsx:1366:                          </div>
+  app\store\page.favorites-backup.tsx:1367:                        )}
+  app\store\page.favorites-backup.tsx:1368:                    </div>
+  app\store\page.tsx:1622:                    {albumIsCurrent && (
+  app\store\page.tsx:1623:                      <span className="active-album-badge">
+  app\store\page.tsx:1624:                        {isPlaying
+> app\store\page.tsx:1625:                          ? "Now Playing"
+  app\store\page.tsx:1626:                          : "Paused"}
+  app\store\page.tsx:1627:                      </span>
+  app\store\page.tsx:1628:                    )}
+  app\store\page.tsx:1629:                  </div>
+  app\store\page.tsx:1630:
+  app\store\page.tsx:1631:                  <div className="album-content">
+  app\store\page.tsx:1632:                    <div className="album-meta">
+  app\store\page.tsx:1633:                      <span>{album.genre}</span>
+  app\store\page.tsx:1634:                      <span>{album.year}</span>
+  app\store\page.tsx:1635:
+  app\store\page.tsx:1636:                      <span>
+  app\store\page.tsx:1637:                        {album.tracks.length} Tracks
+  app\store\page.tsx:1638:                      </span>
+  app\store\page.tsx:1639:                    </div>
+  app\store\page.tsx:1640:
+  app\store\page.tsx:1693:                          <div className="now-playing-album">
+  app\store\page.tsx:1694:                            <span className="playing-indicator">
+  app\store\page.tsx:1695:                              {isPlaying
+> app\store\page.tsx:1696:                                ? "NOW PLAYING"
+  app\store\page.tsx:1697:                                : "PAUSED"}
+  app\store\page.tsx:1698:                            </span>
+  app\store\page.tsx:1699:
+  app\store\page.tsx:1700:                            <strong>
+  app\store\page.tsx:1701:                              {currentTrack.title}
+  app\store\page.tsx:1702:                            </strong>
+  app\store\page.tsx:1703:
+  app\store\page.tsx:1704:                            <small>
+  app\store\page.tsx:1705:                              Track{" "}
+  app\store\page.tsx:1706:                              {currentTrackIndex + 1}{" "}
+  app\store\page.tsx:1707:                              of {playerQueue.length}
+  app\store\page.tsx:1708:                            </small>
+  app\store\page.tsx:1709:                          </div>
+  app\store\page.tsx:1710:                        )}
+  app\store\page.tsx:1711:                    </div>
+  app\layout.tsx:24:    template: "%s | SOLO BEATS ENGINE MUSIC",
+  app\layout.tsx:25:  },
+  app\layout.tsx:26:  description:
+> app\layout.tsx:27:    "Discover Solo Beats albums, music previews, secure purchases, Premium Radio, Premium TV, artist promotion, and business advertising.",
+  app\layout.tsx:28:  applicationName: "SOLO BEATS ENGINE MUSIC",
+  app\layout.tsx:29:  authors: [{ name: "Solo Beats" }],
+  app\layout.tsx:30:  creator: "Solo Beats",
+  app\layout.tsx:31:  publisher: "SOLO BEATS ENGINE MUSIC",
+  app\layout.tsx:32:  alternates: {
+  app\layout.tsx:33:    canonical: "/",
+  app\layout.tsx:34:  },
+  app\layout.tsx:35:  openGraph: {
+  app\layout.tsx:36:    type: "website",
+  app\layout.tsx:37:    url: "/",
+  app\layout.tsx:38:    siteName: "SOLO BEATS ENGINE MUSIC",
+  app\layout.tsx:39:    title: "SOLO BEATS ENGINE MUSIC | Official Music Platform",
+  app\layout.tsx:40:    description:
+> app\layout.tsx:41:      "Discover Solo Beats albums, previews, purchases, Premium Radio, Premium TV, artist promotion, and advertising.",
+  app\layout.tsx:42:    images: [
+  app\layout.tsx:43:      {
+  app\layout.tsx:44:        url: "/covers/hero-home-final.png",
+  app\layout.tsx:45:        width: 1200,
+  app\layout.tsx:46:        height: 630,
+  app\layout.tsx:47:        alt: "SOLO BEATS ENGINE MUSIC",
+  app\layout.tsx:48:      },
+  app\layout.tsx:49:    ],
+  app\layout.tsx:50:  },
+  app\layout.tsx:51:  twitter: {
+  app\layout.tsx:52:    card: "summary_large_image",
+  app\layout.tsx:53:    title: "SOLO BEATS ENGINE MUSIC | Official Music Platform",
+  app\layout.tsx:54:    description:
+> app\layout.tsx:55:      "Discover Solo Beats albums, previews, purchases, Premium Radio, Premium TV, artist promotion, and advertising.",
+  app\layout.tsx:56:    images: ["/covers/hero-home-final.png"],
+  app\layout.tsx:57:  },
+  app\layout.tsx:58:  robots: {
+  app\layout.tsx:59:    index: true,
+  app\layout.tsx:60:    follow: true,
+  app\layout.tsx:61:    googleBot: {
+  app\layout.tsx:62:      index: true,
+  app\layout.tsx:63:      follow: true,
+  app\layout.tsx:64:      "max-image-preview": "large",
+  app\layout.tsx:65:      "max-snippet": -1,
+  app\layout.tsx:66:      "max-video-preview": -1,
+  app\layout.tsx:67:    },
+  app\layout.tsx:68:  },
+  app\layout.tsx:69:};
+  app\layout.tsx:70:
+  app\page.encoding-backup.tsx:639:              <p className="mt-6 max-w-3xl text-lg leading-8 text-white/65">
+  app\page.encoding-backup.tsx:640:                A devastating unreleased electronic album built with aggressive bass,
+  app\page.encoding-backup.tsx:641:                dark futuristic energy, speed, and cinematic power. Preview four flagship tracks
+> app\page.encoding-backup.tsx:642:                now, with additional exclusive tracks coming to Premium Radio and Premium TV.
+  app\page.encoding-backup.tsx:643:              </p>
+  app\page.encoding-backup.tsx:644:
+  app\page.encoding-backup.tsx:645:              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+  app\page.encoding-backup.tsx:646:                {flagshipTracks.map((track) => {
+  app\page.encoding-backup.tsx:647:                  const active = currentTrack?.id === track.id;
+  app\page.encoding-backup.tsx:648:                  const playing = active && isPlaying;
+  app\page.encoding-backup.tsx:649:
+  app\page.encoding-backup.tsx:650:                  return (
+  app\page.encoding-backup.tsx:651:                    <button
+  app\page.encoding-backup.tsx:652:                      key={track.id}
+  app\page.encoding-backup.tsx:653:                      type="button"
+  app\page.encoding-backup.tsx:654:                      onClick={() => {
+  app\page.encoding-backup.tsx:655:                        if (active) {
+  app\page.encoding-backup.tsx:656:                          togglePlay();
+  app\page.encoding-backup.tsx:657:                        } else {
+  app\page.tsx:339:
+  app\page.tsx:340:  const flagshipDescription =
+  app\page.tsx:341:    dashboardFlagship?.description ||
+> app\page.tsx:342:    "A devastating unreleased electronic album built with aggressive bass, dark futuristic energy, speed, and cinematic power. Preview flagship tracks now, with additional exclusive tracks coming to Premium Radio and Premium TV.";
+  app\page.tsx:343:
+  app\page.tsx:344:  const flagshipPageLink =
+  app\page.tsx:345:    dashboardFlagship?.pageLink ||
+  app\page.tsx:346:    "/albums/bullet-carnage";
+  app\page.tsx:347:
+  app\page.tsx:348:  const selectedEarlyAccessTracks =
+  app\page.tsx:349:    dashboardFlagship
+  app\page.tsx:350:      ? dashboardFlagship.flagshipPreviewTrackIds
+  app\page.tsx:351:          .map((mediaId) =>
+  app\page.tsx:352:            dashboardFlagship.tracks.find(
+  app\page.tsx:353:              (track) =>
+  app\page.tsx:354:                track.mediaId === mediaId &&
+  app\page.tsx:355:                typeof track.previewUrl === "string" &&
+  app\page.tsx:356:                track.previewUrl.length > 0
+  app\page.tsx:357:            )
+
+
+

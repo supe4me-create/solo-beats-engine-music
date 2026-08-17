@@ -898,6 +898,162 @@ export default function OwnerDashboardPage() {
             </Link>
           </div>
 
+          <div className="mt-8 rounded-[2rem] border border-cyan-300/15 bg-cyan-400/[0.04] p-6">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
+              Quick Owner Tools
+            </p>
+
+            <h3 className="mt-2 text-2xl font-black">
+              Main Platform Controls
+            </h3>
+
+            <p className="mt-3 max-w-4xl text-sm text-white/55">
+              Open the most-used SOLO BEATS ENGINE MUSIC managers from one place.
+            </p>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <ManagementLink
+                title="Album Manager"
+                description="Create and manage albums, tracks, artwork, releases, Premium access, and Store publishing."
+                href="/developer/albums"
+                action="Open Album Manager"
+                badge="Albums"
+              />
+
+              <ManagementLink
+                title="Media Library"
+                description="Manage audio, artwork, videos, covers, and reusable platform media."
+                href="/developer/media"
+                action="Open Media Library"
+                badge="Media"
+              />
+
+              <ManagementLink
+                title="Radio Manager"
+                description="Manage Premium Radio playlists, tracks, metadata, ordering, enabling, and programming."
+                href="/developer/radio"
+                action="Open Radio Manager"
+                badge="Radio"
+              />
+
+              <ManagementLink
+                title="Premium TV"
+                description="Manage Premium TV programming, publishing, scheduling, ordering, and assignments."
+                href="/developer/videos"
+                action="Manage Premium TV"
+                badge="TV"
+              />
+
+              <ManagementLink
+                title="Video Manager"
+                description="Upload and manage videos for Homepage Channel, Premium TV, promotions, and platform playback."
+                href="/developer/videos"
+                action="Open Video Manager"
+                badge="Video"
+              />
+
+              <ManagementLink
+                title="AI Video Generator"
+                description="Generate AI music videos, promotional clips, visualizers, social videos, and album trailers."
+                href="/developer/ai-video"
+                action="Open AI Video Generator"
+                badge="AI Video"
+              />
+
+              <ManagementLink
+                title="Homepage Manager"
+                description="Manage flagship content, Homepage Video Channel, featured content, banners, and homepage sections."
+                href="/developer/homepage"
+                action="Open Homepage Manager"
+                badge="Homepage"
+              />
+
+              <ManagementLink
+                title="Store"
+                description="Review albums, tracks, pricing, previews, checkout, and customer shopping."
+                href="/store"
+                action="Open Store"
+                badge="Store"
+              />
+            </div>
+
+            <div className="mt-8 border-t border-cyan-300/10 pt-7">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">
+                Quick Owner Operations
+              </p>
+
+              <h4 className="mt-2 text-xl font-black">
+                Business, Members & Platform Operations
+              </h4>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <ManagementLink
+                  title="Orders"
+                  description="Review completed purchases, PayPal payment details, purchased items, and revenue."
+                  href="/developer/orders"
+                  action="Open Orders"
+                  badge="Sales"
+                />
+
+                <ManagementLink
+                  title="Customers"
+                  description="Review customer accounts, purchases, ownership, spending, and My Music access."
+                  href="/developer/customers"
+                  action="Open Customers"
+                  badge="Accounts"
+                />
+
+                <ManagementLink
+                  title="Premium Members"
+                  description="Review active and inactive subscriptions, billing status, and Premium download usage."
+                  href="/developer/premium-members"
+                  action="Open Premium Members"
+                  badge="Premium"
+                />
+
+                <ManagementLink
+                  title="Artist Promotions"
+                  description="Review artist promotion submissions, approvals, payments, scheduling, and active campaigns."
+                  href="/developer/artist-promotions"
+                  action="Manage Promotions"
+                  badge="Promotion"
+                />
+
+                <ManagementLink
+                  title="Business Advertising"
+                  description="Review business and video advertising submissions, payments, approval, and scheduling."
+                  href="/developer/business-advertising"
+                  action="Manage Advertising"
+                  badge="Advertising"
+                />
+
+                <ManagementLink
+                  title="My Music"
+                  description="Open and test the customer-owned music library and secure download experience."
+                  href="/my-music"
+                  action="Open My Music"
+                  badge="Customer Music"
+                />
+
+                <ManagementLink
+                  title="Premium Library"
+                  description="Open the subscriber-only Premium music library and verify member access."
+                  href="/premium/library"
+                  action="Open Premium Library"
+                  badge="Premium"
+                />
+
+                <ManagementLink
+                  title="Payments & Credits"
+                  description="Manage and test AI Video credit balances, purchases, generation costs, and subscriber credits."
+                  href="/developer/ai-video/credits"
+                  action="Manage Credits"
+                  badge="Payments"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="mt-8">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-300">
               Music
@@ -1970,6 +2126,8 @@ function ResultRow({
     </article>
   );
 }
+
+
 
 
 

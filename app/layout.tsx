@@ -26,6 +26,33 @@ export const metadata: Metadata = {
   description:
     "Discover Solo Beats albums, music previews, secure purchases, Premium Radio, Premium TV, artist promotion, and business advertising.",
   applicationName: "SOLO BEATS ENGINE MUSIC",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      {
+        url: "/icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
+    apple: [
+      {
+        url: "/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "SOLO BEATS",
+    statusBarStyle: "black-translucent",
+  },
   authors: [{ name: "Solo Beats" }],
   creator: "Solo Beats",
   publisher: "SOLO BEATS ENGINE MUSIC",
@@ -141,4 +168,5 @@ export default function RootLayout({
     </html>
   );
 }
+
 

@@ -246,8 +246,7 @@ export async function POST(
 
     if (
       job.mode !== "text" &&
-      job.mode !== "image" &&
-      job.mode !== "music"
+      job.mode !== "image"
     ) {
       return NextResponse.json(
         {
@@ -282,10 +281,7 @@ export async function POST(
         : "";
 
     if (
-      (
-        job.mode === "image" ||
-        job.mode === "music"
-      ) &&
+      job.mode === "image" &&
       !imageUrl
     ) {
       return NextResponse.json(
@@ -909,9 +905,9 @@ if (!isOwner) {
 
     try {
       const runwayEndpoint =
-        job.mode === "text"
-          ? "https://api.dev.runwayml.com/v1/text_to_video"
-          : "https://api.dev.runwayml.com/v1/image_to_video";
+        job.mode === "image"
+          ? "https://api.dev.runwayml.com/v1/image_to_video"
+          : "https://api.dev.runwayml.com/v1/text_to_video";
 
       runwayResponse =
         await fetch(
@@ -928,8 +924,8 @@ if (!isOwner) {
             },
             body:
               JSON.stringify(
-                job.mode !==
-                  "text"
+                job.mode ===
+                  "image"
                   ? {
                       model:
                         "gen4.5",

@@ -244,16 +244,12 @@ export async function POST(
     const job =
       snapshot.data() || {};
 
-    if (
-      job.mode !== "text" &&
-      job.mode !== "image" &&
-      job.mode !== "music"
-    ) {
+    if (job.mode !== "text") {
       return NextResponse.json(
         {
           success: false,
           error:
-            "This Runway integration supports Text to Video and Image to Video.",
+            "Step 3B-2 currently supports Text to Video only.",
         },
         { status: 400 }
       );
@@ -270,29 +266,6 @@ export async function POST(
           success: false,
           error:
             "Generation prompt is empty.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const imageUrl =
-      typeof job.imageUrl ===
-        "string"
-        ? job.imageUrl.trim()
-        : "";
-
-    if (
-      (
-        job.mode === "image" ||
-        job.mode === "music"
-      ) &&
-      !imageUrl
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Image to Video source image has not been uploaded.",
         },
         { status: 400 }
       );
@@ -908,14 +881,9 @@ if (!isOwner) {
       Response;
 
     try {
-      const runwayEndpoint =
-        job.mode === "text"
-          ? "https://api.dev.runwayml.com/v1/text_to_video"
-          : "https://api.dev.runwayml.com/v1/image_to_video";
-
       runwayResponse =
         await fetch(
-          runwayEndpoint,
+          "https://api.dev.runwayml.com/v1/text_to_video",
           {
             method: "POST",
             headers: {
@@ -927,28 +895,14 @@ if (!isOwner) {
                 "2024-11-06",
             },
             body:
-              JSON.stringify(
-                job.mode !==
-                  "text"
-                  ? {
-                      model:
-                        "gen4.5",
-                      promptImage:
-                        imageUrl,
-                      promptText:
-                        prompt,
-                      ratio,
-                      duration,
-                    }
-                  : {
-                      model:
-                        "gen4.5",
-                      promptText:
-                        prompt,
-                      ratio,
-                      duration,
-                    }
-              ),
+              JSON.stringify({
+                model:
+                  "gen4.5",
+                promptText:
+                  prompt,
+                ratio,
+                duration,
+              }),
           }
         );
     } catch (providerNetworkError) {
