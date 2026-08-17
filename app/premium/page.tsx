@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -172,6 +172,30 @@ export default function PremiumPage() {
         </section>
 </div>
     
+      <section className="mx-auto mt-8 max-w-[1440px] px-6">
+        <div className="rounded-[28px] border border-cyan-300/25 bg-gradient-to-br from-cyan-950/40 via-violet-950/30 to-black/40 p-8">
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">
+            PREMIUM CREATOR TOOL
+          </p>
+
+          <h2 className="mt-3 text-4xl font-black">
+            AI Music Generator
+          </h2>
+
+          <p className="mt-4 max-w-3xl text-[17px] leading-7 text-white/60">
+            Create original AI-generated songs and beats from a prompt.
+            New users receive 2 free generations. Premium members receive
+            monthly AI Music credits, while owner access remains unlimited.
+          </p>
+
+          <Link
+            href="/premium/ai-music"
+            className="mt-6 inline-flex min-h-[52px] items-center justify-center rounded-[14px] bg-white px-6 text-base font-black text-black transition hover:bg-white/90"
+          >
+            Open AI Music Generator
+          </Link>
+        </div>
+      </section>
       <section
         style={{
           maxWidth: "1440px",

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -953,6 +953,13 @@ export default function OwnerDashboardPage() {
               />
 
               <ManagementLink
+                title="AI Music Generator"
+                description="Generate original AI songs and beats, review generation history, test free trials and Premium credits, and save completed music into the Media Library."
+                href="/premium/ai-music"
+                action="Open AI Music Generator"
+                badge="AI Music"
+              />
+              <ManagementLink
                 title="AI Video Generator"
                 description="Generate AI music videos, promotional clips, visualizers, social videos, and album trailers."
                 href="/developer/ai-video"
@@ -1088,6 +1095,13 @@ export default function OwnerDashboardPage() {
                 href="/developer/homepage"
                 action="Open Homepage Manager"
                 badge="Homepage Control"
+              />
+              <ManagementLink
+                title="AI Music Generator"
+                description="Generate original AI songs and beats, review generation history, test free trials and Premium credits, and save completed music into the Media Library."
+                href="/premium/ai-music"
+                action="Open AI Music Generator"
+                badge="AI Music"
               />
               <ManagementLink
                 title="AI Video Generator"
