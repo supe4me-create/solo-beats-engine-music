@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { albums as staticAlbums } from "../../../store/albums";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
@@ -583,12 +583,12 @@ export async function POST(request: Request) {
             )
           : [];
 
-      if (flagshipPreviewTrackIds.length !== 4) {
+      if (flagshipPreviewTrackIds.length !== 3) {
         return NextResponse.json(
           {
             success: false,
             error:
-              "A flagship album must have exactly 4 Early Access preview tracks.",
+              "A flagship album must have exactly 3 Early Access preview tracks.",
           },
           { status: 400 }
         );
@@ -726,12 +726,12 @@ const albumsSnapshot = await adminDb
       ),
     ];
 
-    if (flagshipPreviewTrackIds.length > 4) {
+    if (flagshipPreviewTrackIds.length > 3) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Choose no more than 4 Flagship Early Access preview tracks.",
+            "Choose no more than 3 Flagship Early Access preview tracks.",
         },
         { status: 400 }
       );

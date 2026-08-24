@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import {
@@ -903,6 +903,13 @@ export default function AlbumManagerPage() {
   }
 
   function toggleFlagshipPreviewTrack(mediaId: string) {
+    if (!mediaId) {
+      setError(
+        "This track has no Media Library ID. Link the audio file before choosing it as an Early Access Preview."
+      );
+      return;
+    }
+
     setForm((current) => {
       const alreadySelected =
         current.flagshipPreviewTrackIds.includes(mediaId);
@@ -917,10 +924,10 @@ export default function AlbumManagerPage() {
         };
       }
 
-      if (current.flagshipPreviewTrackIds.length >= 4) {
+      if (current.flagshipPreviewTrackIds.length >= 3) {
         window.setTimeout(() => {
           setError(
-            "A flagship album can have exactly 4 Early Access preview tracks."
+            "A flagship album can have exactly 3 Early Access preview tracks."
           );
         }, 0);
 
@@ -1059,9 +1066,9 @@ export default function AlbumManagerPage() {
       return;
     }
 
-    if (form.flagshipPreviewTrackIds.length > 4) {
+    if (form.flagshipPreviewTrackIds.length > 3) {
       setError(
-        "Choose no more than 4 Early Access preview tracks."
+        "Choose no more than 3 Early Access preview tracks."
       );
       return;
     }
@@ -1889,9 +1896,11 @@ export default function AlbumManagerPage() {
                             type="radio"
                             name="albumPreview"
                             checked={
+                              Boolean(track.mediaId) &&
                               form.albumPreviewMediaId ===
                               track.mediaId
                             }
+                            disabled={!track.mediaId}
                             onChange={() =>
                               setForm((current) => ({
                                 ...current,
@@ -1905,6 +1914,7 @@ export default function AlbumManagerPage() {
 
                         <label
                           className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold ${
+                            Boolean(track.mediaId) &&
                             form.flagshipPreviewTrackIds.includes(
                               track.mediaId
                             )
@@ -1914,9 +1924,13 @@ export default function AlbumManagerPage() {
                         >
                           <input
                             type="checkbox"
-                            checked={form.flagshipPreviewTrackIds.includes(
-                              track.mediaId
-                            )}
+                            checked={
+                              Boolean(track.mediaId) &&
+                              form.flagshipPreviewTrackIds.includes(
+                                track.mediaId
+                              )
+                            }
+                            disabled={!track.mediaId}
                             onChange={() =>
                               toggleFlagshipPreviewTrack(
                                 track.mediaId
@@ -1925,7 +1939,7 @@ export default function AlbumManagerPage() {
                           />
                           Early Access Preview
                           <span className="text-white/40">
-                            ({form.flagshipPreviewTrackIds.length}/4)
+                            ({form.flagshipPreviewTrackIds.length}/3)
                           </span>
                         </label>
 
