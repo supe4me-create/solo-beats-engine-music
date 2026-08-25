@@ -158,9 +158,19 @@ export async function GET(request: Request) {
       snapshot.docs.map(async (document) => {
         const data = document.data();
 
-        const coverPreviewUrl = await signedReadUrl(
-          data.coverStoragePath
+        const staticAlbum = staticAlbums.find(
+          (album) => album.id === document.id
         );
+
+        const legacyCoverPath =
+          typeof data.legacyCoverPath === "string" &&
+          data.legacyCoverPath.trim()
+            ? data.legacyCoverPath.trim()
+            : staticAlbum?.cover || null;
+
+        const coverPreviewUrl =
+          (await signedReadUrl(data.coverStoragePath)) ||
+          legacyCoverPath;
 
         const tracks = await Promise.all(
           (Array.isArray(data.tracks) ? data.tracks : []).map(
