@@ -61,6 +61,8 @@ type Album = {
   coverMediaId: string | null;
   coverStoragePath: string | null;
   coverPreviewUrl: string | null;
+  coverUrl?: string | null;
+  cover?: string | null;
   albumPreviewMediaId: string | null;
   albumPrice: number;
   trackPrice: number;
@@ -2292,9 +2294,9 @@ export default function AlbumManagerPage() {
                 className="overflow-hidden rounded-2xl border border-white/10 bg-black/25"
               >
                 <div className="flex gap-4 p-4">
-                  {album.coverPreviewUrl ? (
+                  {(album.coverPreviewUrl || album.coverUrl || album.cover) ? (
                     <img
-                      src={album.coverPreviewUrl}
+                      src={album.coverPreviewUrl || album.coverUrl || album.cover || ""}
                       alt={album.title}
                       className="h-28 w-28 shrink-0 rounded-xl object-cover"
                     />
