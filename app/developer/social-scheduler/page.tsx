@@ -3765,7 +3765,7 @@ async function validateYoutubePreview(
     //   of accidentally uploading the original full video.
     // ============================================================
 
-    if (ownerShortMode === "short" && !ownerShortResult) {
+    if (ownerShortMode === "short" && !imageMusicMode && !ownerShortResult) {
       setError("Create the Owner Short before scheduling.");
       return;
     }
@@ -7120,6 +7120,15 @@ youtubeContentType === "long" ? (
                   ? "SAVING..."
                   : "SCHEDULE POST"}
               </button>
+              {/* SOLO_SCHEDULE_INLINE_ERROR_V1 */}
+              {error ? (
+                <div
+                  role="alert"
+                  className="w-full rounded-xl border border-red-500/50 bg-red-950/50 p-4 font-bold text-red-200"
+                >
+                  SCHEDULING ISSUE: {error}
+                </div>
+              ) : null}
 
               <button
                 type="button"
