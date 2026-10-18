@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Form from "next/form";
 import Link from "next/link";
@@ -69,7 +69,7 @@ export default function GlobalHeader() {
 
           {isOwner ? (
             <Link
-              href="/developer"
+              href="/developer/command-center-x"
               className={`rounded-full px-4 py-2 text-sm font-black transition ${
                 pathname.startsWith("/developer")
                   ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/20"
