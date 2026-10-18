@@ -69,7 +69,7 @@ export default function GlobalHeader() {
 
           {isOwner ? (
             <Link
-              href="/developer/command-center-x"
+              href="/developer"
               className={`rounded-full px-4 py-2 text-sm font-black transition ${
                 pathname.startsWith("/developer")
                   ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/20"

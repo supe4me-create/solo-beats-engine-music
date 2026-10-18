@@ -67,7 +67,7 @@ export default function CommandCenterX() {
         <p className="mt-4 text-zinc-400">
           This headquarters is restricted to the authorized platform owner.
         </p>
-        <Link href="/developer/control-room"
+        <Link href="/developer"
           className="mt-8 inline-block rounded-xl border border-purple-500 px-6 py-3">
           Original Control Room
         </Link>
@@ -102,13 +102,13 @@ export default function CommandCenterX() {
               className="rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 px-5 py-4 font-black">
               SOCIAL SCHEDULER
             </Link>
-            <Link href="/developer/owner-tools"
+            <Link href="/developer"
               className="rounded-xl border border-white/30 px-5 py-4 font-bold">
-              ALL OWNER TOOLS
+              FULL OWNER DASHBOARD
             </Link>
-            <Link href="/developer/control-room"
+            <Link href="/developer"
               className="rounded-xl border border-white/30 px-5 py-4 font-bold">
-              ORIGINAL CONTROL ROOM
+              ORIGINAL OWNER DASHBOARD
             </Link>
           </div>
         </header>
