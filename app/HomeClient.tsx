@@ -1,0 +1,1866 @@
+"use client";
+
+import HomepageVideoChannel from "./components/HomepageVideoChannel";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import SoloUpdates from "./components/SoloUpdates";
+import { usePlayer } from "./player/usePlayer";
+import type { PlayerTrack } from "./player/types";
+import { albums as storeAlbums } from "./store/albums";
+
+type Album = {
+  title: string;
+  image: string;
+  year?: string;
+  tracks?: string;
+  audio?: string;
+  link?: string;
+  genre?: string;
+};
+
+
+type PublicFlagshipTrack = {
+  id: string;
+  number: number;
+  title: string;
+  mediaId: string | null;
+  storagePath: string | null;
+  previewUrl: string | null;
+  price: number;
+};
+
+type PublicFlagshipAlbum = {
+  id: string;
+  albumId: string;
+  title: string;
+  artist: string;
+  year: number;
+  genre: string;
+  description: string;
+  status: "released" | "upcoming";
+  publishStatus: "published" | "draft";
+  isFlagship: boolean;
+  flagshipPreviewTrackIds: string[];
+  accessType: "standard" | "premium";
+  cover: string | null;
+  coverUrl: string | null;
+  albumPreview: string | null;
+  albumPreviewUrl: string | null;
+  pageLink: string;
+  trackCount: number;
+  tracks: PublicFlagshipTrack[];
+};
+
+type SponsoredBusinessCampaign = {
+  submissionId: string;
+  businessName: string;
+  campaignName: string;
+  campaignGoal: string;
+  headline: string;
+  description: string;
+  callToAction: string;
+  businessWebsite: string | null;
+  youtubeLink: string | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  sponsoredLabel: string;
+};
+
+type PromotedCampaign = {
+  submissionId: string;
+  artistName: string;
+  songTitle: string;
+  genre: string;
+  description: string;
+  socialLink: string | null;
+  youtubeLink: string | null;
+  artworkUrl: string | null;
+  songUrl: string | null;
+  sponsoredLabel: string;
+};
+
+
+const fallbackFlagshipTracks: PlayerTrack[] = [
+  {
+    id: "bullet-carnage-fantasy",
+    title: "Fantasy",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/1 Fantasy.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-sexy-beat",
+    title: "Sexy Beat",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/19 Sexy Beat.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-title-track",
+    title: "Bullet Carnage",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/7 Bullet Carnage.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-electro-pace",
+    title: "Electro Pace",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/20 Electro Pace.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+  {
+    id: "bullet-carnage-bass-drop",
+    title: "Bass Drop",
+    artist: "Solo Beats",
+    albumTitle: "Bullet Carnage",
+    audio: "/previews/bullet-carnage/18 Bass Drop.mp3",
+    cover: "/covers/bullet-carnage.png",
+  },
+];
+
+const upcomingAlbums: Album[] = [
+  {
+    title: "Dark Horse",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/darkhorse.png",
+    audio: "/previews/darkhorse.mp3",
+    link: "/albums/dark-horse",
+    genre: "Complextro",
+  },
+  {
+    title: "Bass King",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/bassking.png",
+    audio: "/previews/bassking.mp3",
+    link: "/albums/bass-king",
+    genre: "Electro House",
+  },
+  {
+    title: "Zombie Bassline",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/zombiebassline.png",
+    audio: "/previews/zombiebassline.mp3",
+    link: "/albums/zombie-bassline",
+    genre: "Complextro",
+  },
+  {
+    title: "A World Built on Sound",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/aworldbuiltonsound.png",
+    audio: "/previews/aworldbuiltonsound.mp3",
+    link: "/albums/aworldbuiltonsound",
+    genre: "Electronic",
+  },
+  {
+    title: "Black Sea",
+    year: "2026",
+    tracks: "20 Tracks",
+    image: "/covers/black-sea.png",
+    audio: "/previews/18-black-sea.mp3",
+    link: "/albums/black-sea",
+    genre: "Complextro",
+  },
+];
+
+const releasedAlbumBase: Album[] = [
+  {
+    title: "Neon Lights",
+    image: "/covers/neonlights.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "Mystery",
+    image: "/covers/mystery.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "Echoes of Power",
+    image: "/covers/echoes-of-power.jpg",
+    genre: "Electro House",
+  },
+  {
+    title: "Neon Overdrive",
+    image: "/covers/neon-overdrive.jpg",
+    genre: "Complextro",
+  },
+  {
+    title: "Unchained Energy",
+    image: "/covers/unchained-energy.png",
+    genre: "Electro House",
+  },
+  {
+    title: "Novafx",
+    image: "/covers/novafx.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "More Touch",
+    image: "/covers/more-touch.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "Summer Blast",
+    image: "/covers/summer-blast.jpg",
+    genre: "Dance",
+  },
+  {
+    title: "Invincible",
+    image: "/covers/Invincible-cover.jpg",
+    audio: "/previews/invincible/Courageous Time 1.mp3",
+    link: "/albums/invincible",
+    genre: "Electronic",
+  },
+  {
+    title: "Tasty Smile",
+    image: "/covers/tasty-smile.jpg",
+    genre: "Dance",
+  },
+  {
+    title: "Beaming Dance",
+    image: "/covers/beaming-dance.jpg",
+    genre: "Dance",
+  },
+  {
+    title: "Can't Miss It!",
+    image: "/covers/cant-miss-it.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "Cygnus X",
+    image: "/covers/cygnus-x.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "Blur",
+    image: "/covers/blur.png",
+    genre: "Electronic",
+  },
+  {
+    title: "Full Speed",
+    image: "/covers/fullspeed.jpg",
+    genre: "Electro House",
+  },
+  {
+    title: "Night Terror",
+    image: "/covers/nightterror.jpg",
+    audio: "/previews/nightterror.mp3",
+    genre: "Complextro",
+  },
+  {
+    title: "Reboot",
+    image: "/covers/reboot.jpg",
+    genre: "Electronic",
+  },
+  {
+    title: "Strange Feeling",
+    image: "/covers/strangefeeling.png",
+    audio: "/previews/strangefeeling.mp3",
+    genre: "Complextro",
+  },
+];
+
+const releasedAlbums: Album[] = releasedAlbumBase.map((album) => { const match = storeAlbums.find((item) => item.title.toLowerCase().replace(/[^a-z0-9]/g, "") === album.title.toLowerCase().replace(/[^a-z0-9]/g, "")); return { ...album, audio: match?.albumPreview || album.audio, link: "/store", year: match ? String(match.year) : album.year, tracks: match ? `${match.tracks.length} Tracks` : album.tracks }; });
+
+const ALBUMS_PER_PAGE = 8;
+
+const genres = [
+  "All Genres",
+  ...Array.from(
+    new Set(
+      [...upcomingAlbums, ...releasedAlbums]
+        .map((album) => album.genre)
+        .filter((genre): genre is string => Boolean(genre))
+    )
+  ).sort((a, b) => a.localeCompare(b)),
+];
+
+function getYouTubeEmbedUrl(value: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const videoId = url.hostname === "youtu.be"
+      ? url.pathname.replace(/^\//, "").split("/")[0]
+      : url.searchParams.get("v") || url.pathname.split("/").filter(Boolean).pop();
+    return videoId ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}` : null;
+  } catch {
+    return null;
+  }
+}
+
+export default function AlbumsPage() {
+
+  // SOLO_UPCOMING_VISIBILITY_V1
+  const [upcomingVisibility, setUpcomingVisibility] =
+    useState<Record<string, boolean>>({});
+
+  const {
+    currentTrack,
+    isPlaying,
+    playTrack,
+    togglePlay,
+  } = usePlayer();
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
+  const [selectedGenre, setSelectedGenre] = useState("All Genres");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoritesLoaded, setFavoritesLoaded] = useState(false);
+  const [promotedCampaigns, setPromotedCampaigns] = useState<PromotedCampaign[]>([]);
+  const [promotionsLoading, setPromotionsLoading] = useState(true);
+  const [businessCampaigns, setBusinessCampaigns] = useState<SponsoredBusinessCampaign[]>([]);
+  const [businessCampaignsLoading, setBusinessCampaignsLoading] = useState(true);
+
+  const [dashboardFlagship, setDashboardFlagship] =
+    useState<PublicFlagshipAlbum | null>(null);
+
+  const flagshipTitle =
+    dashboardFlagship?.title || "Bullet Carnage";
+
+  const flagshipArtist =
+    dashboardFlagship?.artist || "Solo Beats";
+
+  const flagshipCover =
+    dashboardFlagship?.coverUrl ||
+    dashboardFlagship?.cover ||
+    "/covers/bullet-carnage.png";
+
+  const flagshipStatus =
+    dashboardFlagship?.status === "released"
+      ? "Released"
+      : "Upcoming";
+
+  const flagshipTrackCount =
+    dashboardFlagship?.trackCount || 20;
+
+  const flagshipDescription =
+    dashboardFlagship?.description ||
+    "A devastating unreleased electronic album built with aggressive bass, dark futuristic energy, speed, and cinematic power. Preview flagship tracks now, with additional exclusive tracks coming to Premium Radio and Premium TV.";
+
+  const flagshipPageLink =
+    dashboardFlagship?.pageLink ||
+    "/albums/reckoning";
+
+  const selectedEarlyAccessTracks =
+    dashboardFlagship
+      ? dashboardFlagship.flagshipPreviewTrackIds
+          .map((mediaId) =>
+            dashboardFlagship.tracks.find(
+              (track) =>
+                track.mediaId === mediaId &&
+                typeof track.previewUrl === "string" &&
+                track.previewUrl.length > 0
+            )
+          )
+          .filter(
+            (
+              track
+            ): track is PublicFlagshipTrack =>
+              Boolean(track)
+          )
+      : [];
+
+  const dashboardPreviewTracks: PlayerTrack[] =
+    dashboardFlagship
+      ? selectedEarlyAccessTracks.map((track) => ({
+          id: `flagship-${dashboardFlagship.albumId}-${track.id}`,
+          title: track.title,
+          artist: dashboardFlagship.artist,
+          albumTitle: dashboardFlagship.title,
+          audio: track.previewUrl as string,
+          cover:
+            dashboardFlagship.coverUrl ||
+            dashboardFlagship.cover ||
+            "/covers/bullet-carnage.png",
+        }))
+      : [];
+
+  const homepageFlagshipTracks =
+    dashboardPreviewTracks;
+
+  function sortAlbums(albums: Album[]) {
+    const sortedAlbums = [...albums];
+
+    if (sortBy === "oldest") {
+      return sortedAlbums.reverse();
+    }
+
+    if (sortBy === "az") {
+      return sortedAlbums.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
+    if (sortBy === "za") {
+      return sortedAlbums.sort((a, b) => b.title.localeCompare(a.title));
+    }
+
+    return sortedAlbums;
+  }
+
+  function filterAlbums(albums: Album[]) {
+    const searchText = search.trim().toLowerCase();
+
+    return sortAlbums(albums).filter((album) => {
+      const matchesSearch = album.title.toLowerCase().includes(searchText);
+      const matchesFavorites =
+        !favoritesOnly || favorites.includes(album.title);
+      const matchesGenre =
+        selectedGenre === "All Genres" || album.genre === selectedGenre;
+
+      return matchesSearch && matchesFavorites && matchesGenre;
+    });
+  }
+
+  function toggleFavorite(albumTitle: string) {
+    setFavorites((currentFavorites) => {
+      if (currentFavorites.includes(albumTitle)) {
+        return currentFavorites.filter((title) => title !== albumTitle);
+      }
+
+      return [...currentFavorites, albumTitle];
+    });
+  }
+
+  function isFavorite(albumTitle: string) {
+    return favorites.includes(albumTitle);
+  }
+
+  function createPreviewTrack(album: Album): PlayerTrack | null {
+    if (!album.audio) {
+      return null;
+    }
+
+    return {
+      id: `album-preview-${album.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}`,
+      title: `${album.title} Preview`,
+      artist: "Solo Beats",
+      albumTitle: album.title,
+      audio: album.audio,
+      cover: album.image,
+    };
+  }
+
+  function playPreview(album: Album) {
+    const previewTrack = createPreviewTrack(album);
+
+    if (!previewTrack) {
+      return;
+    }
+
+    if (currentTrack?.id === previewTrack.id) {
+      togglePlay();
+      return;
+    }
+
+    playTrack(previewTrack);
+  }
+
+  // SOLO_UPCOMING_VISIBILITY_V1
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadUpcomingVisibility() {
+      try {
+        const response = await fetch(
+          "/api/homepage/upcoming-visibility",
+          { cache: "no-store" }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              "Upcoming visibility could not be loaded."
+          );
+        }
+
+        if (!cancelled) {
+          setUpcomingVisibility(
+            data.visibility &&
+              typeof data.visibility === "object"
+              ? data.visibility
+              : {}
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Upcoming album visibility could not be loaded:",
+          error
+        );
+      }
+    }
+
+    void loadUpcomingVisibility();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function upcomingVisibilityKey(album: Album) {
+    const link =
+      typeof album.link === "string"
+        ? album.link
+        : "";
+
+    const parts = link
+      .split("/")
+      .filter(Boolean);
+
+    const linkKey =
+      parts.length > 0
+        ? parts[parts.length - 1]
+            .trim()
+            .toLowerCase()
+        : "";
+
+    // SOLO_GLOBAL_ALBUM_VISIBILITY_KEY_FIX_V2
+    if (linkKey && linkKey !== "store") {
+      return linkKey;
+    }
+
+    return album.title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  // SOLO_GLOBAL_HOMEPAGE_VISIBILITY_V1
+  const homepageUpcomingAlbums =
+    upcomingAlbums.filter(
+      (album) =>
+        upcomingVisibility[
+          upcomingVisibilityKey(album)
+        ] !== false
+    );
+
+  const homepageReleasedAlbums =
+    releasedAlbums.filter(
+      (album) =>
+        upcomingVisibility[
+          upcomingVisibilityKey(album)
+        ] !== false
+    );
+
+  const visibleUpcomingAlbums =
+    filterAlbums(homepageUpcomingAlbums);
+
+  const visibleReleasedAlbums =
+    filterAlbums(homepageReleasedAlbums);
+  const totalVisibleAlbums =
+    visibleUpcomingAlbums.length + visibleReleasedAlbums.length;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(visibleReleasedAlbums.length / ALBUMS_PER_PAGE)
+  );
+  const firstAlbumIndex = (currentPage - 1) * ALBUMS_PER_PAGE;
+  const lastAlbumIndex = firstAlbumIndex + ALBUMS_PER_PAGE;
+  const paginatedReleasedAlbums = visibleReleasedAlbums.slice(
+    firstAlbumIndex,
+    lastAlbumIndex
+  );
+  const noResults = totalVisibleAlbums === 0;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardFlagship() {
+      try {
+        const response = await fetch(
+          "/api/catalog/albums?includeFlagshipDraft=1",
+          { cache: "no-store" }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error ||
+              "Public catalog could not be loaded."
+          );
+        }
+
+        const albums = Array.isArray(data.albums)
+          ? (data.albums as PublicFlagshipAlbum[])
+          : [];
+
+        const selected =
+          albums.find(
+            (album) => album.isFlagship === true
+          ) || null;
+
+        if (!cancelled) {
+          setDashboardFlagship(selected);
+        }
+      } catch (error) {
+        console.error(
+          "Homepage flagship could not be loaded:",
+          error
+        );
+
+        if (!cancelled) {
+          setDashboardFlagship(null);
+        }
+      }
+    }
+
+    void loadDashboardFlagship();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPromotions() {
+      try {
+        const response = await fetch("/api/promotions/active?placement=homepage", { cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || "Promoted music could not be loaded.");
+        if (!cancelled) setPromotedCampaigns(Array.isArray(data.promotions) ? data.promotions : []);
+      } catch (error) {
+        console.error("Homepage promotions could not be loaded:", error);
+      } finally {
+        if (!cancelled) setPromotionsLoading(false);
+      }
+    }
+    void loadPromotions();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBusinessCampaigns() {
+      try {
+        const response = await fetch(
+          "/api/business-advertising/active?placement=homepage",
+          { cache: "no-store" }
+        );
+
+        const contentType =
+          response.headers.get("content-type") || "";
+
+        if (!contentType.includes("application/json")) {
+          throw new Error(
+            "The business advertising service returned an invalid response."
+          );
+        }
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(
+            data.error || "Sponsored business campaigns could not be loaded."
+          );
+        }
+
+        if (!cancelled) {
+          setBusinessCampaigns(
+            Array.isArray(data.campaigns) ? data.campaigns : []
+          );
+        }
+      } catch (error) {
+        console.error("Homepage business advertising could not be loaded:", error);
+      } finally {
+        if (!cancelled) {
+          setBusinessCampaignsLoading(false);
+        }
+      }
+    }
+
+    void loadBusinessCampaigns();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedFavorites = window.localStorage.getItem(
+        "solo-beats-favorites"
+      );
+
+      if (savedFavorites) {
+        const parsedFavorites = JSON.parse(savedFavorites);
+
+        if (Array.isArray(parsedFavorites)) {
+          setFavorites(parsedFavorites);
+        }
+      }
+    } catch (error) {
+      console.error("Favorites could not be loaded:", error);
+    } finally {
+      setFavoritesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!favoritesLoaded) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        "solo-beats-favorites",
+        JSON.stringify(favorites)
+      );
+    } catch (error) {
+      console.error("Favorites could not be saved:", error);
+    }
+  }, [favorites, favoritesLoaded]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sortBy, favoritesOnly, selectedGenre]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  function goToPage(pageNumber: number) {
+    setCurrentPage(pageNumber);
+
+    window.setTimeout(() => {
+      document.getElementById("released-albums")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setFavoritesOnly(false);
+    setSortBy("newest");
+    setSelectedGenre("All Genres");
+  }
+
+  return (
+    <main
+      className="min-h-screen bg-[radial-gradient(ellipse_at_14%_8%,rgba(167,55,241,0.24),transparent_36%),radial-gradient(ellipse_at_86%_24%,rgba(14,165,233,0.22),transparent_33%),linear-gradient(145deg,#0e1233_0%,#21103e_45%,#102b51_100%)] px-4 py-8 pb-40 text-white sm:px-5 md:px-10 md:py-12"
+    >
+      {/* SOLO_BEATS_FUTURISTIC_HOMEPAGE_V3 - visual presentation only */}
+      <section aria-labelledby="solo-future-title" className="relative isolate mx-auto mb-14 max-w-7xl overflow-hidden rounded-[2.2rem] border border-fuchsia-300/35 bg-[#160d34] shadow-[0_28px_110px_rgba(117,44,245,0.32)]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_85%_30%,rgba(26,204,255,0.35),transparent_46%),radial-gradient(ellipse_at_20%_70%,rgba(225,45,175,0.36),transparent_48%),linear-gradient(120deg,#170b35,#42206e_52%,#0a4d83)]" aria-hidden="true" />
+        <div className="pointer-events-none absolute -top-32 right-0 h-96 w-96 rounded-full bg-fuchsia-500/30 blur-[90px]" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-32 left-1/4 h-80 w-80 rounded-full bg-cyan-300/25 blur-[88px]" aria-hidden="true" />
+        <div className="relative grid min-h-[550px] gap-9 px-6 py-10 sm:px-10 sm:py-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-6 lg:px-14 lg:py-16">
+          <div className="relative z-10">
+            <div className="mb-7 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] sm:text-xs">
+              <span className="rounded-full border border-cyan-200/60 bg-cyan-300/20 px-4 py-2 text-cyan-50 shadow-[0_0_20px_rgba(34,211,238,0.15)]">THE FUTURE OF SOUND</span>
+              <span className="rounded-full border border-fuchsia-200/40 bg-fuchsia-300/15 px-4 py-2 text-fuchsia-50">MUSIC • RADIO • TV • CREATORS</span>
+            </div>
+            <p className="mb-4 text-xs font-black uppercase tracking-[0.34em] text-pink-200 sm:text-sm">SOLO BEATS ENGINE MUSIC</p>
+            <h1 id="solo-future-title" className="max-w-3xl text-[clamp(3rem,5.8vw,6.7rem)] font-black uppercase leading-[0.94] tracking-[-0.06em] text-white drop-shadow-[0_8px_25px_rgba(0,0,0,0.3)]">
+              DISCOVER THE <span className="block bg-gradient-to-r from-cyan-200 via-white to-fuchsia-200 bg-clip-text text-transparent">FUTURE OF</span><span className="block bg-gradient-to-r from-pink-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent">SOUND.</span>
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-7 text-white/85 sm:text-lg">Explore original music, stream Premium Radio and TV, and discover a world built for artists, DJs, and music lovers.</p>
+            <nav aria-label="Discover SOLO BEATS" className="mt-8 flex flex-wrap gap-3">
+              <Link href="/albums" className="inline-flex min-h-12 items-center justify-center rounded-xl bg-gradient-to-r from-fuchsia-500 to-pink-500 px-6 py-3 text-sm font-black uppercase tracking-wider text-white shadow-[0_10px_32px_rgba(236,72,153,0.35)] transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Explore Music ↗</Link>
+              <Link href="/premium/radio" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-cyan-200/60 bg-cyan-300/20 px-6 py-3 text-sm font-black uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-cyan-300/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Listen to Radio</Link>
+              <Link href="/premium/tv" className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/40 bg-white/15 px-6 py-3 text-sm font-black uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Watch TV</Link>
+            </nav>
+          </div>
+          <div className="relative flex min-h-[340px] items-center justify-center lg:min-h-[490px]" aria-hidden="true">
+            <div className="absolute inset-6 rounded-full border border-cyan-200/20 bg-[radial-gradient(circle,rgba(236,72,153,0.33),rgba(38,17,107,0.15)_45%,transparent_68%)] shadow-[0_0_80px_rgba(34,211,238,0.2)]" />
+            <div className="absolute inset-[14%] animate-[spin_36s_linear_infinite] rounded-full border-2 border-dashed border-cyan-200/35 motion-reduce:animate-none" />
+            <div className="absolute inset-[22%] animate-[spin_50s_linear_infinite_reverse] rounded-full border border-fuchsia-200/55 motion-reduce:animate-none" />
+            <div className="relative z-10 w-[88%] max-w-[460px] overflow-hidden rounded-[2rem] border border-fuchsia-200/40 bg-[#190b37]/40 p-3 shadow-[0_30px_95px_rgba(6,5,34,0.58)] rotate-[3deg]">
+              <div className="aspect-square rounded-[1.4rem] bg-cover bg-center" style={{ backgroundImage: "linear-gradient(135deg,rgba(85,15,135,0.18),rgba(0,180,255,0.23)),url('/covers/hero-home-final.png')" }} />
+              <div className="mt-3 flex items-center justify-between gap-3 px-2 pb-1 text-white"><span className="text-xs font-black uppercase tracking-[0.2em]">SOLO BEATS RADIO</span><span className="flex gap-1.5">{[3,6,4,8,5,7,3,6,4].map((h,i)=><span key={i} className="w-1 rounded-full bg-cyan-300" style={{ height: `${h * 3}px` }} />)}</span></div>
+            </div>
+            <div className="absolute bottom-2 left-0 z-20 rounded-xl border border-cyan-100/45 bg-[#113669]/80 px-4 py-3 text-xs font-black uppercase tracking-widest text-cyan-50 shadow-2xl backdrop-blur-lg sm:left-3">✦ MUSIC WITHOUT LIMITS</div>
+          </div>
+        </div>
+        <div className="relative grid gap-3 border-t border-white/25 bg-gradient-to-r from-fuchsia-700/35 via-indigo-600/30 to-cyan-600/35 px-6 py-5 backdrop-blur-xl sm:grid-cols-4 sm:px-10">
+          {[{title:"Original Albums",desc:"Find your next favorite"},{title:"Premium Radio",desc:"Stream the energy"},{title:"Premium TV",desc:"Watch the sound"},{title:"Creator Studio",desc:"Create and promote"}].map((item)=>(<div key={item.title} className="border-l-2 border-cyan-200/80 pl-4"><p className="text-sm font-black text-white">{item.title}</p><p className="mt-1 text-xs text-white/75">{item.desc}</p></div>))}
+        </div>
+      </section>
+
+      {/* SOLO_BEATS_HOMEPAGE_MIX_MASTERING_V1 */}
+      <section className="mx-auto my-10 w-full max-w-7xl px-4 md:px-6">
+        <div className="overflow-hidden rounded-[2rem] border border-cyan-300/25 bg-gradient-to-br from-cyan-950/50 via-black to-fuchsia-950/40 p-6 md:p-10">
+          <div className="grid gap-8 lg:grid-cols-[1.4fr_0.6fr] lg:items-center">
+
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300">
+                PROFESSIONAL AUDIO SERVICE
+              </p>
+
+              <h2 className="mt-3 text-3xl font-black text-white md:text-5xl">
+                SOLO BEATS MIX & MASTERING
+              </h2>
+
+              <p className="mt-4 max-w-3xl text-base leading-7 text-white/65 md:text-lg">
+                Send your finished song or upload your stems and let SOLO BEATS
+                deliver a polished, powerful, release-ready mix and master.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">
+                  MASTER ONLY
+                </span>
+
+                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">
+                  MIX & MASTER
+                </span>
+
+                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white/80">
+                  WAV + MP3 DELIVERY
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-white/10 bg-black/60 p-6">
+              <p className="text-sm font-black uppercase tracking-[0.2em] text-fuchsia-300">
+                READY TO START?
+              </p>
+
+              <p className="mt-3 text-sm leading-6 text-white/60">
+                Choose your service, upload your audio, complete payment,
+                and submit your project directly to SOLO BEATS.
+              </p>
+
+              <a
+                href="/mix-mastering"
+                className="mt-6 block rounded-xl bg-gradient-to-r from-cyan-300 to-fuchsia-400 px-6 py-4 text-center text-base font-black text-black transition hover:opacity-90"
+              >
+                START MIX & MASTERING
+              </a>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+
+      <section className="mx-auto max-w-7xl">
+        <SoloUpdates />
+        {/* SOLO_HOMEPAGE_DJ_SIGNUP_V1 */}
+        <section
+          aria-labelledby="homepage-dj-title"
+          className="mb-8 rounded-3xl border border-cyan-300/30 bg-gradient-to-r from-cyan-950/60 to-violet-950/50 p-6 md:p-8"
+        >
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-widest text-cyan-300">
+                  Join our radio DJs
+                </p>
+
+                <h2
+                  id="homepage-dj-title"
+                  className="mt-2 text-3xl font-black"
+                >
+                  Bring your sound to Solo Beats
+                </h2>
+
+                <p className="mt-3 max-w-3xl text-white/75">
+                  DJ applications are free. Create an account, verify your email,
+                  and submit your application for owner review. Once approved,
+                  choose the DJ access plan that works for you.
+                </p>
+              </div>
+
+              <Link
+                href="/dj/radio"
+                className="inline-flex shrink-0 items-center justify-center rounded-2xl bg-cyan-300 px-7 py-4 font-black text-black transition hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+              >
+                Become a DJ
+              </Link>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-cyan-300/20 bg-black/25 p-5">
+                <p className="text-sm font-bold uppercase tracking-wide text-white/60">
+                  Monthly DJ Access
+                </p>
+                <p className="mt-2 text-3xl font-black text-cyan-300">
+                  $29.99
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  $29.99 per month
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-300/20 bg-black/25 p-5">
+                <p className="text-sm font-bold uppercase tracking-wide text-white/60">
+                  3-Month DJ Access
+                </p>
+                <p className="mt-2 text-3xl font-black text-cyan-300">
+                  $74.99
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  About $25/month
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-cyan-300/20 bg-black/25 p-5">
+                <p className="text-sm font-bold uppercase tracking-wide text-white/60">
+                  Annual DJ Access
+                </p>
+                <p className="mt-2 text-3xl font-black text-cyan-300">
+                  $199.99
+                </p>
+                <p className="mt-1 text-sm text-white/60">
+                  About $16.67/month
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm text-white/70">
+              Paid DJ access activates automatically after verified PayPal payment.
+              If the subscription does not renew, DJ access automatically stops
+              when the current paid period expires.
+            </div>
+          </div>
+        </section>
+{/* Hero artwork now appears in the cinematic welcome section above. */}
+
+        <section className="relative mb-14 overflow-hidden rounded-[2.5rem] border border-fuchsia-300/40 bg-black px-6 py-10 text-center shadow-[0_0_45px_rgba(217,70,239,0.22)] md:px-10 md:py-14">
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(217,70,239,0.28),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(34,211,238,0.24),transparent_38%)]" />
+          <div className="pointer-events-none absolute inset-x-10 top-0 h-px animate-pulse bg-gradient-to-r from-transparent via-cyan-300 to-transparent shadow-[0_0_20px_rgba(103,232,249,0.95)]" />
+          <div className="pointer-events-none absolute inset-x-10 bottom-0 h-px animate-pulse bg-gradient-to-r from-transparent via-fuchsia-400 to-transparent shadow-[0_0_20px_rgba(232,121,249,0.95)]" />
+
+          <div className="relative">
+            <span className="inline-flex animate-pulse rounded-full border border-cyan-200/50 bg-cyan-300/10 px-5 py-2 text-xs font-black uppercase tracking-[0.28em] text-cyan-200 shadow-[0_0_22px_rgba(34,211,238,0.45)]">
+              Live Now
+            </span>
+
+            <h2 className="mt-6 bg-gradient-to-r from-cyan-200 via-white to-fuchsia-300 bg-clip-text text-4xl font-black uppercase tracking-[0.08em] text-transparent drop-shadow-[0_0_18px_rgba(217,70,239,0.65)] md:text-7xl">
+              Now Launched
+            </h2>
+
+            <p className="mx-auto mt-5 max-w-4xl text-lg font-bold leading-8 text-white/80 md:text-xl">
+              Artist Promotion, Business Advertising, and Premium TV Promotion are officially live on SOLO BEATS ENGINE MUSIC.
+            </p>
+
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <Link
+                href="/artist-promotion"
+                className="rounded-2xl bg-gradient-to-r from-fuchsia-500 to-violet-500 px-7 py-4 font-black text-white shadow-[0_0_26px_rgba(217,70,239,0.42)] transition hover:-translate-y-1 hover:brightness-110"
+              >
+                Promote Your Music
+              </Link>
+
+              <Link
+                href="/business-advertising"
+                className="rounded-2xl bg-gradient-to-r from-cyan-300 to-blue-400 px-7 py-4 font-black text-black shadow-[0_0_26px_rgba(34,211,238,0.38)] transition hover:-translate-y-1 hover:brightness-110"
+              >
+                Advertise Your Business
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-700/25 via-zinc-950 to-cyan-500/15 p-6 shadow-2xl md:p-10">
+          <div className="max-w-4xl">
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-fuchsia-300">
+              Grow Your Audience
+            </p>
+            <h2 className="mt-3 text-4xl font-black leading-tight md:text-6xl">
+              Promote Your Music. Advertise on SOLO BEATS TV and Radio.
+            </h2>
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-white/65">
+              Artists can feature songs, artwork, and promotional videos. Businesses can run sponsored campaigns across the homepage, SOLO BEATS Radio, and SOLO BEATS TV.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-5 lg:grid-cols-2">
+            {/* SOLO_ARTIST_PROMOTION_PRICES_V1 */}
+            <article className="rounded-[2rem] border border-fuchsia-300/20 bg-black/30 p-6">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-fuchsia-300">
+                For Artists
+              </p>
+
+              <h3 className="mt-3 text-3xl font-black">
+                Promote Your Song or Video
+              </h3>
+
+              <p className="mt-3 leading-7 text-white/60">
+                Get your music featured with audio, artwork, video, artist links,
+                and clear Promoted placement across SOLO BEATS ENGINE MUSIC.
+              </p>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <Link
+                  href="/artist-promotion"
+                  className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-4 transition hover:border-fuchsia-300/50 hover:bg-fuchsia-500/20"
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.16em] text-fuchsia-300">
+                    Starter Push
+                  </span>
+                  <span className="mt-2 block text-3xl font-black text-white">
+                    $29.99
+                  </span>
+                  <span className="mt-1 block text-sm text-white/50">
+                    Start Promotion
+                  </span>
+                </Link>
+
+                <Link
+                  href="/artist-promotion"
+                  className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-4 transition hover:border-fuchsia-300/50 hover:bg-fuchsia-500/20"
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.16em] text-fuchsia-300">
+                    Growth Push
+                  </span>
+                  <span className="mt-2 block text-3xl font-black text-white">
+                    $74.99
+                  </span>
+                  <span className="mt-1 block text-sm text-white/50">
+                    Grow Your Reach
+                  </span>
+                </Link>
+
+                <Link
+                  href="/artist-promotion"
+                  className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4 transition hover:border-cyan-300/50 hover:bg-cyan-500/20"
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
+                    Major Push
+                  </span>
+                  <span className="mt-2 block text-3xl font-black text-white">
+                    $149.99
+                  </span>
+                  <span className="mt-1 block text-sm text-white/50">
+                    Major Campaign
+                  </span>
+                </Link>
+
+                <Link
+                  href="/artist-promotion"
+                  className="rounded-2xl border border-amber-300/25 bg-amber-300/10 p-4 transition hover:border-amber-300/60 hover:bg-amber-300/20"
+                >
+                  <span className="block text-xs font-black uppercase tracking-[0.16em] text-amber-300">
+                    Spotlight Campaign
+                  </span>
+                  <span className="mt-2 block text-3xl font-black text-white">
+                    $299.99
+                  </span>
+                  <span className="mt-1 block text-sm text-white/50">
+                    Maximum Exposure
+                  </span>
+                </Link>
+              </div>
+
+              <Link
+                href="/artist-promotion"
+                className="mt-5 flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-fuchsia-500 to-violet-500 px-6 py-4 font-black text-white transition hover:brightness-110"
+              >
+                START ARTIST PROMOTION
+              </Link>
+            </article>
+
+            <article className="rounded-[2rem] border border-cyan-300/20 bg-black/30 p-6">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-cyan-300">
+                For Businesses and Brands
+              </p>
+              <h3 className="mt-3 text-3xl font-black">
+                Advertise on SOLO BEATS TV and Radio
+              </h3>
+              <p className="mt-3 leading-7 text-white/60">
+                Reach music listeners with sponsored business campaigns, video advertising, branded creative, and calls to action.
+              </p>
+              <Link
+                href="/business-advertising"
+                className="mt-6 inline-flex rounded-2xl bg-cyan-300 px-6 py-4 font-black text-black"
+              >
+                Advertise Your Business
+              </Link>
+            </article>
+          </div>
+        </section>
+        {/* SOLO_HOMEPAGE_SEO_LINKS_V1 */}
+        <section
+          aria-labelledby="solo-beats-explore-title"
+          className="mb-14 overflow-hidden rounded-[2.5rem] border border-white/10 bg-gradient-to-br from-zinc-950 via-black to-fuchsia-950/20 p-6 md:p-10"
+        >
+          <div className="max-w-4xl">
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-cyan-300">
+              Explore SOLO BEATS ENGINE MUSIC
+            </p>
+
+            <h2
+              id="solo-beats-explore-title"
+              className="mt-3 text-3xl font-black md:text-5xl"
+            >
+              Electronic Music, Radio, Albums & Artist Services
+            </h2>
+
+            <p className="mt-4 max-w-3xl leading-7 text-white/60">
+              Discover original electronic music by Solo Beats, buy albums,
+              stream premium music and video, use professional Mix & Mastering,
+              promote your music, or apply for DJ access.
+            </p>
+          </div>
+
+          <nav
+            aria-label="SOLO BEATS music and artist services"
+            className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <Link
+              href="/store"
+              className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-5 transition hover:border-fuchsia-300/50 hover:bg-fuchsia-500/20"
+            >
+              <span className="text-xl font-black">Buy Solo Beats Albums</span>
+              <span className="mt-2 block text-sm leading-6 text-white/55">
+                Shop original electronic music albums and tracks from Solo Beats.
+              </span>
+            </Link>
+
+            <Link
+              href="/mix-mastering"
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-5 transition hover:border-cyan-300/50 hover:bg-cyan-500/20"
+            >
+              <span className="text-xl font-black">Mix & Mastering Services</span>
+              <span className="mt-2 block text-sm leading-6 text-white/55">
+                Submit your song or stems for professional mixing and mastering.
+              </span>
+            </Link>
+
+            <Link
+              href="/artist-promotion"
+              className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-5 transition hover:border-fuchsia-300/50 hover:bg-fuchsia-500/20"
+            >
+              <span className="text-xl font-black">Artist Music Promotion</span>
+              <span className="mt-2 block text-sm leading-6 text-white/55">
+                Promote your song, artwork, video, and artist profile.
+              </span>
+            </Link>
+
+            <Link
+              href="/premium"
+              className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-5 transition hover:border-amber-300/50 hover:bg-amber-300/20"
+            >
+              <span className="text-xl font-black">Premium Radio & TV</span>
+              <span className="mt-2 block text-sm leading-6 text-white/55">
+                Access Premium Radio, Premium TV, music, and member features.
+              </span>
+            </Link>
+
+            <Link
+              href="/dj/radio"
+              className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-5 transition hover:border-cyan-300/50 hover:bg-cyan-500/20"
+            >
+              <span className="text-xl font-black">Apply for DJ Access</span>
+              <span className="mt-2 block text-sm leading-6 text-white/55">
+                Apply to become a SOLO BEATS radio DJ and access DJ tools.
+              </span>
+            </Link>
+
+            <Link
+              href="/albums"
+              className="rounded-2xl border border-red-300/20 bg-red-500/10 p-5 transition hover:border-red-300/50 hover:bg-red-500/20"
+            >
+              <span className="text-xl font-black">Explore Solo Beats Albums</span>
+              <span className="mt-2 block text-sm leading-6 text-white/55">
+                Browse released albums, upcoming projects, previews, and new music.
+              </span>
+            </Link>
+          </nav>
+        </section>
+
+        <HomepageVideoChannel />
+
+        <h1 className="text-center text-4xl font-black md:text-6xl">
+          SOLO BEATS ALBUMS
+        </h1>
+
+        <p className="mb-10 mt-4 text-center text-gray-400">
+          Explore upcoming projects and the official Solo Beats catalog.
+        </p>
+
+
+        {dashboardFlagship ? (
+        <section className="mb-14 overflow-hidden rounded-[2.5rem] border border-red-500/25 bg-gradient-to-br from-red-950 via-black to-zinc-950 p-6 shadow-2xl md:p-10">
+          <div className="grid gap-8 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center">
+            <img
+              src={flagshipCover}
+              alt={`${flagshipTitle} album cover`}
+              className="aspect-square w-full rounded-[2rem] object-cover shadow-2xl shadow-red-950/60"
+            />
+
+            <div>
+              <p className="text-sm font-black uppercase tracking-[0.28em] text-red-400">
+                New Flagship Album
+              </p>
+
+              <h2 className="mt-3 text-5xl font-black md:text-7xl">
+                {flagshipTitle}
+              </h2>
+
+              <p className="mt-4 text-lg text-white/55">
+                {flagshipStatus} {"\u2022"} {flagshipTrackCount}{" "}
+                {flagshipTrackCount === 1 ? "Track" : "Tracks"} {"\u2022"}{" "}
+                {flagshipArtist}
+              </p>
+
+              <p className="mt-6 max-w-3xl text-lg leading-8 text-white/65">
+                {flagshipDescription}
+              </p>
+
+              <div className="mt-7 grid gap-3 sm:grid-cols-2">
+                {homepageFlagshipTracks.map((track) => {
+                  const active = currentTrack?.id === track.id;
+                  const playing = active && isPlaying;
+
+                  return (
+                    <button
+                      key={track.id}
+                      type="button"
+                      onClick={() => {
+                        if (active) {
+                          togglePlay();
+                        } else {
+                          playTrack(track);
+                        }
+                      }}
+                      className="rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-left transition hover:-translate-y-1 hover:border-red-400/50 hover:bg-red-500/20"
+                    >
+                      <span className="block text-xs font-black uppercase tracking-[0.18em] text-red-300">
+                        Flagship Preview
+                      </span>
+                      <span className="mt-2 block text-xl font-black">
+                        {track.title}
+                      </span>
+                      <span className="mt-1 block text-sm text-white/45">
+                        {playing ? "Pause preview" : active ? "Resume preview" : "Play preview"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link
+                  href="/premium"
+                  className="rounded-2xl bg-white px-6 py-4 font-black text-black"
+                >
+                  Join Premium for Early Access
+                </Link>
+
+                <Link
+                href={flagshipPageLink}
+                className="rounded-2xl border border-white/15 bg-white/5 px-6 py-4 font-black"
+              >
+                View Flagship Album
+              </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+        ) : null}
+        {(businessCampaignsLoading || businessCampaigns.length > 0) && (
+          <section className="mb-14 rounded-[2rem] border border-cyan-300/20 bg-gradient-to-br from-cyan-700/20 via-zinc-950 to-violet-500/10 p-6 md:p-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.24em] text-cyan-300">
+                  Sponsored Business
+                </p>
+                <h2 className="mt-2 text-3xl font-black md:text-4xl">
+                  Featured Business Advertising
+                </h2>
+              </div>
+
+              <Link
+                href="/business-advertising"
+                className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 font-black"
+              >
+                Advertise Your Business
+              </Link>
+            </div>
+
+            {businessCampaignsLoading ? (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-white/50">
+                Loading sponsored businesses...
+              </div>
+            ) : (
+              <div className="mt-6 grid gap-6">
+                {businessCampaigns.map((campaign) => {
+                  const embedUrl = getYouTubeEmbedUrl(campaign.youtubeLink);
+
+                  return (
+                    <article
+                      key={campaign.submissionId}
+                      className="overflow-hidden rounded-2xl border border-white/10 bg-black/25"
+                    >
+                      <div className="grid gap-6 p-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+                        <div>
+                          {campaign.imageUrl ? (
+                            <img
+                              src={campaign.imageUrl}
+                              alt={`${campaign.campaignName} advertisement`}
+                              className="aspect-square w-full rounded-2xl object-cover"
+                            />
+                          ) : (
+                            <div className="grid aspect-square place-items-center rounded-2xl border border-white/10 bg-zinc-900 text-center text-white/35">
+                              Sponsored creative
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="inline-flex rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-cyan-100">
+                            {campaign.sponsoredLabel || "Sponsored"}
+                          </span>
+
+                          <p className="mt-4 text-sm font-black uppercase tracking-[0.18em] text-emerald-300">
+                            {campaign.businessName}
+                          </p>
+
+                          <h3 className="mt-2 text-4xl font-black">
+                            {campaign.headline}
+                          </h3>
+
+                          <p className="mt-2 text-white/45">
+                            {campaign.campaignName}
+                          </p>
+
+                          <p className="mt-5 max-w-3xl leading-7 text-white/60">
+                            {campaign.description}
+                          </p>
+
+                          {embedUrl ? (
+                            <div className="mt-6 aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black">
+                              <iframe
+                                src={embedUrl}
+                                title={`${campaign.campaignName} sponsored video`}
+                                className="h-full w-full"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                allowFullScreen
+                              />
+                            </div>
+                          ) : campaign.videoUrl ? (
+                            <div className="mt-6 rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-300">
+                                Sponsored Video
+                              </p>
+                              <video
+                                controls
+                                preload="metadata"
+                                src={campaign.videoUrl}
+                                className="aspect-video w-full rounded-xl bg-black"
+                              />
+                            </div>
+                          ) : null}
+
+                          <div className="mt-6 flex flex-wrap gap-3">
+                            {campaign.businessWebsite ? (
+                              <a
+                                href={campaign.businessWebsite}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-xl bg-white px-5 py-3 font-black text-black"
+                              >
+                                {campaign.callToAction || "Learn More"}
+                              </a>
+                            ) : null}
+
+                            <Link
+                              href="/business-advertising"
+                              className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 font-black"
+                            >
+                              Get Sponsored
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {(promotionsLoading || promotedCampaigns.length > 0) && (
+          <section className="mb-14 rounded-[2rem] border border-fuchsia-400/20 bg-gradient-to-br from-fuchsia-700/20 via-zinc-950 to-cyan-500/10 p-6 md:p-8">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-sm font-black uppercase tracking-[0.24em] text-fuchsia-300">Promoted Music</p>
+                <h2 className="mt-2 text-3xl font-black md:text-4xl">Featured Artist Promotions</h2>
+              </div>
+              <Link href="/artist-promotion" className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 font-black">Promote Your Music</Link>
+            </div>
+            {promotionsLoading ? (
+              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-8 text-center text-white/50">Loading promoted music...</div>
+            ) : (
+              <div className="mt-6 grid gap-6">
+                {promotedCampaigns.map((campaign) => {
+                  const embedUrl = getYouTubeEmbedUrl(campaign.youtubeLink);
+                  return (
+                    <article key={campaign.submissionId} className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+                      <div className="grid gap-6 p-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+                        <div>{campaign.artworkUrl ? <img src={campaign.artworkUrl} alt={`${campaign.songTitle} artwork`} className="aspect-square w-full rounded-2xl object-cover" /> : <div className="grid aspect-square place-items-center rounded-2xl border border-white/10 bg-zinc-900 text-white/35">Artwork unavailable</div>}</div>
+                        <div className="min-w-0">
+                          <span className="inline-flex rounded-full border border-fuchsia-300/25 bg-fuchsia-300/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-fuchsia-200">{campaign.sponsoredLabel || "Promoted"}</span>
+                          <p className="mt-4 text-sm font-black uppercase tracking-[0.18em] text-cyan-300">{campaign.artistName}</p>
+                          <h3 className="mt-2 text-4xl font-black">{campaign.songTitle}</h3>
+                          <p className="mt-2 text-white/45">{campaign.genre}</p>
+                          <p className="mt-5 max-w-3xl leading-7 text-white/60">{campaign.description}</p>
+                          {embedUrl ? (
+                            <div className="mt-6 aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black"><iframe src={embedUrl} title={`${campaign.songTitle} promotional video`} className="h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
+                          ) : campaign.songUrl ? (
+                            <div className="mt-6 rounded-2xl border border-white/10 bg-zinc-950/70 p-4"><p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-emerald-300">Promoted Song</p><audio controls preload="metadata" src={campaign.songUrl} className="w-full" /></div>
+                          ) : null}
+                          <div className="mt-6 flex flex-wrap gap-3">
+                            {campaign.socialLink ? <a href={campaign.socialLink} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-5 py-3 font-black text-black">Visit Artist</a> : null}
+                            <Link href="/artist-promotion" className="rounded-xl border border-white/15 bg-white/5 px-5 py-3 font-black">Get Featured</Link>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        <div className="mx-auto mb-6 grid max-w-5xl gap-4 md:grid-cols-[1fr_220px_auto]">
+          <input
+            type="text"
+            placeholder="Search albums..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-4 text-white outline-none transition duration-300 placeholder:text-gray-500 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
+          />
+
+          <select
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none transition duration-300 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="az">A to Z</option>
+            <option value="za">Z to A</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setFavoritesOnly((current) => !current)}
+            className={`rounded-xl border px-5 py-4 font-bold transition-all duration-300 ${
+              favoritesOnly
+                ? "border-pink-500 bg-pink-500 text-white shadow-lg shadow-pink-500/30"
+                : "border-zinc-700 bg-zinc-900 text-gray-200 hover:border-pink-500 hover:text-pink-400"
+            }`}
+          >
+            {"\u2665"} Favorites
+          </button>
+        </div>
+
+        <div className="mx-auto mb-6 max-w-5xl">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-fuchsia-400">
+              Filter by genre
+            </p>
+
+            <p className="text-sm text-gray-500">
+              {selectedGenre === "All Genres"
+                ? "Showing every genre"
+                : `Showing ${selectedGenre}`}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            {genres.map((genre) => {
+              const genreCount =
+                genre === "All Genres"
+                  ? [...upcomingAlbums, ...releasedAlbums].length
+                  : [...upcomingAlbums, ...releasedAlbums].filter(
+                      (album) => album.genre === genre
+                    ).length;
+
+              const active = selectedGenre === genre;
+
+              return (
+                <button
+                  key={genre}
+                  type="button"
+                  onClick={() => setSelectedGenre(genre)}
+                  className={`rounded-full border px-4 py-2 text-sm font-bold transition-all duration-300 ${
+                    active
+                      ? "border-fuchsia-500 bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/25"
+                      : "border-zinc-700 bg-zinc-900 text-gray-300 hover:border-fuchsia-500 hover:text-fuchsia-300"
+                  }`}
+                >
+                  {genre} ({genreCount})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mx-auto mb-14 flex max-w-5xl flex-wrap items-center justify-between gap-3 text-sm">
+          <p className="text-gray-400">
+            Showing{" "}
+            <span className="font-bold text-white">{totalVisibleAlbums}</span>{" "}
+            album{totalVisibleAlbums === 1 ? "" : "s"}
+          </p>
+
+          {(search || favoritesOnly || sortBy !== "newest" || selectedGenre !== "All Genres") && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="font-bold text-fuchsia-400 transition hover:text-fuchsia-300"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+
+        {noResults ? (
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 px-6 py-16 text-center">
+            <h2 className="text-2xl font-black">No albums found</h2>
+
+            <p className="mt-3 text-gray-400">
+              Try another title or clear your current filters.
+            </p>
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-6 rounded-xl bg-fuchsia-600 px-6 py-3 font-bold transition duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
+            >
+              Clear Filters
+            </button>
+          </div>
+        ) : (
+          <>
+            {visibleUpcomingAlbums.length > 0 && (
+              <section className="mb-20">
+                <div className="mb-8">
+                  <p className="font-bold uppercase tracking-[0.3em] text-fuchsia-500">
+                    Coming Soon
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-black md:text-4xl">
+                    Upcoming Releases
+                  </h2>
+                </div>
+
+                <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+                  {visibleUpcomingAlbums.map((album) => {
+                    const albumIsPlaying =
+                      currentTrack?.audio === album.audio && isPlaying;
+                    const albumIsFavorite = isFavorite(album.title);
+
+                    return (
+                      <article
+                        key={album.title}
+                        className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite(album.title)}
+                          aria-label={
+                            albumIsFavorite
+                              ? `Remove ${album.title} from favorites`
+                              : `Add ${album.title} to favorites`
+                          }
+                          className={`absolute right-7 top-7 z-10 flex h-11 w-11 items-center justify-center rounded-full border text-xl shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 ${
+                            albumIsFavorite
+                              ? "border-pink-400 bg-pink-500 text-white"
+                              : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
+                          }`}
+                        >
+                          {albumIsFavorite ? "\u2665" : "\u2661"}
+                        </button>
+
+                        <div className="overflow-hidden rounded-xl">
+                          {album.link ? (
+                            <Link
+                              href={album.link}
+                              className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-500"
+                            >
+                              <img
+                                src={album.image}
+                                alt={`${album.title} album cover`}
+                                className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                              />
+                            </Link>
+                          ) : (
+                            <img
+                              src={album.image}
+                              alt={`${album.title} album cover`}
+                              className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                            />
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-fuchsia-500/15 px-3 py-1 text-xs font-bold text-fuchsia-300">
+                            Upcoming
+                          </span>
+
+                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-gray-300">
+                            {album.genre}
+                          </span>
+                        </div>
+
+                        <h3 className="mt-4 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
+                          {album.title}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                          Upcoming Album {"\u2022"} Solo Beats
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          {album.year} {"\u2022"} {album.tracks}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => playPreview(album)}
+                          className="mt-5 w-full rounded-xl bg-fuchsia-600 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
+                        >
+                          {albumIsPlaying ? "Pause Preview" : "Play Preview"}
+                        </button>
+
+                        {album.link && (
+                          <Link
+                            href={album.link}
+                            className="mt-3 block w-full rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300"
+                          >
+                            View Album
+                          </Link>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {visibleReleasedAlbums.length > 0 && (
+              <section id="released-albums" className="scroll-mt-8">
+                <div className="mb-8">
+                  <p className="font-bold uppercase tracking-[0.3em] text-fuchsia-500">
+                    Official Catalog
+                  </p>
+
+                  <h2 className="mt-2 text-3xl font-black md:text-4xl">
+                    Released Albums
+                  </h2>
+
+                  <p className="mt-3 max-w-2xl text-gray-400">
+                    Browse officially released Solo Beats albums and listen to
+                    available previews.
+                  </p>
+                </div>
+
+                <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {paginatedReleasedAlbums.map((album) => {
+                    const albumIsFavorite = isFavorite(album.title);
+                    const albumIsPlaying =
+                      currentTrack?.audio === album.audio && isPlaying;
+
+                    return (
+                      <article
+                        key={album.title}
+                        className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleFavorite(album.title)}
+                          aria-label={
+                            albumIsFavorite
+                              ? `Remove ${album.title} from favorites`
+                              : `Add ${album.title} to favorites`
+                          }
+                          className={`absolute right-7 top-7 z-10 flex h-11 w-11 items-center justify-center rounded-full border text-xl shadow-lg backdrop-blur-md transition-all duration-300 hover:scale-110 ${
+                            albumIsFavorite
+                              ? "border-pink-400 bg-pink-500 text-white"
+                              : "border-white/20 bg-black/60 text-white hover:border-pink-400 hover:text-pink-400"
+                          }`}
+                        >
+                          {albumIsFavorite ? "\u2665" : "\u2661"}
+                        </button>
+
+                        <div className="overflow-hidden rounded-xl">
+                          {album.link ? (
+                            <Link href={album.link}>
+                              <img
+                                src={album.image}
+                                alt={`${album.title} album cover`}
+                                className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                              />
+                            </Link>
+                          ) : (
+                            <img
+                              src={album.image}
+                              alt={`${album.title} album cover`}
+                              className="aspect-square w-full rounded-xl object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                            />
+                          )}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-green-500/15 px-3 py-1 text-xs font-bold text-green-300">
+                            Released
+                          </span>
+
+                          <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs font-bold text-gray-300">
+                            {album.genre}
+                          </span>
+                        </div>
+
+                        <h3 className="mt-4 text-2xl font-black transition-colors duration-300 group-hover:text-fuchsia-400">
+                          {album.title}
+                        </h3>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                          Released Album {"\u2022"} Solo Beats
+                        </p>
+
+                        <div className="mt-5 grid grid-cols-2 gap-3">
+                          {album.audio ? (
+                            <button
+                              type="button"
+                              onClick={() => playPreview(album)}
+                              className="rounded-xl bg-fuchsia-600 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-700 hover:shadow-lg hover:shadow-fuchsia-500/30"
+                            >
+                              {albumIsPlaying ? "Pause" : "Listen"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="cursor-not-allowed rounded-xl bg-fuchsia-600/50 py-3 font-bold text-white/70"
+                            >
+                              Listen
+                            </button>
+                          )}
+
+                          {album.link ? (
+                            <Link
+                              href={album.link}
+                              className="rounded-xl border border-fuchsia-500 py-3 text-center font-bold transition-all duration-300 hover:-translate-y-1 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/30"
+                            >
+                              Buy
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              className="cursor-not-allowed rounded-xl border border-fuchsia-500/50 py-3 font-bold text-white/60"
+                            >
+                              Buy
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="mt-12 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+
+                    {Array.from(
+                      { length: totalPages },
+                      (_, index) => index + 1
+                    ).map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => goToPage(pageNumber)}
+                        className={`h-12 min-w-12 rounded-xl px-4 font-bold transition-all duration-300 hover:-translate-y-1 ${
+                          currentPage === pageNumber
+                            ? "bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-500/30"
+                            : "border border-zinc-700 bg-zinc-900 hover:border-fuchsia-500 hover:bg-fuchsia-500"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="rounded-xl border border-zinc-700 px-5 py-3 font-bold transition-all duration-300 hover:-translate-y-1 hover:border-fuchsia-500 hover:bg-fuchsia-500 hover:shadow-lg hover:shadow-fuchsia-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+
+                <p className="mt-5 text-center text-sm text-gray-500">
+                  Page {currentPage} of {totalPages}
+                </p>
+              </section>
+            )}
+          </>
+        )}
+      </section>
+
+    </main>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
