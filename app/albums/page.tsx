@@ -1,4 +1,5 @@
-﻿"use client";
+/* SOLO_FUTURISTIC_V4_ALBUMS — visual-only classes */
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -202,6 +203,91 @@ const fallbackReleasedAlbums: Album[] = [
 const ALBUMS_PER_PAGE = 8;
 
 export default function AlbumsPage() {
+  // SOLO_PUBLIC_ALBUMS_GLOBAL_VISIBILITY_V1
+  const [globalAlbumVisibility, setGlobalAlbumVisibility] =
+    useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadGlobalAlbumVisibility() {
+      try {
+        const response = await fetch(
+          "/api/homepage/upcoming-visibility",
+          {
+            cache: "no-store",
+          }
+        );
+
+        const data = await response.json();
+
+        if (
+          !response.ok ||
+          !data.success
+        ) {
+          throw new Error(
+            data.error ||
+              "Album visibility could not be loaded."
+          );
+        }
+
+        if (!cancelled) {
+          setGlobalAlbumVisibility(
+            data.visibility &&
+            typeof data.visibility === "object"
+              ? data.visibility
+              : {}
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Public albums visibility could not be loaded:",
+          error
+        );
+      }
+    }
+
+    void loadGlobalAlbumVisibility();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function publicAlbumVisibilityKey(album: Album) {
+    const link =
+      typeof album.link === "string"
+        ? album.link
+        : "";
+
+    const parts = link
+      .split("/")
+      .filter(Boolean);
+
+    const linkKey =
+      parts.length > 0
+        ? parts[parts.length - 1]
+            .trim()
+            .toLowerCase()
+        : "";
+
+    if (linkKey && linkKey !== "store") {
+      return linkKey;
+    }
+
+    return album.title
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function publicAlbumIsVisible(album: Album) {
+    const key = publicAlbumVisibilityKey(album);
+
+    return globalAlbumVisibility[key] !== false;
+  }
+
   const {
     currentTrack,
     isPlaying,
@@ -266,7 +352,15 @@ export default function AlbumsPage() {
       const matchesGenre =
         selectedGenre === "All Genres" || album.genre === selectedGenre;
 
-      return matchesSearch && matchesFavorites && matchesGenre;
+      const matchesGlobalVisibility =
+        publicAlbumIsVisible(album);
+
+      return (
+        matchesSearch &&
+        matchesFavorites &&
+        matchesGenre &&
+        matchesGlobalVisibility
+      );
     });
   }
 
@@ -480,10 +574,10 @@ export default function AlbumsPage() {
 
   return (
     <main
-      className="min-h-screen bg-black px-5 py-12 pb-40 text-white md:px-10"
+      className="min-h-screen bg-[radial-gradient(ellipse_at_15%_0%,rgba(185,59,226,0.34),transparent_38%),radial-gradient(ellipse_at_95%_30%,rgba(22,157,245,0.25),transparent_42%),linear-gradient(135deg,#160c30,#1c174d_52%,#071d40)] px-5 py-12 pb-40 text-white md:px-10"
     >
       <section className="mx-auto max-w-7xl">
-        <h1 className="text-center text-4xl font-black md:text-6xl">
+        <h1 className="bg-gradient-to-r from-white via-cyan-200 to-fuchsia-300 bg-clip-text text-center text-4xl font-black text-transparent md:text-6xl">
           SOLO BEATS ALBUMS
         </h1>
 
@@ -497,13 +591,13 @@ export default function AlbumsPage() {
             placeholder="Search albums..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-5 py-4 text-white outline-none transition duration-300 placeholder:text-gray-500 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
+            className="w-full rounded-xl border border-violet-300/30 bg-indigo-950/70 px-5 py-4 text-white outline-none transition duration-300 placeholder:text-gray-500 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
           />
 
           <select
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value)}
-            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-4 text-white outline-none transition duration-300 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
+            className="w-full rounded-xl border border-violet-300/30 bg-indigo-950/70 px-4 py-4 text-white outline-none transition duration-300 focus:border-fuchsia-500 focus:shadow-[0_0_20px_rgba(217,70,239,0.18)]"
           >
             <option value="newest">Newest First</option>
             <option value="oldest">Oldest First</option>
@@ -623,7 +717,7 @@ export default function AlbumsPage() {
                     return (
                       <article
                         key={album.title}
-                        className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
+                        className="group relative overflow-hidden rounded-2xl border border-violet-300/25 bg-gradient-to-br from-violet-900/70 via-slate-900/90 to-sky-950/75 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
                       >
                         <button
                           type="button"
@@ -734,7 +828,7 @@ export default function AlbumsPage() {
                     return (
                       <article
                         key={album.title}
-                        className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
+                        className="group relative overflow-hidden rounded-2xl border border-violet-300/25 bg-gradient-to-br from-violet-900/70 via-slate-900/90 to-sky-950/75 p-5 shadow-xl transition-all duration-300 ease-out hover:-translate-y-3 hover:scale-[1.02] hover:border-fuchsia-500 hover:shadow-[0_22px_55px_rgba(217,70,239,0.28)]"
                       >
                         <button
                           type="button"
@@ -882,6 +976,7 @@ export default function AlbumsPage() {
     </main>
   );
 }
+
 
 
 
