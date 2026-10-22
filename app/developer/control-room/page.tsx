@@ -1,3 +1,4 @@
+// SOLO_CONTROL_ROOM_DASHBOARD_V4 - visual layout only; existing logic preserved
 "use client";
 
 import Link from "next/link";
@@ -223,9 +224,9 @@ export default function ControlRoomPage() {
 
   return (
     <main className="min-h-screen bg-[#050505] text-white">
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-8 md:px-8">
+      <div className="mx-auto w-full max-w-[1800px] px-3 py-5 sm:px-5 md:px-6">
 
-        <section className="rounded-3xl border border-red-500/30 bg-gradient-to-br from-red-950/30 via-black to-black p-6 md:p-9">
+        <section className="rounded-3xl border border-red-500/30 bg-gradient-to-br from-red-950/30 via-black to-black p-5 md:p-6">
 
           <div className="flex flex-wrap items-start justify-between gap-6">
 
@@ -234,7 +235,7 @@ export default function ControlRoomPage() {
                 OWNER COMMAND CENTER
               </p>
 
-              <h1 className="mt-2 text-3xl font-black md:text-5xl">
+              <h1 className="mt-2 text-2xl font-black leading-tight sm:text-3xl md:text-4xl">
                 SOLO BEATS CONTROL ROOM
               </h1>
 
@@ -266,7 +267,7 @@ export default function ControlRoomPage() {
           </div>
         ) : null}
 
-        <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 
           <BigStatus
             label="RADIO"
@@ -327,7 +328,7 @@ export default function ControlRoomPage() {
 
         </section>
 
-        <section className="mt-7 rounded-3xl border border-white/10 bg-[#0a0a0a] p-6">
+        <section className="mt-5 rounded-3xl border border-white/10 bg-[#0a0a0a] p-5 md:p-6">
 
           <div className="flex flex-wrap items-center justify-between gap-4">
 
