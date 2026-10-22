@@ -614,6 +614,14 @@ export async function POST(
         }
       );
 
+      // SOLO_BEATS_MP4_ATTACHMENT_FIX_V1
+      const [downloadAttachmentUrl] = await finalFile.getSignedUrl({
+        action: "read",
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000,
+        responseDisposition: `attachment; filename="${safeName(title)}-visualizer.mp4"`,
+      });
+
+
     await Promise.all(
       chunkPaths.map(
         chunkPath =>
@@ -653,6 +661,7 @@ export async function POST(
       {
         success: true,
         downloadUrl,
+        downloadAttachmentUrl,
         storagePath:
           finalStoragePath,
       }

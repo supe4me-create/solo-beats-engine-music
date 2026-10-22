@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
@@ -476,7 +476,10 @@ export default function MusicVisualizerPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const [
+  const [videoDownloadUrl, setVideoDownloadUrl] =
+    useState<string | null>(null);
+
+const [
     visualizerBalance,
     setVisualizerBalance,
   ] = useState<number | null>(null);
@@ -1033,6 +1036,7 @@ ${raw.slice(
         await joinResponse.json() as {
           success?: boolean;
           downloadUrl?: string;
+          downloadAttachmentUrl?: string;
           storagePath?: string;
           error?: string;
         };
@@ -1050,6 +1054,7 @@ ${raw.slice(
       setVideoUrl(
         joinData.downloadUrl
       );
+      setVideoDownloadUrl(joinData.downloadAttachmentUrl || null);
 
       setUploadProgress(
         100
@@ -1486,8 +1491,7 @@ ${raw.slice(
                 />
 
                 <a
-                  href={videoUrl}
-                  download={`${safeFilePart(title)}-visualizer.mp4`}
+                  href={videoDownloadUrl || videoUrl} download={`${safeFilePart(title)}-visualizer.mp4`}
                   className="mt-6 inline-block rounded-2xl bg-fuchsia-600 px-8 py-4 text-xl font-black text-white transition hover:bg-fuchsia-500"
                 >
                   DOWNLOAD MP4
