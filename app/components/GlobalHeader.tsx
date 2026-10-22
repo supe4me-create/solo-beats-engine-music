@@ -14,6 +14,7 @@ const links = [
   { href: "/", label: "Home" },
   { href: "/albums", label: "Albums" },
   { href: "/store", label: "Store" },
+  { href: "/connect", label: "SOLO CONNECT" },
   { href: "/premium", label: "Premium" },
   { href: "/premium/radio", label: "Radio" },
   { href: "/premium/tv", label: "TV" },
