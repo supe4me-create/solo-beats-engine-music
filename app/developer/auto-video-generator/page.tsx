@@ -789,6 +789,42 @@ export default function AutoVideoGeneratorPage() {
 
   return (
     <main className="min-h-screen bg-[#050509] px-4 pb-24 pt-10 text-white sm:px-8">
+
+        {/* SOLO_AUTO_VIDEO_V3_ANIMATED_STUDIO */}
+        <section
+          aria-label="Animated video creation"
+          className="mb-6 rounded-3xl border border-fuchsia-500/35 bg-gradient-to-br from-fuchsia-950/35 via-[#101022] to-black p-5 text-white shadow-lg md:p-7"
+        >
+          <p className="text-xs font-black uppercase tracking-[0.25em] text-fuchsia-300">
+            SOLO BEATS VIDEO V3
+          </p>
+          <h2 className="mt-2 text-2xl font-black md:text-3xl">
+            Animated Scene Studio
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-300">
+            Create real moving scenes with the existing Runway video engine,
+            then add your soundtrack with the music-video tools.
+            The current Runway connection supports 5- or 10-second scenes.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <a
+              href="/developer/ai-video"
+              className="rounded-2xl border border-fuchsia-400/40 bg-fuchsia-600 px-5 py-4 text-center text-sm font-black text-white transition hover:bg-fuchsia-500"
+            >
+              CREATE ANIMATED SCENES
+            </a>
+            <a
+              href="/developer/auto-video-generator"
+              className="rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-center text-sm font-black text-white transition hover:bg-white/20"
+            >
+              CLASSIC MUSIC VIDEO GENERATOR
+            </a>
+          </div>
+          <p className="mt-4 text-xs text-zinc-400">
+            Multi-scene assembly and beat synchronization are the next V3
+            engine stage. Existing rendering controls remain available.
+          </p>
+        </section>
       <div className="mx-auto max-w-7xl">
 
         <section className="rounded-[2rem] border border-fuchsia-400/20 bg-gradient-to-br from-fuchsia-500/15 via-black to-cyan-500/10 p-8">
