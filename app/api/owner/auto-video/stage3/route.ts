@@ -102,16 +102,57 @@ export async function POST(request: Request) {
     if (!audioSnapshot.exists || audio?.kind !== "audio" || typeof audio.storagePath !== "string") {
       return NextResponse.json({ success: false, error: "Select a valid music track from the Media Library." }, { status: 400 });
     }
+    // SOLO_STAGE3_COMPLETED_OUTPUT_FALLBACK_V1
+    // Reuse completed video outputs without creating new Runway jobs.
     const runwayKey = process.env.RUNWAYML_API_SECRET;
-    if (!runwayKey) throw new Error("Runway is not configured.");
-    const client = new RunwayML({ apiKey: runwayKey });
+    const client = runwayKey ? new RunwayML({ apiKey: runwayKey }) : null;
     const outputs: string[] = [];
+
     for (const job of jobs) {
-      const task = await client.tasks.retrieve(job.data()!.providerJobId as string);
-      if (task.status !== "SUCCEEDED" || !Array.isArray(task.output) || typeof task.output[0] !== "string") {
-        return NextResponse.json({ success: false, error: "A Runway clip is not currently downloadable." }, { status: 400 });
+      const data = job.data()!;
+      const savedUrl = typeof data.outputUrl === "string"
+        ? data.outputUrl.trim()
+        : "";
+
+      let outputUrl = "";
+
+      // Refresh from Runway when an API key is configured.
+      if (client) {
+        try {
+          const task = await client.tasks.retrieve(data.providerJobId as string);
+          if (task.status === "SUCCEEDED" &&
+              Array.isArray(task.output) &&
+              typeof task.output[0] === "string") {
+            outputUrl = task.output[0];
+          }
+        } catch (error) {
+          console.warn("STAGE3_RUNWAY_REFRESH_UNAVAILABLE", error);
+        }
       }
-      outputs.push(task.output[0]);
+
+      // A completed job may already have a stored provider output URL.
+      if (!outputUrl && savedUrl) {
+        outputUrl = savedUrl;
+      }
+
+      if (!outputUrl) {
+        return NextResponse.json({
+          success: false,
+          error: "A completed Runway video has no saved output URL. Configure RUNWAYML_API_SECRET on Vercel to retrieve it again."
+        }, { status: 400 });
+      }
+
+      const parsed = new URL(outputUrl);
+      if (parsed.protocol !== "https:" ||
+          parsed.username || parsed.password ||
+          parsed.port) {
+        return NextResponse.json({
+          success: false,
+          error: "A completed video has an invalid output URL."
+        }, { status: 400 });
+      }
+
+      outputs.push(outputUrl);
     }
     temp = await mkdtemp(join(tmpdir(), "solo-stage3-owner-"));
     const clips: string[] = [];
