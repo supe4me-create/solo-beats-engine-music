@@ -54,6 +54,26 @@ async function downloadRunwayVideo(urlText: string, dest: string) {
   if (count < 1024) throw new Error("Runway clip download is empty.");
 }
 
+// SOLO_STAGE3_TRACK_CHOOSER_V2 — read-only owner Media Library listing.
+export async function GET(request: Request) {
+  try {
+    if (!(await requireOwner(request))) return NextResponse.json({ success: false, error: "Owner access required." }, { status: 403 });
+    const snapshot = await adminDb.collection("mediaLibrary").limit(300).get();
+    const tracks = snapshot.docs.filter(doc => {
+      const item = doc.data();
+      return item.kind === "audio" && typeof item.storagePath === "string" && item.storagePath.length > 0;
+    }).map(doc => {
+      const item = doc.data();
+      const label = [item.title, item.name, item.originalName, item.fileName].find(x => typeof x === "string" && x.trim());
+      return { id: doc.id, label: typeof label === "string" ? label.slice(0, 160) : doc.id };
+    }).sort((a,b) => a.label.localeCompare(b.label));
+    return NextResponse.json({ success: true, tracks });
+  } catch (error) {
+    console.error("STAGE3_MEDIA_LIST_ERROR", error);
+    return NextResponse.json({ success: false, error: "Unable to load audio library." }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   let temp = "";
   try {
