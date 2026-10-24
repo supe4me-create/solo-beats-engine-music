@@ -1,4 +1,4 @@
-﻿import {
+import {
   adminDb,
 } from "./firebaseAdmin";
 
@@ -43,6 +43,7 @@ export const SOCIAL_SCHEDULER_PLANS:
       platforms: [
         "facebook",
         "instagram",
+        "tiktok",
       ],
       recurringEnabled: true,
       description:
@@ -57,6 +58,7 @@ export const SOCIAL_SCHEDULER_PLANS:
       platforms: [
         "facebook",
         "instagram",
+        "tiktok",
       ],
       recurringEnabled: true,
       description:

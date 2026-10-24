@@ -194,12 +194,51 @@ export async function POST(
         : customer.email ||
           null;
 
-    await adminDb
-      .collection(
-        "socialSchedulerCustomers"
-      )
-      .doc(customer.uid)
-      .set(
+    // SOLO_SCHEDULER_PAYPAL_OWNERSHIP_GUARD_V1
+    // A PayPal subscription must not be claimable by knowing its ID.
+    const verifiedFirebaseEmail =
+      typeof customer.email === "string" && customer.email_verified === true
+        ? customer.email.trim().toLowerCase()
+        : "";
+    const actualPaypalEmail =
+      typeof subscription?.subscriber?.email_address === "string"
+        ? subscription.subscriber.email_address.trim().toLowerCase()
+        : "";
+
+    if (!verifiedFirebaseEmail || !actualPaypalEmail ||
+        verifiedFirebaseEmail !== actualPaypalEmail) {
+      return Response.json(
+        { success: false, error: "The verified sign-in email must match the PayPal subscriber email. Contact support if your PayPal account uses another email." },
+        { status: 403 }
+      );
+    }
+
+    // A Firestore transaction enforces a unique subscription -> customer binding.
+    const claimRef = adminDb.collection("socialSchedulerSubscriptionClaims").doc(subscriptionId);
+    const customerRef = adminDb.collection("socialSchedulerCustomers").doc(customer.uid);
+    try {
+      await adminDb.runTransaction(async tx => {
+        const [claim, existingCustomer] = await Promise.all([
+          tx.get(claimRef),
+          tx.get(customerRef),
+        ]);
+        const priorUid = claim.data()?.uid;
+        if (claim.exists && priorUid !== customer.uid) {
+          throw new Error("SUBSCRIPTION_ALREADY_CLAIMED");
+        }
+        const currentSubscription = existingCustomer.data()?.subscriptionId;
+        if (typeof currentSubscription === "string" &&
+            currentSubscription && currentSubscription !== subscriptionId &&
+            existingCustomer.data()?.accessActive === true) {
+          throw new Error("CUSTOMER_HAS_ACTIVE_SUBSCRIPTION");
+        }
+        tx.set(claimRef, {
+          uid: customer.uid,
+          subscriptionId,
+          verifiedPaypalEmail: actualPaypalEmail,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        tx.set(customerRef,
         {
           uid:
             customer.uid,
@@ -262,8 +301,16 @@ export async function POST(
         },
         {
           merge: true,
-        }
-      );
+        });
+      });
+    } catch (claimError) {
+      if (claimError instanceof Error &&
+          (claimError.message === "SUBSCRIPTION_ALREADY_CLAIMED" ||
+           claimError.message === "CUSTOMER_HAS_ACTIVE_SUBSCRIPTION")) {
+        return Response.json({ success: false, error: "Subscription is already linked to an account. Contact support." }, { status: 409 });
+      }
+      throw claimError;
+    }
 
     return Response.json({
       success: true,

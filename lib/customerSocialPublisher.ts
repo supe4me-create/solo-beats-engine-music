@@ -1,4 +1,6 @@
-﻿import {
+// SOLO_TIKTOK_FIREBASE_FILE_UPLOAD_V1
+import { sendTikTokInboxDraftFromFirebase } from "./soloTikTokFileUpload";
+import {
   createDecipheriv,
   createHash,
 } from "crypto";
@@ -567,6 +569,39 @@ async function instagramPublish({
   );
 }
 
+// SOLO_CUSTOMER_TIKTOK_DRAFT_V1
+// Initialises a TikTok inbox draft; it does not publish a public post.
+async function tiktokDraftInit(accessToken: string, videoUrl: string) {
+  const approvedPrefix = (process.env.TIKTOK_VERIFIED_VIDEO_URL_PREFIX || "").trim();
+  if (!approvedPrefix) throw new Error("TIKTOK_VERIFIED_VIDEO_URL_PREFIX is not configured. Verify your media URL prefix with TikTok before draft uploads.");
+  const approved = new URL(approvedPrefix);
+  const media = new URL(videoUrl);
+  // SOLO_TIKTOK_VERIFIED_DOMAIN_FIX_V2
+  // An apex-domain verification can include its subdomains; never allow suffix lookalikes.
+  const domainMatch = media.hostname === approved.hostname ||
+    media.hostname.endsWith("." + approved.hostname);
+  const pathMatch = media.pathname.startsWith(approved.pathname);
+  if (approved.protocol !== "https:" || media.protocol !== "https:" ||
+      !domainMatch || !pathMatch || approved.port || media.port ||
+      approved.username || approved.password || media.username || media.password ||
+      !/\.(mp4|mov|webm)$/i.test(media.pathname)) {
+    throw new Error("TikTok requires an HTTPS video under the verified media URL prefix (MP4/MOV/WebM).");
+  }
+  const response = await fetch("https://open.tiktokapis.com/v2/post/publish/inbox/video/init/", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+    body: JSON.stringify({source_info: {source: "PULL_FROM_URL", video_url: videoUrl}}),
+    signal: AbortSignal.timeout(30000),
+  });
+  const body = await response.json().catch(() => ({})) as {
+    data?: {publish_id?: string}; error?: {code?: string;message?: string};
+  };
+  if (!response.ok || body.error?.code !== "ok" || !body.data?.publish_id) {
+    throw new Error("TikTok draft initialization failed: " + (body.error?.code || response.status) + " " + (body.error?.message || ""));
+  }
+  return body.data.publish_id;
+}
+
 export async function runCustomerSocialPublisher() {
   const snapshot =
     await adminDb
@@ -618,6 +653,38 @@ export async function runCustomerSocialPublisher() {
       );
 
     if (!customerUid) {
+      continue;
+    }
+
+    // SOLO_SCHEDULER_PUBLISH_TIME_ACCESS_V1
+    // Subscription eligibility must be checked again when a queued post becomes due.
+    // An expired/revoked customer must not keep publishing merely because the
+    // subscription was active when the schedule was created.
+    const customerSnapshot = await adminDb
+      .collection("socialSchedulerCustomers")
+      .doc(customerUid)
+      .get();
+    const customer = customerSnapshot.data() || {};
+    const allowedPlatforms = Array.isArray(customer.platforms)
+      ? customer.platforms.filter((p: unknown): p is string => typeof p === "string")
+      : [];
+    const isAccessActive = customer.accessActive === true && customer.status === "ACTIVE";
+    const isOwnerUnlimited = customer.ownerUnlimited === true && isAccessActive;
+    const queuedPlatforms = Array.isArray(data.platforms)
+      ? data.platforms.filter((p: unknown): p is string => typeof p === "string")
+      : [];
+    const revoked = queuedPlatforms.filter((platform: string) =>
+      !allowedPlatforms.includes(platform)
+    );
+    if (!isAccessActive || (!isOwnerUnlimited && revoked.length > 0)) {
+      await document.ref.set({
+        status: "BLOCKED",
+        lastError: !isAccessActive
+          ? "Social Scheduler subscription inactive; publishing paused."
+          : `These platforms are no longer included in the subscription: ${revoked.join(", ")}.`,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      results.push({ postId: document.id, customerUid, status: "BLOCKED", reason: "subscription" });
       continue;
     }
 
@@ -722,6 +789,27 @@ export async function runCustomerSocialPublisher() {
 
     let lastError =
       "";
+
+    // SOLO_CUSTOMER_PUBLISHER_UNSUPPORTED_PLATFORM_GUARD_V1
+    // Never report an unimplemented customer platform as published.
+    for (const platform of platforms) {
+      if (platform === "facebook" || platform === "instagram" || platform === "tiktok") {
+        continue;
+      }
+
+      failed = true;
+      const message =
+        `${platform} customer auto-publishing is not yet enabled.`;
+      lastError = message;
+      platformStatus[platform] = "failed";
+      publishLog.push({
+        platform,
+        mediaType: postType,
+        result: "failed",
+        error: message,
+        at: new Date().toISOString(),
+      });
+    }
 
     if (
       platforms.includes(
@@ -980,6 +1068,35 @@ export async function runCustomerSocialPublisher() {
       }
     }
 
+    // TikTok video.upload transfers to the creator's TikTok inbox.
+    // No public success is claimed: the creator must finish inside TikTok.
+    let tiktokDraftInitialized = false;
+    if (platforms.includes("tiktok")) {
+      try {
+        if (postType !== "video") throw new Error("TikTok draft automation currently supports video posts only.");
+        if (connection.tiktokConnected !== true) throw new Error("Customer TikTok account is not connected.");
+        const scopes = cleanText(connection.tiktokScope, 3000).split(/[\s,]+/);
+        if (!scopes.includes("video.upload")) throw new Error("Customer has not granted the TikTok video.upload permission. Reconnect TikTok.");
+        const expiration = Number(connection.tiktokAccessTokenExpiresAt || 0);
+        if (!expiration || expiration <= Date.now() + 60000) throw new Error("Customer TikTok access token expired. Reconnect TikTok before scheduling.");
+        const encryptedToken = cleanText(connection.tiktokAccessTokenEncrypted, 10000);
+        if (!encryptedToken) throw new Error("Customer TikTok access token is unavailable.");
+        // Set PROCESSING before remote submission: prevent automatic replay after crashes.
+        await document.ref.set({status: "PROCESSING", platformStatus: {tiktok: "submitting_draft"},updatedAt:FieldValue.serverTimestamp()},{merge:true});
+        const publishId = await sendTikTokInboxDraftFromFirebase({ customerUid, mediaStoragePath: cleanText(data.mediaStoragePath, 3000), accessToken: decrypt(encryptedToken) });
+        tiktokDraftInitialized = true;
+        platformStatus.tiktok = "draft_pending";
+        publishLog.push({platform: "tiktok", mediaType: "video", result: "draft_pending", publishId, at: new Date().toISOString(), note: "Customer must finish posting in TikTok inbox"});
+        await document.ref.set({tiktokDraftPublishId:publishId,updatedAt:FieldValue.serverTimestamp()},{merge:true});
+      } catch (error) {
+        failed = true;
+        const message = error instanceof Error ? error.message : "TikTok draft submission failed.";
+        lastError = message;
+        platformStatus.tiktok = "failed";
+        publishLog.push({platform:"tiktok",mediaType:postType,result:"failed",error:message.slice(0,1000),at:new Date().toISOString()});
+      }
+    }
+
     const requestedImplementedPlatforms =
       platforms.filter(
         platform =>
@@ -990,8 +1107,10 @@ export async function runCustomerSocialPublisher() {
       );
 
     const allComplete =
-      requestedImplementedPlatforms
-        .length > 0 &&
+      !failed &&
+      !platforms.includes("tiktok") &&
+      requestedImplementedPlatforms.length > 0 &&
+      requestedImplementedPlatforms.length === platforms.length &&
       requestedImplementedPlatforms
         .every(
           platform =>
@@ -1019,7 +1138,9 @@ export async function runCustomerSocialPublisher() {
             ? "PUBLISHED"
             : failed
               ? "FAILED"
-              : data.status,
+              : tiktokDraftInitialized
+                ? "ACTION_REQUIRED"
+                : data.status,
 
         lastError:
           allComplete
@@ -1056,7 +1177,9 @@ export async function runCustomerSocialPublisher() {
           ? "PUBLISHED"
           : failed
             ? "FAILED"
-            : data.status,
+            : tiktokDraftInitialized
+              ? "ACTION_REQUIRED"
+              : data.status,
 
       platformStatus,
     });

@@ -1,4 +1,4 @@
-﻿import {
+import {
   NextResponse,
 } from "next/server";
 
@@ -66,17 +66,33 @@ export async function GET(
     const result =
       await runSocialPublisher();
 
+    // SOLO_SCHEDULER_CUSTOMER_CRON_TRANSPARENCY_V1
+    // A customer failure must never appear as an all-clear scheduler run.
+    let customerResult;
     try {
-      await runCustomerSocialPublisher();
+      customerResult = await runCustomerSocialPublisher();
     } catch (customerError) {
-      console.error(
-        "CUSTOMER AUTOMATIC SOCIAL PUBLISHER ERROR:",
-        customerError
+      console.error("CUSTOMER AUTOMATIC SOCIAL PUBLISHER ERROR:", customerError);
+      return NextResponse.json(
+        {
+          success: false,
+          owner: result,
+          customer: {
+            success: false,
+            error: customerError instanceof Error
+              ? customerError.message
+              : "Customer publisher failed.",
+          },
+        },
+        {
+          status: 500,
+          headers: { "Cache-Control": "no-store, max-age=0" },
+        }
       );
     }
 
     return NextResponse.json(
-      result,
+      { success: true, owner: result, customer: customerResult },
       {
         headers: {
           "Cache-Control":

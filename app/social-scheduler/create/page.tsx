@@ -1997,6 +1997,26 @@ export default function CustomerCreatePostPage() {
                       {post.recurrence.toUpperCase()}
                     </div>
 
+                    {/* SOLO_TIKTOK_CUSTOMER_ACTION_REQUIRED_UI_V1 */}
+                    {post.status === "ACTION_REQUIRED" &&
+                    post.platforms.includes("tiktok") ? (
+                      <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-950/20 p-4">
+                        <div className="text-xs font-black text-amber-200">
+                          TIKTOK — FINISH YOUR POST
+                        </div>
+                        <p className="mt-2 text-sm text-amber-100/90">
+                          Your video was sent to TikTok for an inbox draft.
+                          Open TikTok notifications on your connected account,
+                          review the video, and complete publication there.
+                          This does not mean the video is publicly posted.
+                        </p>
+                        <p className="mt-2 text-xs text-amber-100/70">
+                          Other platforms have their own publishing status.
+                          Check your TikTok account before trying to upload again.
+                        </p>
+                      </div>
+                    ) : null}
+
                     {/* PUBLISH FAILURE DETAILS */}
                     {post.status === "FAILED" ? (
                       <div className="mt-4 rounded-xl border border-red-500/30 bg-red-950/30 p-4">
