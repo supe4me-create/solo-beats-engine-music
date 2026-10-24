@@ -605,9 +605,25 @@ export default function SocialSchedulerPage() {
               Your Social Scheduler workspace is unlocked.
             </h2>
 
+            {/* SOLO_CUSTOMER_WORKSPACE_NAV_STATUS_V1 */}
             <p className="mt-3 text-white/65">
-              Next we will connect your private social accounts, posting limits, scheduled posts and recurring campaigns.
+              Manage your connected accounts and scheduled promotions below.
             </p>
+
+            <nav aria-label="Social Scheduler workspace" className="mt-6 grid gap-3 sm:grid-cols-2">
+              <Link href="/social-scheduler/create" className="rounded-xl bg-white px-5 py-4 text-center font-black text-black hover:bg-cyan-100">
+                CREATE OR MANAGE POSTS
+              </Link>
+              <Link href="/social-scheduler/connections" className="rounded-xl border border-white/30 px-5 py-4 text-center font-black text-white hover:bg-white/10">
+                SOCIAL CONNECTIONS
+              </Link>
+            </nav>
+
+            <div className="mt-6 rounded-2xl border border-white/15 bg-black/30 p-5 text-sm text-white/75">
+              <p className="font-bold text-white">Important publishing information</p>
+              <p className="mt-2">TikTok draft delivery requires an authorized TikTok connection. An uploaded draft is not a public post: finish publishing it in TikTok when the status says ACTION REQUIRED.</p>
+              <p className="mt-2">A CONNECTED label confirms a stored account connection, not successful publishing. Review each post's platform status and any errors in Create or Manage Posts.</p>
+            </div>
 
           </section>
         )}
